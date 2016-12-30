@@ -1,6 +1,7 @@
 package com.programmaticallyspeaking.ncd.testing
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Inbox, PoisonPill, Props, Terminated}
+import com.typesafe.config.ConfigFactory
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.{Answer, OngoingStubbing}
 import org.scalatest._
@@ -11,13 +12,25 @@ import scala.reflect.ClassTag
 
 trait UnitTest extends FreeSpec with Matchers
 
+object NoActorLogging {
+  val config = ConfigFactory.parseString(
+    """
+      |akka.loggers = ["akka.testkit.TestEventListener"]
+      |akka.stdout-loglevel = "OFF"
+      |akka.loglevel = "OFF"
+      |akka.log-dead-letters = off
+    """.stripMargin)
+}
+
 trait ActorTesting extends BeforeAndAfterEach with OneInstancePerTest { self: UnitTest =>
   val receiveTimeout = 1.second
 
   implicit var system: ActorSystem = _
 
+  def createActorSystem = ActorSystem(getClass.getName.replace('.', '_'), NoActorLogging.config)
+
   final override protected def beforeEach(): Unit = {
-    system = ActorSystem(getClass.getName.replace('.', '_'))
+    system = createActorSystem
     beforeTest()
   }
 

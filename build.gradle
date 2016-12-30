@@ -1,5 +1,5 @@
 plugins {
-    id "com.github.maiflai.scalatest" version "0.14"
+    id "com.github.maiflai.scalatest" version "0.12"
 }
 
 group 'com.programmaticallyspeaking'
@@ -22,6 +22,9 @@ dependencies {
     def logbackVersion = '1.1.7'
     def akkaHttpVersion = '10.0.0'
     def akkaVersion = '2.4.14'
+
+    // needed for gradle-scalatest
+    testRuntime 'org.pegdown:pegdown:1.6.0'
 
     testCompile group: 'org.scalatest', name: 'scalatest_2.11', version: '3.0.1'
     testCompile group: 'com.typesafe.akka', name: 'akka-http-testkit_2.11', version: akkaHttpVersion

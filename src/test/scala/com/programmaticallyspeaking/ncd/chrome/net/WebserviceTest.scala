@@ -5,7 +5,8 @@ import akka.http.scaladsl.testkit.{ScalatestRouteTest, WSProbe}
 import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.infra.ObjectMapping
 import com.programmaticallyspeaking.ncd.messaging.Subject
-import com.programmaticallyspeaking.ncd.testing.UnitTest
+import com.programmaticallyspeaking.ncd.testing.{NoActorLogging, UnitTest}
+import com.typesafe.config.Config
 import org.mockito.Mockito._
 import org.scalatest.mockito.MockitoSugar
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
@@ -17,6 +18,8 @@ class WebserviceTest extends UnitTest with ScalatestRouteTest with BeforeAndAfte
   var wsClient: WSProbe = _  // = WSProbe()
   val service = new Webservice(domainFactory)
 
+
+  override def testConfig: Config = NoActorLogging.config
 
   override protected def beforeAll(): Unit = try super.beforeAll() finally {
     val scriptHost = mock[ScriptHost]
