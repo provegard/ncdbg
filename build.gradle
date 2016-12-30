@@ -1,0 +1,41 @@
+plugins {
+    id "com.github.maiflai.scalatest" version "0.14"
+}
+
+group 'com.programmaticallyspeaking'
+version '1.0-SNAPSHOT'
+
+apply plugin: 'scala'
+apply plugin: 'application'
+
+def jdkHome = System.getenv("JAVA_HOME")
+
+sourceCompatibility = 1.8
+
+mainClassName = "com.programmaticallyspeaking.ncd.boot.Main"
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    def logbackVersion = '1.1.7'
+    def akkaHttpVersion = '10.0.0'
+    def akkaVersion = '2.4.14'
+
+    testCompile group: 'org.scalatest', name: 'scalatest_2.11', version: '3.0.1'
+    testCompile group: 'com.typesafe.akka', name: 'akka-http-testkit_2.11', version: akkaHttpVersion
+    testCompile group: 'org.mockito', name: 'mockito-core', version: '2.2.27'
+
+    compile files("$jdkHome/lib/tools.jar")
+
+    compile group: 'ch.qos.logback', name: 'logback-classic', version: logbackVersion
+    compile group: 'org.slf4s', name: 'slf4s-api_2.11', version: '1.7.13'
+
+    compile group: 'com.typesafe.akka', name: 'akka-actor_2.11', version: akkaVersion
+    compile group: 'com.typesafe.akka', name: 'akka-http_2.11', version: akkaHttpVersion
+
+    compile group: 'com.fasterxml.jackson.module', name: 'jackson-module-scala_2.11', version: '2.8.4'
+
+    compile 'org.scala-lang:scala-library:2.11.8'
+}

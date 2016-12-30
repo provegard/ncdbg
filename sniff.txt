@@ -1,0 +1,218 @@
+Node Inspector v0.7.3
+Visit http://127.0.0.1:8080/debug?port=5858 to start debugging.
+  node-inspector:protocol:devtools frontend: {"method":"Worker.canInspectWorkers","id":1} +0ms
+  node-inspector:protocol:devtools backend: {"id":1,"result":{"result":false}} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"CSS.getSupportedCSSProperties","id":2} +9ms
+  node-inspector:protocol:devtools backend: {"id":2,"result":{"cssProperties":[]}} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Network.enable","id":3} +2ms
+  node-inspector:protocol:devtools backend: {"id":3} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.enable","id":4} +0ms
+  node-inspector:protocol:devtools backend: {"id":4} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"Network.enable","id":5} +0ms
+  node-inspector:protocol:devtools backend: {"id":5} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.getResourceTree","id":6} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"Debugger.canSetScriptSource","id":7} +0ms
+  node-inspector:protocol:devtools backend: {"id":7,"result":{"result":true}} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"Debugger.enable","id":8} +0ms
+  node-inspector:protocol:v8-debug request: {"seq":1,"type":"request","command":"version","arguments":{"maxStringLength":10000}} +0ms
+  node-inspector:protocol:v8-debug unknown: [object Object] +2ms
+  node-inspector:protocol:devtools frontend: {"method":"CSS.enable","id":9} +9ms
+  node-inspector:protocol:devtools backend: {"id":9} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Network.setUserAgentOverride","params":{"userAgent":""},"id":10} +2ms
+  node-inspector:protocol:devtools backend: {"id":10,"result":{}} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.setDeviceMetricsOverride","params":{"width":0,"height":0,"fontScaleFactor":1,"fitWindow":false},"id":11} +2ms
+  node-inspector:protocol:devtools backend: {"id":11} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.clearDeviceOrientationOverride","id":12} +1ms
+  node-inspector:protocol:devtools backend: {"id":12} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.clearGeolocationOverride","id":13} +1ms
+  node-inspector:protocol:devtools backend: {"id":13} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.setTouchEmulationEnabled","params":{"enabled":false},"id":14} +1ms
+  node-inspector:protocol:devtools backend: {"id":14} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.setEmulatedMedia","params":{"media":""},"id":15} +0ms
+  node-inspector:protocol:devtools backend: {"id":15} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Console.enable","id":16} +20ms
+  node-inspector:protocol:devtools backend: {"id":16} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Inspector.enable","id":17} +0ms
+  node-inspector:protocol:devtools backend: {"id":17} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Database.enable","id":18} +1ms
+  node-inspector:protocol:devtools backend: {"id":18} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"DOMStorage.enable","id":19} +0ms
+  node-inspector:protocol:devtools backend: {"id":19} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Profiler.enable","id":20} +0ms
+  node-inspector:protocol:devtools backend: {"id":20} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.setShowViewportSizeOnResize","params":{"show":true,"showGrid":false},"id":21} +0ms
+  node-inspector:protocol:devtools backend: {"id":21} +0ms
+  node-inspector:protocol:v8-debug response: [object Object] +49ms
+  node-inspector:protocol:devtools backend: {"id":8} +19ms
+  node-inspector:protocol:v8-debug request: {"seq":2,"type":"request","command":"evaluate","arguments":{"expression":"JSON.stringify([process.cwd(), process.mainModule ? process.mainModule.filename : process.argv[1]]).match(/.{1,80}/g).slice()","global":true,"maxStringLength":10000}} +3ms
+  node-inspector:protocol:v8-debug request: {"seq":3,"type":"request","command":"listbreakpoints","arguments":{"maxStringLength":10000}} +0ms
+  node-inspector:protocol:v8-debug response: [object Object] +13ms
+  node-inspector:protocol:v8-debug response: [object Object] +2ms
+  node-inspector:protocol:v8-debug request: {"seq":4,"type":"request","command":"scripts","arguments":{"includeSource":true,"types":4,"maxStringLength":10000}} +1ms
+  node-inspector:protocol:devtools backend: {"id":6,"result":{"frameTree":{"frame":{"id":"nodeinspector-toplevel-frame","url":"file:///Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","loaderId":"1395971770660-6528485093731433","_isNodeInspectorScript":true},"resources":[{"url":"file:///Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","type":"Script","mimeType":"text/javascript"}]}}} +35ms
+  node-inspector:protocol:v8-debug response: [object Object] +70ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"17","url":"events.js","startLine":0,"startColumn":0}} +54ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"39","url":"_linklist.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"22","url":"vm.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"44","url":"punycode.js","startLine":0,"startColumn":0}} +1ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"16","url":"node.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"31","url":"smalloc.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"25","url":"stream.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"40","url":"_http_server.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"24","url":"fs.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"34","url":"_http_incoming.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"49","url":"child_process.js","startLine":0,"startColumn":0}} +1ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"27","url":"_stream_writable.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"23","url":"assert.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"38","url":"timers.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"28","url":"_stream_duplex.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"42","url":"_http_agent.js","startLine":0,"startColumn":0}} +1ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"48","url":"dgram.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"50","url":"string_decoder.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"45","url":"querystring.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"46","url":"_http_client.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"41","url":"net.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"20","url":"path.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"51","url":"console.js","startLine":0,"startColumn":0}} +1ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"19","url":"buffer.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"21","url":"module.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"37","url":"_http_outgoing.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"36","url":"freelist.js","startLine":0,"startColumn":0}} +1ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"30","url":"_stream_passthrough.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"43","url":"url.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"52","url":"tty.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"33","url":"http.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"29","url":"_stream_transform.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"26","url":"_stream_readable.js","startLine":0,"startColumn":0}} +1ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"47","url":"cluster.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"18","url":"util.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"35","url":"_http_common.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"32","url":"file:///Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","startLine":0,"startColumn":0}} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"Runtime.releaseObjectGroup","params":{"objectGroup":"watch-group"},"id":22} +50ms
+  node-inspector:protocol:devtools backend: {"id":22} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"Debugger.setPauseOnExceptions","params":{"state":"none"},"id":23} +63ms
+  node-inspector:protocol:v8-debug request: {"seq":5,"type":"request","command":"setexceptionbreak","arguments":{"type":"all","enabled":false,"maxStringLength":10000}} +123ms
+  node-inspector:protocol:v8-debug response: [object Object] +3ms
+  node-inspector:protocol:v8-debug request: {"seq":6,"type":"request","command":"setexceptionbreak","arguments":{"type":"uncaught","enabled":false,"maxStringLength":10000}} +0ms
+  node-inspector:protocol:v8-debug response: [object Object] +1ms
+  node-inspector:protocol:devtools backend: {"id":23} +5ms
+  node-inspector:protocol:devtools frontend: {"method":"Debugger.setBreakpointByUrl","params":{"lineNumber":4,"url":"file:///Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","columnNumber":0,"condition":""},"id":24} +4ms
+  node-inspector:protocol:v8-debug request: {"seq":7,"type":"request","command":"setbreakpoint","arguments":{"type":"script","target":"/Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","line":4,"column":0,"condition":"","maxStringLength":10000}} +5ms
+  node-inspector:protocol:devtools frontend: {"method":"Debugger.setBreakpointByUrl","params":{"lineNumber":5,"url":"file:///Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","columnNumber":0,"condition":""},"id":25} +1ms
+  node-inspector:protocol:v8-debug request: {"seq":8,"type":"request","command":"setbreakpoint","arguments":{"type":"script","target":"/Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","line":5,"column":0,"condition":"","maxStringLength":10000}} +1ms
+  node-inspector:protocol:devtools backend: {"method":"Inspector.detached","params":{"reason":"Debugged process exited."}} +3ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.getResourceContent","params":{"frameId":"nodeinspector-toplevel-frame","url":"file:///Users/shingonakanishi/Documents/workspace/テスト/simple-server.js"},"id":26} +140ms
+  node-inspector:protocol:devtools backend: {"id":26,"result":{"content":"(function (exports, require, module, __filename, __dirname) { var http = require('http');\n\nfunction func(arg1, arg2) {\n    var result = 'Hello from func. ';\n      result += arg1;\n        result += ' ';\n          result += arg2;\n            return result;\n}\n\nvar server = http.createServer(function(req, resp) {\n    var str = 'string',\n          num = 10,\n          array = [1, 2, 3, 4, 5],\n          buffer = new Buffer('x'),\n          undef;\n\n  resp.setHeader('Content-Type', 'text/plain');\n    resp.end(func(str, num) + '\\n');\n});\n\nserver.listen(3000, function() {\n    console.log('listening on port 3000');\n});\n\n});"}} +3ms
+  node-inspector:protocol:devtools frontend: {"method":"Runtime.enable","id":27} +45ms
+  node-inspector:protocol:devtools backend: {"id":27} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Debugger.getScriptSource","params":{"scriptId":"32"},"id":28} +111ms
+  node-inspector:protocol:devtools backend: {"method":"Inspector.detached","params":{"reason":"Debugged process exited."}} +1ms
+  node-inspector:protocol:devtools backend: showConsole +0ms
+  node-inspector:protocol:devtools backend: {"method":"Console.messageAdded","params":{"message":{"source":3,"type":0,"level":"error","line":0,"column":0,"url":"","groupLevel":7,"repeatCount":1,"text":"Debugger.getScriptSource failed.\nErrorNotConnected: Debugged process exited."}}} +0ms
+  node-inspector:protocol:devtools backend: {"id":28,"error":"ErrorNotConnected: Debugged process exited."} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Worker.canInspectWorkers","id":1} +697ms
+  node-inspector:protocol:devtools backend: {"id":1,"result":{"result":false}} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"CSS.getSupportedCSSProperties","id":2} +9ms
+  node-inspector:protocol:devtools backend: {"id":2,"result":{"cssProperties":[]}} +3ms
+  node-inspector:protocol:devtools frontend: {"method":"Network.enable","id":3} +0ms
+  node-inspector:protocol:devtools backend: {"id":3} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.enable","id":4} +0ms
+  node-inspector:protocol:devtools backend: {"id":4} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"Network.enable","id":5} +0ms
+  node-inspector:protocol:devtools backend: {"id":5} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.getResourceTree","id":6} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Debugger.canSetScriptSource","id":7} +0ms
+  node-inspector:protocol:devtools backend: {"id":7,"result":{"result":true}} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Debugger.enable","id":8} +0ms
+  node-inspector:protocol:v8-debug request: {"seq":9,"type":"request","command":"version","arguments":{"maxStringLength":10000}} +1s
+  node-inspector:protocol:v8-debug unknown: [object Object] +1ms
+  node-inspector:protocol:v8-debug response: [object Object] +0ms
+  node-inspector:protocol:devtools backend: {"id":8} +4ms
+  node-inspector:protocol:v8-debug request: {"seq":10,"type":"request","command":"evaluate","arguments":{"expression":"JSON.stringify([process.cwd(), process.mainModule ? process.mainModule.filename : process.argv[1]]).match(/.{1,80}/g).slice()","global":true,"maxStringLength":10000}} +1ms
+  node-inspector:protocol:v8-debug request: {"seq":11,"type":"request","command":"listbreakpoints","arguments":{"maxStringLength":10000}} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"CSS.enable","id":9} +5ms
+  node-inspector:protocol:devtools backend: {"id":9} +0ms
+  node-inspector:protocol:v8-debug response: [object Object] +6ms
+  node-inspector:protocol:v8-debug response: [object Object] +0ms
+  node-inspector:protocol:v8-debug request: {"seq":12,"type":"request","command":"scripts","arguments":{"includeSource":true,"types":4,"maxStringLength":10000}} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"Network.setUserAgentOverride","params":{"userAgent":""},"id":10} +2ms
+  node-inspector:protocol:devtools backend: {"id":10,"result":{}} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.setDeviceMetricsOverride","params":{"width":0,"height":0,"fontScaleFactor":1,"fitWindow":false},"id":11} +0ms
+  node-inspector:protocol:devtools backend: {"id":11} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.clearDeviceOrientationOverride","id":12} +1ms
+  node-inspector:protocol:devtools backend: {"id":12} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.clearGeolocationOverride","id":13} +0ms
+  node-inspector:protocol:devtools backend: {"id":13} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.setTouchEmulationEnabled","params":{"enabled":false},"id":14} +1ms
+  node-inspector:protocol:devtools backend: {"id":14} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.setEmulatedMedia","params":{"media":""},"id":15} +0ms
+  node-inspector:protocol:devtools backend: {"id":15} +0ms
+  node-inspector:protocol:devtools backend: {"id":6,"result":{"frameTree":{"frame":{"id":"nodeinspector-toplevel-frame","url":"file:///Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","loaderId":"1395971771875-3371609465684742","_isNodeInspectorScript":true},"resources":[{"url":"file:///Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","type":"Script","mimeType":"text/javascript"}]}}} +4ms
+  node-inspector:protocol:devtools frontend: {"method":"Console.enable","id":16} +7ms
+  node-inspector:protocol:devtools backend: {"id":16} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"Inspector.enable","id":17} +0ms
+  node-inspector:protocol:devtools backend: {"id":17} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Database.enable","id":18} +0ms
+  node-inspector:protocol:devtools backend: {"id":18} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"DOMStorage.enable","id":19} +1ms
+  node-inspector:protocol:devtools backend: {"id":19} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Profiler.enable","id":20} +0ms
+  node-inspector:protocol:devtools backend: {"id":20} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.setShowViewportSizeOnResize","params":{"show":true,"showGrid":false},"id":21} +0ms
+  node-inspector:protocol:devtools backend: {"id":21} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Debugger.setPauseOnExceptions","params":{"state":"none"},"id":22} +18ms
+  node-inspector:protocol:v8-debug request: {"seq":13,"type":"request","command":"setexceptionbreak","arguments":{"type":"all","enabled":false,"maxStringLength":10000}} +33ms
+  node-inspector:protocol:devtools frontend: {"method":"Debugger.setBreakpointByUrl","params":{"lineNumber":4,"url":"file:///Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","columnNumber":0,"condition":""},"id":23} +1ms
+  node-inspector:protocol:v8-debug request: {"seq":14,"type":"request","command":"setbreakpoint","arguments":{"type":"script","target":"/Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","line":4,"column":0,"condition":"","maxStringLength":10000}} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"Debugger.setBreakpointByUrl","params":{"lineNumber":5,"url":"file:///Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","columnNumber":0,"condition":""},"id":24} +0ms
+  node-inspector:protocol:v8-debug request: {"seq":15,"type":"request","command":"setbreakpoint","arguments":{"type":"script","target":"/Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","line":5,"column":0,"condition":"","maxStringLength":10000}} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"Runtime.enable","id":25} +1ms
+  node-inspector:protocol:devtools backend: {"id":25} +0ms
+  node-inspector:protocol:v8-debug response: [object Object] +32ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"17","url":"events.js","startLine":0,"startColumn":0}} +32ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"39","url":"_linklist.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"22","url":"vm.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"44","url":"punycode.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"16","url":"node.js","startLine":0,"startColumn":0}} +1ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"31","url":"smalloc.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"25","url":"stream.js","startLine":0,"startColumn":0}} +7ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"40","url":"_http_server.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"24","url":"fs.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"34","url":"_http_incoming.js","startLine":0,"startColumn":0}} +1ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"49","url":"child_process.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"27","url":"_stream_writable.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"23","url":"assert.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"38","url":"timers.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"28","url":"_stream_duplex.js","startLine":0,"startColumn":0}} +1ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"42","url":"_http_agent.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"48","url":"dgram.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"50","url":"string_decoder.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"45","url":"querystring.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"46","url":"_http_client.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"41","url":"net.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"20","url":"path.js","startLine":0,"startColumn":0}} +1ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"51","url":"console.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"19","url":"buffer.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"21","url":"module.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"37","url":"_http_outgoing.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"36","url":"freelist.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"30","url":"_stream_passthrough.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"43","url":"url.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"52","url":"tty.js","startLine":0,"startColumn":0}} +1ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"33","url":"http.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"29","url":"_stream_transform.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"26","url":"_stream_readable.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"47","url":"cluster.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"18","url":"util.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"35","url":"_http_common.js","startLine":0,"startColumn":0}} +0ms
+  node-inspector:protocol:devtools backend: {"method":"Debugger.scriptParsed","params":{"scriptId":"32","url":"file:///Users/shingonakanishi/Documents/workspace/テスト/simple-server.js","startLine":0,"startColumn":0}} +2ms
+  node-inspector:protocol:devtools backend: {"method":"Inspector.detached","params":{"reason":"Debugged process exited."}} +1ms
+  node-inspector:protocol:devtools frontend: {"method":"Runtime.releaseObjectGroup","params":{"objectGroup":"watch-group"},"id":26} +54ms
+  node-inspector:protocol:devtools backend: {"id":26} +0ms
+  node-inspector:protocol:devtools frontend: {"method":"Page.getResourceContent","params":{"frameId":"nodeinspector-toplevel-frame","url":"file:///Users/shingonakanishi/Documents/workspace/テスト/simple-server.js"},"id":27} +164ms
+  node-inspector:protocol:devtools backend: {"id":27,"result":{"content":"(function (exports, require, module, __filename, __dirname) { var http = require('http');\n\nfunction func(arg1, arg2) {\n    var result = 'Hello from func. ';\n      result += arg1;\n        result += ' ';\n          result += arg2;\n            return result;\n}\n\nvar server = http.createServer(function(req, resp) {\n    var str = 'string',\n          num = 10,\n          array = [1, 2, 3, 4, 5],\n          buffer = new Buffer('x'),\n          undef;\n\n  resp.setHeader('Content-Type', 'text/plain');\n    resp.end(func(str, num) + '\\n');\n});\n\nserver.listen(3000, function() {\n    console.log('listening on port 3000');\n});\n\n});"}} +2ms
+  node-inspector:protocol:devtools frontend: {"method":"Debugger.getScriptSource","params":{"scriptId":"32"},"id":28} +163ms
+  node-inspector:protocol:devtools backend: {"method":"Inspector.detached","params":{"reason":"Debugged process exited."}} +0ms
+  node-inspector:protocol:devtools backend: showConsole +1ms
+  node-inspector:protocol:devtools backend: {"method":"Console.messageAdded","params":{"message":{"source":3,"type":0,"level":"error","line":0,"column":0,"url":"","groupLevel":7,"repeatCount":1,"text":"Debugger.getScriptSource failed.\nErrorNotConnected: Debugged process exited."}}} +0ms
+  node-inspector:protocol:devtools backend: {"id":28,"error":"ErrorNotConnected: Debugged process exited."} +0ms
