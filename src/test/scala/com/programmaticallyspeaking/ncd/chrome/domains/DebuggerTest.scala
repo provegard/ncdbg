@@ -10,11 +10,12 @@ import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.Inside
+import org.scalatest.concurrent.Eventually
 
 import scala.collection.mutable
 import scala.util.Try
 
-class DebuggerTest extends UnitTest with DomainActorTesting with Inside {
+class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eventually {
   import org.mockito.Mockito._
   import org.mockito.ArgumentMatchers._
   import com.programmaticallyspeaking.ncd.testing.MockingUtils._
@@ -261,7 +262,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside {
       val debugger = newActorInstance[Debugger]
       probe.watch(debugger)
 
-      debugger ! Messages.Request("1", Domain.enable)
+      requestAndReceive(debugger, "1", Domain.enable)
 
       debugger ! PoisonPill
 
