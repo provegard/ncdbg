@@ -73,6 +73,35 @@ class MarshallerTest extends UnitTest with MockitoSugar {
     }
   }
 
+  "Marshaller.marshalledAs" - {
+    "should extract a string" in {
+      val value = stringRef("test")
+      newMarshaller.marshalledAs[String](value) should be ("test")
+    }
+
+    "should extract a Scala Boolean" in {
+      val value = booleanValue(true)
+      newMarshaller.marshalledAs[Boolean](value) should be (true)
+    }
+
+    "should throw if trying to extract a value of the wrong type" in {
+      val value = booleanValue(true)
+      assertThrows[ClassCastException](newMarshaller.marshalledAs[String](value))
+    }
+  }
+
+  "Marshaller.marshalledAsOptionally" - {
+    "should extract a string" in {
+      val value = stringRef("test")
+      newMarshaller.marshalledAsOptionally[String](value) should be (Some("test"))
+    }
+
+    "should return None if trying to extract a value of the wrong type" in {
+      val value = booleanValue(true)
+      newMarshaller.marshalledAsOptionally[String](value) should be (None)
+    }
+  }
+
   private def arrayOfStrings(strings: Seq[String]): ArrayReference = {
     val ar = mock[ArrayReference]
     val list: java.util.List[Value] = strings.map(stringRef)
@@ -84,5 +113,11 @@ class MarshallerTest extends UnitTest with MockitoSugar {
     val sr = mock[StringReference]
     when(sr.value()).thenReturn(s)
     sr
+  }
+
+  private def booleanValue(value: Boolean): PrimitiveValue = {
+    val pv = mock[BooleanValue]
+    when(pv.booleanValue()).thenReturn(value.booleanValue())
+    pv
   }
 }

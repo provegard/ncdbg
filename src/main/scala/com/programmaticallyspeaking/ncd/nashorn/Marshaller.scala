@@ -249,7 +249,8 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case Some(value) => value
     case None =>
       val runtimeClass = implicitly[ClassTag[R]].runtimeClass
-      throw new ClassCastException(s"Cannot extract value of type ${runtimeClass.getName} from $v")
+      val vType = if (v == null) "null" else v.getClass.getName
+      throw new ClassCastException(s"Cannot extract value of type ${runtimeClass.getName} from $v (of type $vType)")
   }
 
   /**
@@ -260,9 +261,8 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     * @return the marshalled and unpacked value if possible, otherwise `None`
     */
   def marshalledAsOptionally[R <: Any : ClassTag](v: Value): Option[R] = {
-    val runtimeClass = implicitly[ClassTag[R]].runtimeClass
     marshal(v) match {
-      case SimpleValue(value) if runtimeClass.isInstance(value) => Some(value.asInstanceOf[R])
+      case SimpleValue(value: R) => Some(value)
       case other => None
     }
   }
