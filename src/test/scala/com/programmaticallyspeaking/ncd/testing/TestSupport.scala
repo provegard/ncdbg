@@ -13,9 +13,10 @@ import scala.reflect.ClassTag
 trait UnitTest extends FreeSpec with Matchers
 
 object NoActorLogging {
+  // TODO: Use this only when run from the command line. Inside IDEA dead letter logging is useful.
   val config = ConfigFactory.parseString(
     """
-      |akka.loggers = ["akka.testkit.TestEventListener"]
+      |akka.loggers = []
       |akka.stdout-loglevel = "OFF"
       |akka.loglevel = "OFF"
       |akka.log-dead-letters = off
