@@ -14,6 +14,9 @@ sourceCompatibility = 1.8
 
 mainClassName = "com.programmaticallyspeaking.ncd.boot.Main"
 
+// Always run tests!
+test.outputs.upToDateWhen {false}
+
 repositories {
     mavenCentral()
 }
