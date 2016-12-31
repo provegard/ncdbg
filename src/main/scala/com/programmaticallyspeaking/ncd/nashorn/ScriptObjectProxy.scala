@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{LazyNode, SimpleValue, ValueNode}
+import com.programmaticallyspeaking.ncd.host.{LazyNode, ValueNode}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.{ArrayReference, ObjectReference, ThreadReference}
 
@@ -16,19 +16,9 @@ class ScriptObjectProxy(val mirror: ScriptObjectMirror, thread: ThreadReference,
 
   val scriptObject = mirror.scriptObject
 
-  lazy val className = {
-    marshaller.marshal(mirror.getClassName) match {
-      case SimpleValue(s: String) => s
-      case other => throw new IllegalStateException("Expected getClassName to be marshalled to a SimpleValue(String), but got: " + other)
-    }
-  }
+  lazy val className = marshaller.marshalledAs[String](mirror.getClassName)
 
-  lazy val isArray = {
-    marshaller.marshal(mirror.isArray) match {
-      case SimpleValue(b: Boolean) => b
-      case other => throw new IllegalStateException("Expected isArray to be marshalled to a SimpleValue(Boolean), but got: " + other)
-    }
-  }
+  lazy val isArray = marshaller.marshalledAs[Boolean](mirror.isArray)
 
   def isFunction = className == "Function"
   def isError = className == "Error"
