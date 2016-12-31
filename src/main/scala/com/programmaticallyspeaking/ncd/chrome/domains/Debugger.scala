@@ -120,7 +120,7 @@ class Debugger extends DomainActor with Logging {
       val exceptionId = 1
 
       val reportException = !maybeSilent.getOrElse(false)
-      scriptHost.evaluateOnStackFrame(callFrameId, expression) match {
+      scriptHost.evaluateOnStackFrame(callFrameId, expression, Map.empty) match {
         case Success(err: ErrorValue) if reportException =>
           val data = err.data
           // Note that Chrome wants line numbers to be 0-based

@@ -7,6 +7,7 @@ import java.util.Collections
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.infra.IdGenerator
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Subject}
+import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
 import com.sun.jdi.request.{EventRequest, StepRequest}
 import com.sun.jdi.{StackFrame => _, _}
@@ -14,11 +15,25 @@ import org.slf4s.Logging
 
 import scala.annotation.tailrec
 import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Success, Try}
 
+object NashornDebuggerHost {
+  val NIR_DebuggerSupport = "jdk.nashorn.internal.runtime.DebuggerSupport"
+  val NIR_ScriptRuntime = "jdk.nashorn.internal.runtime.ScriptRuntime"
+
+  val wantedTypes = Set(
+    NIR_DebuggerSupport,
+    NIR_ScriptRuntime
+  )
+
+  type CodeEvaluator = (String, Map[String, AnyRef]) => ValueNode
+}
+
 class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost with Logging {
   import scala.collection.JavaConversions._
+  import NashornDebuggerHost._
 
   // TODO: These probably don't need to be TrieMaps, given that the host is accessed via a TypedActor wrapper...
   private val scriptByPath = TrieMap[String, Script]()
@@ -38,7 +53,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     override def objectById(id: ObjectId): Option[ComplexNode] = objectPairById.get(id).map(_._2)
   }
 
-  private var internalRuntimeDebuggerSupportType: Option[ReferenceType] = None
+  private val foundWantedTypes = mutable.Map[String, ClassType]()
 
   // Data that are defined when the VM has paused on a breakpoint or encountered a step event
   private var pausedData: Option[PausedData] = None
@@ -58,9 +73,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
 
     referenceTypes.foreach { refType =>
       val className = refType.name()
-      if (className == "jdk.nashorn.internal.runtime.DebuggerSupport") {
-        log.debug(s"Found the $className type")
-        internalRuntimeDebuggerSupportType = Some(refType)
+
+      if (wantedTypes.contains(className)) {
+        refType match {
+          case ct: ClassType =>
+            log.debug(s"Found the $className type")
+            foundWantedTypes += className -> ct
+          case other =>
+            log.warn(s"Found the $className type but it's a ${other.getClass.getName} rather than a ClassType")
+        }
       } else if (className.startsWith("jdk.nashorn.internal.scripts.Script$")) {
         // This is a compiled Nashorn script class.
         log.debug(s"Script reference type: ${refType.name}")
@@ -151,6 +172,42 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     FunctionDetails(functionMethod.name())
   }
 
+  private def scopeWithFreeVariables(thread: ThreadReference, scopeObject: Value, freeVariables: Map[String, AnyRef]): Value = {
+    // If there aren't any free variables, we don't need to create a wrapper scope
+    if (freeVariables.isEmpty) return scopeObject
+
+    // Create a wrapper scope using ScriptRuntime.openWith, which corresponds to `with (obj) { ... }` in JS.
+    foundWantedTypes.get(NIR_ScriptRuntime) match {
+      case Some(scriptRuntime) =>
+        // Just using "{}" returns undefined - don't know why - but "Object.create" works well.
+        val anObject = DebuggerSupport_eval(thread, null, null, "Object.create(null)").asInstanceOf[ObjectReference]
+        val mirror = new ScriptObjectMirror(thread, anObject)
+        freeVariables.foreach {
+          case (name, value) =>
+            mirror.put(name, value, isStrict = false)
+        }
+
+        new StaticInvoker(thread, scriptRuntime).openWith(scopeObject, anObject)
+
+      case None =>
+        log.warn("Don't have the ScriptRuntime type available to wrap the scope.")
+        scopeObject
+    }
+  }
+
+  private def DebuggerSupport_eval(thread: ThreadReference, thisObject: Value, scopeObject: Value, code: String): Value  = {
+    foundWantedTypes.get(NIR_DebuggerSupport) match {
+      case Some(ct: ClassType) =>
+        val invoker = new StaticInvoker(thread, ct)
+
+        // eval(ScriptObject scope, Object self, String string, boolean returnException
+        invoker.eval(scopeObject, thisObject, code, true)
+
+      case _ =>
+        throw new IllegalStateException("The DebuggerSupport type wasn't found, cannot evaluate code.")
+    }
+  }
+
   private def handleBreakpoint(ev: LocatableEvent): Boolean = {
     log.debug(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")
     val thread = ev.thread()
@@ -186,20 +243,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
         marshalled.get(":this").flatMap { thisObj =>
           val scopeObj = marshalled.get(":scope").orNull
 
-          def evaluateCodeOnFrame: (String) => ValueNode = { code =>
-            internalRuntimeDebuggerSupportType match {
-              case Some(ct: ClassType) =>
-                val originalThis = values(":this")
-                val originalScope = values.get(":scope").orNull
-                val invoker = new StaticInvoker(thread, ct)
+          def evaluateCodeOnFrame: CodeEvaluator = { case (code, namedValues) =>
+            val originalThis = values(":this")
+            val originalScope = scopeWithFreeVariables(thread, values.get(":scope").orNull, namedValues)
 
-                // eval(ScriptObject scope, Object self, String string, boolean returnException
-                val ret = invoker.eval(originalScope, originalThis, code, true)
-                marshaller.marshal(ret)
-
-              case _ =>
-                throw new IllegalStateException("The DebuggerSupport type wasn't found, cannot evaluate code.")
-            }
+            val ret = DebuggerSupport_eval(thread, originalThis, originalScope, code)
+            marshaller.marshal(ret)
           }
 
           // Variables that don't start with ":" are locals
@@ -368,11 +417,22 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
       throw new IllegalStateException("A breakpoint must be active for stepping to work")
   }
 
-  override def evaluateOnStackFrame(stackFrameId: String, expression: String): Try[ValueNode] = Try {
+  override def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode] = Try {
     pausedData match {
       case Some(pd) =>
         pd.stackFrames.find(_.id == stackFrameId) match {
-          case Some(sf: StackFrameImpl) => sf.eval(expression)
+          case Some(sf: StackFrameImpl) =>
+
+            // Get the Value instances corresponding to the named objects
+            val namedValues = namedObjects.map {
+              case (name, objectId) =>
+                objectPairById.get(objectId) match {
+                  case Some((maybeValue, _)) if maybeValue.isDefined => name -> maybeValue.get
+                  case _ => throw new IllegalArgumentException(s"No object with ID '$objectId' was found.")
+                }
+            }
+
+            sf.eval(expression, namedValues)
           case _ =>
             log.warn(s"No stack frame found with ID $stackFrameId. Available IDs: " + pd.stackFrames.map(_.id).mkString(", "))
             throw new IllegalArgumentException(s"Failed to find a stack frame with ID $stackFrameId")
@@ -385,12 +445,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
   class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame])
 
   class StackFrameImpl(val thisObj: ValueNode, val scopeObj: Option[ValueNode], val locals: ObjectNode, val breakpoint: Breakpoint,
-                       evaluateCodeOnFrame: (String) => ValueNode,
+                       val eval: CodeEvaluator,
                        val functionDetails: FunctionDetails) extends StackFrame {
     // Generate an ID for the stack frame so that we can find it later when asked to evaluate code for a
     // particular stack frame.
     val id = stackframeIdGenerator.next
-
-    def eval(code: String): ValueNode = evaluateCodeOnFrame(code)
   }
 }

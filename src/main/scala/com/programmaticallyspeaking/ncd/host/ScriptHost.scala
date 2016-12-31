@@ -33,7 +33,18 @@ case object StepOver extends StepType
 case object StepOut extends StepType
 
 trait ScriptHost {
-  def evaluateOnStackFrame(stackFrameId: String, expression: String): Try[ValueNode]
+  /**
+    * Evaluates an expression on a specific stack frame. Variables visible on that stack frame can be used in the
+    * expression.
+    *
+    * This method is only valid to call when the host is paused.
+    *
+    * @param stackFrameId the ID of the stack frame to evaluate the expression on.
+    * @param expression the expression to evaluate
+    * @param namedObjects map of objects to expose as free variables
+    * @return
+    */
+  def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode]
 
   def removeBreakpointById(id: String): Unit
 

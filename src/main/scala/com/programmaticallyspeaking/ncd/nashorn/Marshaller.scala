@@ -3,6 +3,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, Undefined}
 import com.programmaticallyspeaking.ncd.infra.IdGenerator
+import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi._
 import jdk.nashorn.api.scripting.NashornException
 import jdk.nashorn.internal.runtime.ScriptObject
@@ -64,11 +65,12 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
 
   private def marshalScriptObject(value: Value): ValueNode = {
     val scriptObject = value.asInstanceOf[ObjectReference]
-    val proxy = new ScriptObjectProxy(scriptObject, thread, this)
+    val mirror = new ScriptObjectMirror(thread, scriptObject)
+    val proxy = new ScriptObjectProxy(mirror, thread, this)
     if (proxy.isArray) toArray(proxy)
     else if (proxy.isFunction) toFunction(proxy)
     else if (proxy.isError) toError(proxy)
-    else if (proxy.isDate) toDate(proxy)
+    else if (proxy.isDate) toDate(mirror)
     else {
       //TODO: Date + regexp - but how to marshal to Chrome later?
       // Assume object
@@ -115,12 +117,11 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     ArrayNode(items, objectId)
   }
 
-  private def toDate(proxy: ScriptObjectProxy) = {
-    val invoker = new DynamicInvoker(thread, proxy.scriptObject)
+  private def toDate(mirror: ScriptObjectMirror) = {
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toString
     // "The toString() method always returns a string representation of the date in American English."
     // The Chrome debugging protocol (in particular, RemoteObject) doesn't seem to care about Date details.
-    val stringRep = marshalledAs[String](invoker.applyDynamic("toString")())
+    val stringRep = marshalledAs[String](mirror.actualToString)
     DateNode(stringRep, objectId)
   }
 
