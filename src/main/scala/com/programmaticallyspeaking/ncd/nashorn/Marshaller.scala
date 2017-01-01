@@ -29,7 +29,19 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     result
   }
 
-  private def objectId = ObjectId(objectIdGenerator.next)
+  /**
+    * Generate an ID for an object. If possible, we generate an ID based on the unique ID of the object reference,
+    * so that two references to the same object get the same ID.
+    *
+    * @param v the value for which an object ID should be generated
+    */
+  private def objectId(v: Value) = {
+    val id = v match {
+      case o: ObjectReference => "uid-" + o.uniqueID()
+      case _ => objectIdGenerator.next
+    }
+    ObjectId(id)
+  }
 
   private def marshalInPrivate(value: Value): ValueNode = value match {
     case primitive: PrimitiveValue => SimpleValue(marshalPrimitive(primitive))
@@ -44,7 +56,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       ObjectNode(Map(
         "className" -> LazyNode.eager(SimpleValue(value.getClass.getName)),
         "typeName" -> LazyNode.eager(SimpleValue(value.`type`().name()))
-      ), objectId)
+      ), objectId(obj))
     case x if x == null => EmptyNode
     case other => throw new IllegalArgumentException("Don't know how to marshal: " + other)
   }
@@ -102,7 +114,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case _ => false
   }
 
-  private def toArray(ref: ArrayReference) = ArrayNode(ref.getValues.map(marshalLater), objectId)
+  private def toArray(ref: ArrayReference) = ArrayNode(ref.getValues.map(marshalLater), objectId(ref))
 
   private def toArray(proxy: ScriptObjectProxy) = {
     val entrySet = proxy.entrySet()
@@ -114,7 +126,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
         }
         idx -> lazyValue
     }.toSeq.sortWith((a, b) => a._1 < b._1).map(_._2)
-    ArrayNode(items, objectId)
+    ArrayNode(items, objectId(proxy.scriptObject))
   }
 
   private def toDate(mirror: ScriptObjectMirror) = {
@@ -122,7 +134,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     // "The toString() method always returns a string representation of the date in American English."
     // The Chrome debugging protocol (in particular, RemoteObject) doesn't seem to care about Date details.
     val stringRep = marshalledAs[String](mirror.actualToString)
-    DateNode(stringRep, objectId)
+    DateNode(stringRep, objectId(mirror.scriptObject))
   }
 
   private def toObject(proxy: ScriptObjectProxy) = {
@@ -130,7 +142,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     val data = entrySet.map {
       case (key, lazyValue) => getString(key) -> lazyValue
     }
-    ObjectNode(data, objectId)
+    ObjectNode(data, objectId(proxy.scriptObject))
   }
 
   private def toFunction(proxy: ScriptObjectProxy) = {
@@ -140,7 +152,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     val nameValue = invoker.getName()
     val sourceValue = invoker.toSource()
 
-    FunctionNode(getString(marshal(nameValue)), getString(marshal(sourceValue)), data, objectId)
+    FunctionNode(getString(marshal(nameValue)), getString(marshal(sourceValue)), data, objectId(proxy.scriptObject))
   }
 
   private def toError(proxy: ScriptObjectProxy) = {
@@ -169,7 +181,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
         marshalledAsOptionally[String](fileNameValue).getOrElse("<unknown>"), //TODO: To URL?
         Option(stack)
       )
-    ErrorValue(exData, objectId)
+    ErrorValue(exData, objectId(so))
   }
 
   private def marshalLater(v: Value) = new LazyMarshalledValue(v)
@@ -206,7 +218,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
         val nashornException = classes.find(_.name() == classOf[NashornException].getName)
 
         if (isThrowable) {
-          Some(ErrorValue(exceptionDataOf(objRef, nashornException), objectId))
+          Some(ErrorValue(exceptionDataOf(objRef, nashornException), objectId(v)))
         } else None
 
       case _ => None
