@@ -12,15 +12,19 @@ import scala.reflect.ClassTag
 
 trait UnitTest extends FreeSpec with Matchers
 
-object NoActorLogging {
-  // TODO: Use this only when run from the command line. Inside IDEA dead letter logging is useful.
-  val config = ConfigFactory.parseString(
-    """
-      |akka.loggers = []
-      |akka.stdout-loglevel = "OFF"
-      |akka.loglevel = "OFF"
-      |akka.log-dead-letters = off
-    """.stripMargin)
+object SelectiveActorLogging {
+  def config = {
+    val suppress = System.getProperty("SelectiveActorLogging.suppress") == "true"
+    val configStr = if (suppress) {
+      """
+        |akka.loggers = []
+        |akka.stdout-loglevel = "OFF"
+        |akka.loglevel = "OFF"
+        |akka.log-dead-letters = off
+      """.stripMargin
+    } else ""
+    ConfigFactory.parseString(configStr)
+  }
 }
 
 trait ActorTesting extends BeforeAndAfterEach with OneInstancePerTest { self: UnitTest =>
@@ -28,7 +32,7 @@ trait ActorTesting extends BeforeAndAfterEach with OneInstancePerTest { self: Un
 
   implicit var system: ActorSystem = _
 
-  def createActorSystem = ActorSystem(getClass.getName.replace('.', '_'), NoActorLogging.config)
+  def createActorSystem = ActorSystem(getClass.getName.replace('.', '_'), SelectiveActorLogging.config)
 
   final override protected def beforeEach(): Unit = {
     system = createActorSystem

@@ -14,8 +14,13 @@ sourceCompatibility = 1.8
 
 mainClassName = "com.programmaticallyspeaking.ncd.boot.Main"
 
-// Always run tests!
-test.outputs.upToDateWhen {false}
+test {
+    // Always run tests!
+    outputs.upToDateWhen {false}
+
+    systemProperty "SelectiveActorLogging.suppress", "true"
+    systemProperty "logback.configurationFile", "logback-off.xml"
+}
 
 repositories {
     mavenCentral()
