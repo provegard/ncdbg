@@ -22,7 +22,7 @@ object Runtime {
 
   case class RemoteObject(`type`: String, subtype: String, className: String, description: String, value: Any, unserializableValue: String, objectId: String)
 
-  case class GetPropertiesResult(result: Seq[PropertyDescriptor])
+  case class GetPropertiesResult(result: Seq[PropertyDescriptor], exceptionDetails: Option[ExceptionDetails])
 
   case class PropertyDescriptor(name: String, value: RemoteObject, writable: Boolean = false, configurable: Boolean = false, enumerable: Boolean = false)
 
@@ -128,8 +128,10 @@ class Runtime extends DomainActor with Logging {
       objectRegistry.objectById(objectId) match {
         case Some(value) =>
           val propDescs = value.entries.map(e => PropertyDescriptor(e._1, toRemoteObject(e._2.resolve(), byValue = false)))
-          GetPropertiesResult(propDescs)
-        case None => throw new IllegalArgumentException("Unknown object ID: " + objectId)
+          GetPropertiesResult(propDescs, None)
+        case None =>
+          val exceptionDetails = ExceptionDetails(1, s"Error: Unknown object ID: '$jsonObjectId'", 0, 1, None)
+          GetPropertiesResult(Seq.empty, Some(exceptionDetails))
       }
 
     case Domain.enable =>

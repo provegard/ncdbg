@@ -8,6 +8,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.mockito.Mockito._
 import org.mockito.ArgumentMatchers._
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
 class ResponseException(msg: String) extends RuntimeException(msg)
@@ -21,6 +22,7 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
   private var scriptEventSubject: Subject[ScriptEvent] = _
   protected var objectRegistry: ObjectRegistry = _
   protected var currentScriptHost: ScriptHost = _
+  protected val objectsById = mutable.Map[ObjectId, ComplexNode]()
 
   def requestAndReceive(actorRef: ActorRef, id: String, msg: AnyRef): Any = {
     val request = Messages.Request(id, msg)
@@ -72,7 +74,7 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
   def createScriptHost(): ScriptHost = {
     scriptEventSubject = Subject.serialized[ScriptEvent]
     objectRegistry = new ObjectRegistry {
-      override def objectById(id: ObjectId): Option[ComplexNode] = None
+      override def objectById(id: ObjectId): Option[ComplexNode] = objectsById.get(id)
     }
 
     val mockScriptHost = mock[ScriptHost]
