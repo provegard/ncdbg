@@ -34,4 +34,11 @@ class ValueNodeTest extends UnitTest {
       result should be (Some(SimpleValue("the stack")))
     }
   }
+
+  "FunctionNode" - {
+    "should expose name among the entries" in {
+      val fun = FunctionNode("aFun", "", Map.empty, ObjectId("x"))
+      fun.entries.find(_._1 == "name").map(_._2.resolve()) should be (Some(SimpleValue("aFun")))
+    }
+  }
 }

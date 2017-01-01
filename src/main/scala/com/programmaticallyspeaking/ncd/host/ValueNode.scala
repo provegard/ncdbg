@@ -54,5 +54,5 @@ case class DateNode(stringRepresentation: String, objectId: ObjectId) extends Co
 }
 
 case class FunctionNode(name: String, source: String, data: Map[String, LazyNode], objectId: ObjectId) extends ComplexNode {
-  def entries = data.toSeq
+  def entries = data.toSeq :+ ("name" -> LazyNode.eager(SimpleValue(name)))
 }
