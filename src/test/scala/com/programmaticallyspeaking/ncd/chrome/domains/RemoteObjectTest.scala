@@ -78,6 +78,11 @@ class RemoteObjectTest extends UnitTest {
       "should reject empty object ID" in {
         assertThrows[IllegalArgumentException](RemoteObject.forArray(1, ""))
       }
+
+      "should accept an Array" in {
+        val data: Array[Any] = Array("foo")
+        RemoteObject.forArray(data) should be (RemoteObject("object", "array", "Array", "Array[1]", data, null, null))
+      }
     }
 
     "forObject" - {
@@ -86,11 +91,16 @@ class RemoteObjectTest extends UnitTest {
       }
 
       "should reject null object ID" in {
-        assertThrows[IllegalArgumentException](RemoteObject.forObject(null))
+        assertThrows[IllegalArgumentException](RemoteObject.forObject(null.asInstanceOf[String]))
       }
 
       "should reject empty object ID" in {
         assertThrows[IllegalArgumentException](RemoteObject.forObject(""))
+      }
+
+      "should accept an object Map" in {
+        val data = Map("foo" -> "bar")
+        RemoteObject.forObject(data) should be (RemoteObject("object", null, "Object", "Object", data, null, null))
       }
     }
 

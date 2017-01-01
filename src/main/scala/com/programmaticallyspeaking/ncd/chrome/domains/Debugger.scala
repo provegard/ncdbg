@@ -17,7 +17,7 @@ object Debugger {
 
   case object resume
 
-  case class evaluateOnCallFrame(callFrameId: CallFrameId, expression: String, silent: Option[Boolean])
+  case class evaluateOnCallFrame(callFrameId: CallFrameId, expression: String, silent: Option[Boolean], returnByValue: Option[Boolean])
 
   case class EvaluateOnCallFrameResult(result: Runtime.RemoteObject, exceptionDetails: Option[Runtime.ExceptionDetails] = None)
 
@@ -112,9 +112,12 @@ class Debugger extends DomainActor with Logging {
     case Debugger.stepOut =>
       scriptHost.step(StepOut)
 
-    case Debugger.evaluateOnCallFrame(callFrameId, expression, maybeSilent) =>
+    case Debugger.evaluateOnCallFrame(callFrameId, expression, maybeSilent, maybeReturnByValue) =>
       // TODO: "In silent mode exceptions thrown during evaluation are not reported and do not pause execution. Overrides setPauseOnException state."
       // TODO: -- Obey setPauseOnException - and what about pausing??
+
+      // The protocol says this is optional, but doesn't specify the default value. False is just a guess.
+      val actualReturnByValue = maybeReturnByValue.getOrElse(false)
 
       // TODO: What is the exception ID for?
       val exceptionId = 1
@@ -129,7 +132,7 @@ class Debugger extends DomainActor with Logging {
           EvaluateOnCallFrameResult(RemoteObject.undefinedValue, Some(details))
         case Success(err: ErrorValue) if err.isBasedOnThrowable =>
           EvaluateOnCallFrameResult(RemoteObject.undefinedValue)
-        case Success(result) => EvaluateOnCallFrameResult(toRemoteObject(result))
+        case Success(result) => EvaluateOnCallFrameResult(toRemoteObject(result, actualReturnByValue))
         case Failure(t) =>
 
           val exceptionDetails = t.getStackTrace.headOption.flatMap { stackTraceElement =>
@@ -155,13 +158,14 @@ class Debugger extends DomainActor with Logging {
       emitEvent("Debugger.resumed", null)
   }
 
-  private def toRemoteObject(node: ValueNode): RemoteObject = remoteObjectConverter.toRemoteObject(node)
+  private def toRemoteObject(node: ValueNode, byValue: Boolean): RemoteObject =
+    remoteObjectConverter.toRemoteObject(node, byValue = byValue)
 
   private def pauseBasedOnBreakpoint(hitBreakpoint: HitBreakpoint): Unit = {
     def callFrames = hitBreakpoint.stackFrames.map { sf =>
-      val localScope = Scope("local", toRemoteObject(sf.locals))
-      val scopes = Seq(localScope) ++ sf.scopeObj.map(s => Scope("closure", toRemoteObject(s))).toSeq
-      val thisObj = toRemoteObject(sf.thisObj)
+      val localScope = Scope("local", toRemoteObject(sf.locals, byValue = false))
+      val scopes = Seq(localScope) ++ sf.scopeObj.map(s => Scope("closure", toRemoteObject(s, byValue = false))).toSeq
+      val thisObj = toRemoteObject(sf.thisObj, byValue = false)
       // Reuse stack frame ID as call frame ID so that mapping is easier when we talk to the debugger
       CallFrame(sf.id, Location(sf.breakpoint.scriptId, sf.breakpoint.lineNumberBase1 - 1, 0), scopes, thisObj, sf.functionDetails.name)
     }

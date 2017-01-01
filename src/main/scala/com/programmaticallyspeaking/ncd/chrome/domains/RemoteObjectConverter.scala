@@ -3,15 +3,35 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.Undefined
-import com.programmaticallyspeaking.ncd.infra.ObjectMapping
+import com.programmaticallyspeaking.ncd.infra.{ObjectMapping, StringAnyMap}
 
-class RemoteObjectConverter() {
+class RemoteObjectConverter {
 
   private def objectId(value: ComplexNode) = ObjectMapping.toJson(value.objectId)
 
-  def toRemoteObject(value: ValueNode): RemoteObject = value match {
-    case array: ArrayNode => RemoteObject.forArray(array.items.size, objectId(array))
-    case obj: ObjectNode => RemoteObject.forObject(objectId(obj))
+  def toRemoteObject(value: ValueNode, byValue: Boolean): RemoteObject = value match {
+    case array: ArrayNode =>
+      if (byValue) {
+        val extractor = new ValueNodeExtractor
+        extractor.extract(array) match {
+          case a: Array[_] => RemoteObject.forArray(a)
+          case other =>
+            throw new IllegalStateException("Unexpected extracted value from ArrayNode: " + other)
+        }
+      } else {
+        RemoteObject.forArray(array.items.size, objectId(array))
+      }
+    case obj: ObjectNode =>
+      if (byValue) {
+        val extractor = new ValueNodeExtractor
+        extractor.extract(obj) match {
+          case StringAnyMap(aMap) => RemoteObject.forObject(aMap)
+          case other =>
+            throw new IllegalStateException("Unexpected extracted value from ObjectNode: " + other)
+        }
+      } else {
+        RemoteObject.forObject(objectId(obj))
+      }
     case date: DateNode => RemoteObject.forDate(date.stringRepresentation, objectId(date))
     case EmptyNode => RemoteObject.nullValue
     case fun: FunctionNode => RemoteObject.forFunction(fun.name, fun.source, objectId(fun))

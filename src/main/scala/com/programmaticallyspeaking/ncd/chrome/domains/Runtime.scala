@@ -38,6 +38,7 @@ object Runtime {
   case class ExceptionDetails(exceptionId: Int, text: String, lineNumber: Int, columnNumber: Int, url: Option[String], scriptId: Option[ScriptId] = None, executionContextId: ExecutionContextId = StaticExecutionContextId)
 
   object RemoteObject {
+
     def forFunction(name: String, source: String, objectId: String) = {
       val src = Option(source).getOrElse("[unknown]")
       val desc = s"function $name() { $src }"
@@ -53,10 +54,21 @@ object Runtime {
       RemoteObject("object", null, "Object", "Object", null, null, validObjectId(objectId))
     }
 
+    def forObject(value: Map[String, Any]) = {
+      // Note: I don't know if object ID should be omitted here. The protocol doesn't say.
+      RemoteObject("object", null, "Object", "Object", value, null, null)
+    }
+
     def forArray(length: Int, objectId: String) = {
       require(length >= 0, "array length must be non-negative")
       val desc = s"Array[$length]"
       RemoteObject("object", "array", "Array", desc, null, null, validObjectId(objectId))
+    }
+
+    def forArray(items: Seq[_]) = {
+      val desc = s"Array[${items.length}]"
+      // Note: I don't know if object ID should be omitted here. The protocol doesn't say.
+      RemoteObject("object", "array", "Array", desc, items, null, null)
     }
 
     def forString(s: String) =
@@ -106,7 +118,8 @@ class Runtime extends DomainActor with Logging {
     remoteObjectConverter = new RemoteObjectConverter()
   }
 
-  private def toRemoteObject(node: ValueNode): RemoteObject = remoteObjectConverter.toRemoteObject(node)
+  private def toRemoteObject(node: ValueNode, byValue: Boolean): RemoteObject =
+    remoteObjectConverter.toRemoteObject(node, byValue = byValue)
 
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case Runtime.getProperties(jsonObjectId, _) =>
@@ -114,7 +127,7 @@ class Runtime extends DomainActor with Logging {
       val objectId = ObjectMapping.fromJson[ObjectId](jsonObjectId)
       objectRegistry.objectById(objectId) match {
         case Some(value) =>
-          val propDescs = value.entries.map(e => PropertyDescriptor(e._1, toRemoteObject(e._2.resolve())))
+          val propDescs = value.entries.map(e => PropertyDescriptor(e._1, toRemoteObject(e._2.resolve(), byValue = false)))
           GetPropertiesResult(propDescs)
         case None => throw new IllegalArgumentException("Unknown object ID: " + objectId)
       }

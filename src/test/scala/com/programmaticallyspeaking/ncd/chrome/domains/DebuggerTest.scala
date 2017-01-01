@@ -140,10 +140,24 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
           params.callFrames.head.scopeChain.map(_.`type`) should contain ("closure")
         }
 
+        "should return the closure scope by-reference" in {
+          val ev = simulateHitBreakpoint(Seq(stackFrame))
+          val params = getEventParams(ev)
+          val closureScope = params.callFrames.head.scopeChain.find(_.`type` == "closure")
+          closureScope.map(_.`object`.value) should be (Some(null))
+        }
+
         "should have a local scope in the event params" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
           val params = getEventParams(ev)
           params.callFrames.head.scopeChain.map(_.`type`) should contain ("local")
+        }
+
+        "should return the local scope by-reference" in {
+          val ev = simulateHitBreakpoint(Seq(stackFrame))
+          val params = getEventParams(ev)
+          val localScope = params.callFrames.head.scopeChain.find(_.`type` == "local")
+          localScope.map(_.`object`.value) should be (Some(null))
         }
 
         "should have the correct function name in the call frame" in {
@@ -184,7 +198,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
     "evaluateOnCallFrame" - {
 
-      def testEvalHandling(theAnswer: => ValueNode, silent: Option[Boolean] = None)(fun: (Debugger.EvaluateOnCallFrameResult) => Unit): Unit = {
+      def testEvalHandling(theAnswer: => ValueNode, silent: Option[Boolean] = None, returnByValue: Option[Boolean] = None)(fun: (Debugger.EvaluateOnCallFrameResult) => Unit): Unit = {
         when(currentScriptHost.evaluateOnStackFrame(any[String], any[String], any[Map[String, ObjectId]])).thenAnswer(new Answer[Try[ValueNode]] {
           override def answer(invocation: InvocationOnMock): Try[ValueNode] = {
             Try(theAnswer)
@@ -194,7 +208,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val debugger = newActorInstance[Debugger]
         debugger ! Messages.Request("1", Domain.enable)
 
-        inside(requestAndReceiveResponse(debugger, "", Debugger.evaluateOnCallFrame("a", "5+5", silent))) {
+        inside(requestAndReceiveResponse(debugger, "", Debugger.evaluateOnCallFrame("a", "5+5", silent, returnByValue))) {
           case r: Debugger.EvaluateOnCallFrameResult =>
             fun(r)
         }
@@ -260,6 +274,14 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
             case Some(url) =>
               url should fullyMatch regex ("file:/.*DebuggerTestHelper\\.scala".r)
           }
+        }
+      }
+
+      "should support by-value return" in {
+        val items = Seq(LazyNode.eager(SimpleValue("abc")))
+        val arr = ArrayNode(items, ObjectId("x"))
+        testEvalHandling(arr, returnByValue = Some(true)) { resp =>
+          resp.result should be (RemoteObject.forArray(Seq("abc")))
         }
       }
     }
