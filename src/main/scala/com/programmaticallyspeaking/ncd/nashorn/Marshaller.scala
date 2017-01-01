@@ -241,7 +241,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       }
 
       val name = "Error"
-      val message = marshalledAs[String](invoker.invokeParameterLessMethod(objRef, "getMessage")) // SimpleValue(String)
+      val message = marshalledAs[String](invoker.getMessage())
       val fullStack = s"$name: $message" + Option(data._2).map(st => "\n" + st)
 //      val cause = marshal(invoker.invokeParameterLessMethod(objRef, "getCause")) // ErrorValue
 //      val stack = marshal(invoker.invokeParameterLessMethod(objRef, "getStackTrace")) // ArrayNode
