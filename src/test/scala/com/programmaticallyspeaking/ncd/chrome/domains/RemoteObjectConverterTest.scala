@@ -35,8 +35,12 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
       converter.toRemoteObject(SimpleValue(42.0d), byValue = false) should be (RemoteObject.forNumber(42.0d))
     }
 
-    "convert SimpleValue with an integer-number to a number-based RemoteObject" in {
-      converter.toRemoteObject(SimpleValue(42), byValue = false) should be (RemoteObject.forNumber(42.0d))
+    "convert SimpleValue with an integer-number to an integer-based RemoteObject" in {
+      converter.toRemoteObject(SimpleValue(42), byValue = false).value shouldBe a[java.lang.Integer]
+    }
+
+    "convert SimpleValue with a long-number to a long-based RemoteObject" in {
+      converter.toRemoteObject(SimpleValue(42L), byValue = false).value shouldBe a[java.lang.Long]
     }
 
     "convert SimpleValue with Undefined to RemoteObject.undefined" in {

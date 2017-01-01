@@ -23,8 +23,12 @@ class RemoteObjectTest extends UnitTest {
         RemoteObject.forNumber(Double.NegativeInfinity) should be (RemoteObject("number", null, null, "-Infinity", null, "-Infinity", null))
       }
 
-      "should handle 0" in {
-        RemoteObject.forNumber(0) should be (RemoteObject("number", null, null, "0.0", 0.0d, null, null))
+      "should handle 0 (integer)" in {
+        RemoteObject.forNumber(0) should be (RemoteObject("number", null, null, "0", 0, null, null))
+      }
+
+      "should handle a long number" in {
+        RemoteObject.forNumber(42L).value shouldBe a[java.lang.Long]
       }
 
       "should handle -0" in {

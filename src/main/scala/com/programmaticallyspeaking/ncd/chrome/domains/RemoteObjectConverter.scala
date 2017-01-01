@@ -38,6 +38,8 @@ class RemoteObjectConverter {
     case err: ErrorValue => RemoteObject.forError(err.data.name, err.data.message, err.data.stackIncludingMessage, objectId(err))
     case SimpleValue(b: Boolean) => if (b) RemoteObject.trueValue else RemoteObject.falseValue
     case SimpleValue(s: String) => RemoteObject.forString(s)
+    case SimpleValue(n: Int) => RemoteObject.forNumber(n)
+    case SimpleValue(n: Long) => RemoteObject.forNumber(n)
     case SimpleValue(n: Number) => RemoteObject.forNumber(n.doubleValue())
     case SimpleValue(Undefined) => RemoteObject.undefinedValue
     case SimpleValue(x) => throw new IllegalArgumentException("Unknown simple value: " + x)

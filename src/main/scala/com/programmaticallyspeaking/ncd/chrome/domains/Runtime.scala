@@ -86,6 +86,9 @@ object Runtime {
       RemoteObject("number", null, null, number.toString, number, null, null)
     }
 
+    def forNumber(number: Int): RemoteObject = RemoteObject("number", null, null, number.toString, number, null, null)
+    def forNumber(number: Long): RemoteObject = RemoteObject("number", null, null, number.toString, number, null, null)
+
     val trueValue = RemoteObject("boolean", null, null, null, true, null, null)
     val falseValue = RemoteObject("boolean", null, null, null, false, null, null)
     val nullValue = RemoteObject("object", "null", null, null, null, null, null)
