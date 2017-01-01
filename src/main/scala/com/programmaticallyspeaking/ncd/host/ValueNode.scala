@@ -19,12 +19,13 @@ object LazyNode {
 trait LazyNode extends ValueNode {
   def resolve(): ValueNode
 }
-trait ComplexNode extends ValueNode{
+sealed trait ComplexNode extends ValueNode {
   def entries: Seq[(String, LazyNode)]
   val objectId: ObjectId
 }
 case object EmptyNode extends ValueNode
 case class SimpleValue(value: Any) extends ValueNode
+// TODO: Naming - all ComplexNode classes are named XXNode, but not this.
 case class ErrorValue(data: ExceptionData, objectId: ObjectId) extends ComplexNode {
   override def entries: Seq[(String, LazyNode)] = Seq(
     "message" -> LazyNode.eager(SimpleValue(data.message)),
