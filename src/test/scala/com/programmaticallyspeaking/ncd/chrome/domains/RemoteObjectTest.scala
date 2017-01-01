@@ -80,7 +80,7 @@ class RemoteObjectTest extends UnitTest {
       }
 
       "should accept an Array" in {
-        val data: Array[Any] = Array("foo")
+        val data = Seq("foo")
         RemoteObject.forArray(data) should be (RemoteObject("object", "array", "Array", "Array[1]", data, null, null))
       }
     }
