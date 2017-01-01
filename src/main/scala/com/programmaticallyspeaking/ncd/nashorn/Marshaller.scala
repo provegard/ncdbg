@@ -162,11 +162,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
 
   private def toError(proxy: ScriptObjectProxy) = {
     val so = proxy.scriptObject
-    val invoker = new DynamicInvoker(thread, so)
-    val getSignature = "get(Ljava/lang/Object;)Ljava/lang/Object;"
-    // Convenience method to avoid noise since we call a full-signature method (which we do since there are overloads
-    // and we want to select the correct method).
-    def getValue(key: String) = invoker.applyDynamic(getSignature)(key)
+    def getValue(key: String) = proxy.mirror.get(key)
 
     val msgValue = getValue("message")
     val nameValue = getValue("name")
