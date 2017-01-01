@@ -40,8 +40,7 @@ object Runtime {
   object RemoteObject {
 
     def forFunction(name: String, source: String, objectId: String) = {
-      val src = Option(source).getOrElse("[unknown]")
-      val desc = s"function $name() { $src }"
+      val desc = Option(source).getOrElse(s"function $name() { [unknown] }")
       RemoteObject("function", null, "Function", desc, null, null, validObjectId(objectId))
     }
 

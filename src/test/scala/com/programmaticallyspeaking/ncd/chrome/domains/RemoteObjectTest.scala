@@ -105,8 +105,8 @@ class RemoteObjectTest extends UnitTest {
     }
 
     "forFunction" - {
-      "should handle name and source" in {
-        RemoteObject.forFunction("fun", "return 42;", "an-id") should be (RemoteObject("function", null, "Function", "function fun() { return 42; }", null, null, "an-id"))
+      "should handle name and source (and assume source includes the entire function definition)" in {
+        RemoteObject.forFunction("fun", "function fun() { return 42; }", "an-id") should be (RemoteObject("function", null, "Function", "function fun() { return 42; }", null, null, "an-id"))
       }
 
       "should handle unknown/null source" in {
