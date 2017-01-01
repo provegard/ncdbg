@@ -25,8 +25,18 @@ sealed trait ComplexNode extends ValueNode {
 }
 case object EmptyNode extends ValueNode
 case class SimpleValue(value: Any) extends ValueNode
+
+/**
+  * Represents a JS Error or an exception.
+  *
+  * @param data exception data
+  * @param isBasedOnThrowable a flag that indicates whether the data are based on a captured [[Throwable]] or if they
+  *                           just represent a JS `Error` instance which essentially is a value to be handled like
+  *                           any other value.
+  * @param objectId object ID
+  */
 // TODO: Naming - all ComplexNode classes are named XXNode, but not this.
-case class ErrorValue(data: ExceptionData, objectId: ObjectId) extends ComplexNode {
+case class ErrorValue(data: ExceptionData, isBasedOnThrowable: Boolean, objectId: ObjectId) extends ComplexNode {
   override def entries: Seq[(String, LazyNode)] = Seq(
     "message" -> LazyNode.eager(SimpleValue(data.message)),
     "name" -> LazyNode.eager(SimpleValue(data.name))

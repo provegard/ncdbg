@@ -181,7 +181,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
         marshalledAsOptionally[String](fileNameValue).getOrElse("<unknown>"), //TODO: To URL?
         Option(stack)
       )
-    ErrorValue(exData, objectId(so))
+    ErrorValue(exData, isBasedOnThrowable = false, objectId(so))
   }
 
   private def marshalLater(v: Value) = new LazyMarshalledValue(v)
@@ -218,7 +218,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
         val nashornException = classes.find(_.name() == classOf[NashornException].getName)
 
         if (isThrowable) {
-          Some(ErrorValue(exceptionDataOf(objRef, nashornException), objectId(v)))
+          Some(ErrorValue(exceptionDataOf(objRef, nashornException), isBasedOnThrowable = true, objectId(v)))
         } else None
 
       case _ => None

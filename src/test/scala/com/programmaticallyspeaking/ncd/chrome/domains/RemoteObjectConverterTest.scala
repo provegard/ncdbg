@@ -64,7 +64,7 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
 
     "convert ErrorValue to a RemoteObject with error details" in {
       val data = ExceptionData("SomeError", "oops", 10, 0, "file:/tmp/data.js", Some("SomeError: oops"))
-      val ev = ErrorValue(data, ObjectId("obj-1"))
+      val ev = ErrorValue(data, isBasedOnThrowable = false, ObjectId("obj-1"))
       converter.toRemoteObject(ev) should be (RemoteObject.forError("SomeError", "oops", Some("SomeError: oops"), """{"id":"obj-1"}"""))
     }
 

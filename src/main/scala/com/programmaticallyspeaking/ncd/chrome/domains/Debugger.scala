@@ -121,13 +121,13 @@ class Debugger extends DomainActor with Logging {
 
       val reportException = !maybeSilent.getOrElse(false)
       scriptHost.evaluateOnStackFrame(callFrameId, expression, Map.empty) match {
-        case Success(err: ErrorValue) if reportException =>
+        case Success(err: ErrorValue) if reportException && err.isBasedOnThrowable =>
           val data = err.data
           // Note that Chrome wants line numbers to be 0-based
           val details = Runtime.ExceptionDetails(exceptionId, data.message, data.lineNumberBase1 - 1, data.columnNumber, Some(data.url))
           // Apparently we need to pass an actual value with the exception details
           EvaluateOnCallFrameResult(RemoteObject.undefinedValue, Some(details))
-        case Success(err: ErrorValue) =>
+        case Success(err: ErrorValue) if err.isBasedOnThrowable =>
           EvaluateOnCallFrameResult(RemoteObject.undefinedValue)
         case Success(result) => EvaluateOnCallFrameResult(toRemoteObject(result))
         case Failure(t) =>
