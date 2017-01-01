@@ -24,6 +24,9 @@ class ScriptObjectMirror(thread: ThreadReference, val scriptObject: ObjectRefere
   def put(key: AnyRef, value: AnyRef, isStrict: Boolean) =
     invoker.applyDynamic(putObjectObjectBoolSignature)(key, value, isStrict)
 
+  def get(key: AnyRef) =
+    invoker.applyDynamic(getObjectSignature)(key)
+
   def actualToString = invoker.applyDynamic("toString")()
 
   override def toString = "ScriptObjectMirror (maybe you meant actualToString?)"
@@ -31,4 +34,5 @@ class ScriptObjectMirror(thread: ThreadReference, val scriptObject: ObjectRefere
 
 object ScriptObjectMirror {
   val putObjectObjectBoolSignature = "put(Ljava/lang/Object;Ljava/lang/Object;Z)Ljava/lang/Object;"
+  val getObjectSignature = "get(Ljava/lang/Object;)Ljava/lang/Object;"
 }
