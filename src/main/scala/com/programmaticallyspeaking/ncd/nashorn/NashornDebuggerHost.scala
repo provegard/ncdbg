@@ -247,8 +247,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
             val originalThis = values(":this")
             val originalScope = scopeWithFreeVariables(thread, values.get(":scope").orNull, namedValues)
 
-            val ret = DebuggerSupport_eval(thread, originalThis, originalScope, code)
-            marshaller.marshal(ret)
+            try {
+              val ret = DebuggerSupport_eval(thread, originalThis, originalScope, code)
+              marshaller.marshal(ret)
+            } catch {
+              case ex: Exception =>
+                log.error("Code evaluation failed.", ex)
+                throw ex
+            }
           }
 
           // Variables that don't start with ":" are locals
