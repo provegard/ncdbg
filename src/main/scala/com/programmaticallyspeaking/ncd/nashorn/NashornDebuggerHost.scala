@@ -95,13 +95,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
             getOrAddScript(scriptPath) match {
               case Success(script) =>
 
-//                val breakpoints = locations.map(loc => {
-              //                  val br = erm.createBreakpointRequest(loc)
-              //                  // Assume script code runs in a single thread, so pausing that thread should be enough.
-              //                  br.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
-              //                  br
-              //                }).map(br => new BreakpointRequestWrapper(script, br, breakpointIdGenerator.next))
-              //                addBreakpoints(script, breakpoints)
               val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
               addBreakableLocations(script, breakableLocations)
 
