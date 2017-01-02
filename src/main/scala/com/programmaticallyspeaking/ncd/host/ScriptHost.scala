@@ -32,6 +32,15 @@ case object StepInto extends StepType
 case object StepOver extends StepType
 case object StepOut extends StepType
 
+/**
+  * Return type for [[ScriptHost]] methods that otherwise would return [[Unit]]. The point is to make the typed actor
+  * implementation treat all methods as synchronous rather than treating the `Unit`-returning ones as fire-and-forget.
+  * One alternative would be to let all methods return [[scala.concurrent.Future]], but it makes the trait very awkward
+  * to implement.
+  */
+trait Done
+object Done extends Done
+
 trait ScriptHost {
   /**
     * Evaluates an expression on a specific stack frame. Variables visible on that stack frame can be used in the
@@ -46,14 +55,14 @@ trait ScriptHost {
     */
   def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode]
 
-  def removeBreakpointById(id: String): Unit
+  def removeBreakpointById(id: String): Done
 
-  def resume(): Unit
+  def resume(): Done
 
   /**
     * Resets the host - resumes if the host is paused and disables all breakpoints.
     */
-  def reset(): Unit
+  def reset(): Done
 
   def scriptById(id: String): Option[Script]
 
@@ -74,15 +83,15 @@ trait ScriptHost {
 
   def objectRegistry: ObjectRegistry
 
-  def step(stepType: StepType): Unit
+  def step(stepType: StepType): Done
 
   /**
     * Tells the host to pause when it encounters a breakpoint.
     */
-  def pauseOnBreakpoints(): Unit
+  def pauseOnBreakpoints(): Done
 
   /**
     * Tells the host to ignore breakpoints.
     */
-  def ignoreBreakpoints(): Unit
+  def ignoreBreakpoints(): Done
 }

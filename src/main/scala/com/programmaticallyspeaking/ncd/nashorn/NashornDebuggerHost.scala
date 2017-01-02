@@ -419,23 +419,25 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
       log.debug("Ignoring resume request when not paused (no pause data).")
   }
 
-  override def resume(): Unit = {
+  override def resume(): Done = {
     resumeWhenPaused()
+    Done
   }
 
-  private def removeAllBreakpoints(): Unit = {
+  private def removeAllBreakpoints(): Done = {
     enabledBreakpoints.foreach(e => e._2.disable())
     enabledBreakpoints.clear()
+    Done
   }
 
-  override def reset(): Unit = {
+  override def reset(): Done = {
     log.info("Resetting VM...")
     willPauseOnBreakpoints = false
     removeAllBreakpoints()
     resume()
   }
 
-  override def removeBreakpointById(id: String): Unit = {
+  override def removeBreakpointById(id: String): Done = {
     enabledBreakpoints.get(id) match {
       case Some(bp) =>
         log.info(s"Removing breakpoint with id $id")
@@ -444,6 +446,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
       case None =>
         log.warn(s"Got request to remove an unknown breakpoint with id $id")
     }
+    Done
   }
 
   private def expensiveStepInto(): Unit = {
@@ -454,7 +457,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     }
   }
 
-  override def step(stepType: StepType): Unit = pausedData match {
+  override def step(stepType: StepType): Done = pausedData match {
     case Some(pd) =>
       log.info(s"Stepping with type $stepType")
       val depth = stepType match {
@@ -478,6 +481,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
         req.enable()
         resumeWhenPaused()
       }
+      Done
     case None =>
       throw new IllegalStateException("A breakpoint must be active for stepping to work")
   }
@@ -524,13 +528,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
 
   case class StackFrameHolder(stackFrame: Option[StackFrame], isAtDebuggerStatement: Boolean = false)
 
-  override def pauseOnBreakpoints(): Unit = {
+  override def pauseOnBreakpoints(): Done = {
     log.info("Will pause on breakpoints")
     willPauseOnBreakpoints = true
+    Done
   }
 
-  override def ignoreBreakpoints(): Unit = {
+  override def ignoreBreakpoints(): Done = {
     log.info("Will ignore breakpoints")
     willPauseOnBreakpoints = false
+    Done
   }
 }

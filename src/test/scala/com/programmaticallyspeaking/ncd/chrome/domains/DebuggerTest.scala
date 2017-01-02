@@ -344,6 +344,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     when(host.removeBreakpointById(any[String])).thenAnswerWith({
       case (id: String) :: Nil =>
         activeBreakpoints -= id
+        Done
     })
 
 

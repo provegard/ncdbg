@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 
 import akka.actor.{Actor, ActorRef, PoisonPill, Stash, Status, TypedActor, TypedProps}
 import akka.util.Timeout
-import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
+import com.programmaticallyspeaking.ncd.host.{Done, ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
 import org.slf4s.Logging
 
@@ -116,6 +116,9 @@ abstract class DomainActor extends Actor with Logging with Stash {
         case msg: Messages.DomainMessage =>
           sender() ! msg
         case u: Unit =>
+          sender() ! Messages.Accepted(req.id)
+        case d: Done =>
+          // Done is a Unit replacement to achieve synchronous calls, so we treat it just as Unit.
           sender() ! Messages.Accepted(req.id)
         case data =>
           sender() ! Messages.Response(req.id, data)
