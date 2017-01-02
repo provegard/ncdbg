@@ -1,34 +1,40 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import akka.actor.{Actor, ActorRef, Stash, TypedActor, TypedProps}
+import akka.actor.{Actor, ActorRef, Stash, Status, TypedActor, TypedProps}
 import akka.util.Timeout
 import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
 import org.slf4s.Logging
 
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 
 object DomainActor {
   private[DomainActor] case class ScriptHostRef(actorRef: ActorRef)
+
+  private[DomainActor] case class ProcessingResult(req: Messages.Request, result: Any)
+  private[DomainActor] case class ProcessingError(req: Messages.Request, t: Throwable)
+
+  private[DomainActor] case class EmittableEvent(event: Messages.Event, receiver: ActorRef)
 }
 
 abstract class DomainActor extends Actor with Logging with Stash {
   import DomainActor._
+  implicit val ec = ExecutionContext.global
 
   protected var scriptHost: ScriptHost = _
   private var scriptEventSubscription: Subscription = _
 
   private var isProcessingRequest = false
-  private val eventsToEmit = ListBuffer[Messages.Event]()
+  private val eventsToEmit = ListBuffer[EmittableEvent]()
   private var lastRequestor: ActorRef = _
 
   val name = getClass.getSimpleName // assume the implementing class is named after the domain
 
   override def preStart(): Unit = try super.preStart() finally {
-    import context.dispatcher
     val scriptHostActor = context.actorSelection("/user/scriptHost")
     implicit val timeout = Timeout(1.second)
     scriptHostActor.resolveOne().onComplete {
@@ -104,40 +110,48 @@ abstract class DomainActor extends Actor with Logging with Stash {
       handleScriptEvent.applyOrElse(scriptEvent, { se: ScriptEvent =>
         log.debug(s"[$name] Dropping unhandled script event $scriptEvent")
       })
+
+    case ProcessingResult(req, result) =>
+      result match {
+        case msg: Messages.DomainMessage =>
+          sender() ! msg
+        case u: Unit =>
+          sender() ! Messages.Accepted(req.id)
+        case data =>
+          sender() ! Messages.Response(req.id, data)
+      }
+      finishProcessingRequest(req)
+
+    case ProcessingError(req, ex) =>
+      log.error(s"Message handling error for domain $name", ex)
+      sender() ! Messages.ErrorResponse(req.id, ex.getMessage)
+      finishProcessingRequest(req)
+  }
+
+  private def finishProcessingRequest(req: Messages.Request): Unit = {
+    isProcessingRequest = false
+    emitQueuedEvents()
+
+    if (req.msg == Domain.disable) {
+      log.info(s"Disabling domain $name")
+      context.become(receive)
+    }
+  }
+
+
+  private def handleProcessingResult(req: Messages.Request, theSender: ActorRef, t: Try[Any]): Unit = t match {
+    case Success(f: Future[_]) => f.onComplete(handleProcessingResult(req, theSender, _: Try[Any]))
+    case Success(result) => self.tell(ProcessingResult(req, result), theSender)
+    case Failure(ex) => self.tell(ProcessingError(req, ex), theSender)
   }
 
   private def processRequest(req: Messages.Request): Unit = {
     // We need this when calling emitQueuedEvents outside of request processing
     lastRequestor = sender()
-
     isProcessingRequest = true
-    try {
-      handle.applyOrElse(req.msg, { x: AnyRef =>
-        unhandledBySubclass(req, x) //.asInstanceOf[Any]
-        //            Messages.ErrorResponse(req.id, "Method not supported").asInstanceOf[Any]
-      }) match {
-        case msg: Messages.DomainMessage =>
-          lastRequestor ! msg
-        case u: Unit =>
-          lastRequestor ! Messages.Accepted(req.id)
-        case data =>
-          lastRequestor ! Messages.Response(req.id, data)
-      }
-    } catch {
-      case ex: Exception =>
-        log.error(s"Message handling error for domain $name", ex)
-        lastRequestor ! Messages.ErrorResponse(req.id, ex.getMessage)
-    } finally {
-      isProcessingRequest = false
-      emitQueuedEvents()
 
-      //        if (req.msg == Domain.disable) isEnabled = false
-      if (req.msg == Domain.disable) {
-        log.info(s"Disabling domain $name")
-        context.become(receive)
-      }
-    }
-
+    val unhandled = unhandledBySubclass(req, _: AnyRef)
+    handleProcessingResult(req, lastRequestor, Try(handle.applyOrElse(req.msg, unhandled)))
   }
 
   private def unhandledBySubclass(req: Messages.Request, x: AnyRef): Messages.DomainMessage = req.msg match {
@@ -148,17 +162,15 @@ abstract class DomainActor extends Actor with Logging with Stash {
   }
 
   private def emitQueuedEvents(): Unit = {
-    Option(lastRequestor) match {
-      case Some(actorRef) =>
-        eventsToEmit.foreach(actorRef !)
-        eventsToEmit.clear()
-      case None =>
-        ??? // TODO
+    eventsToEmit.foreach { e =>
+      e.receiver ! e.event
     }
+    eventsToEmit.clear()
   }
 
   protected def emitEvent(method: String, params: Any): Unit = {
-    eventsToEmit += Messages.Event(method, params)
+    assert(lastRequestor != null, "lastRequester must be set in emitEvent")
+    eventsToEmit += EmittableEvent(Messages.Event(method, params), lastRequestor)
     if (!isProcessingRequest) emitQueuedEvents()
   }
 

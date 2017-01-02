@@ -1,22 +1,30 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import akka.actor.{Actor, DeadLetter, Inbox, PoisonPill, Props}
+import akka.actor.{Actor, ActorRef, DeadLetter, Props}
 import com.programmaticallyspeaking.ncd.host.ScriptEvent
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.{ExecutionContext, Future}
 
 object TestDomainActor {
   case object fail
   case class echo(msg: String)
+  case class echoLater(msg: String)
 }
 
 class TestDomainActor extends DomainActor {
+  import ExecutionContext.Implicits.global
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case TestDomainActor.fail =>
       throw new Exception("I failed")
     case TestDomainActor.echo(msg) =>
       msg
+    case TestDomainActor.echoLater(msg) =>
+      Future {
+        Thread.sleep(200)
+        msg
+      }
   }
 
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
@@ -36,6 +44,8 @@ class EnableDisableDomainActor extends DomainActor {
 
 class DomainActorTest extends UnitTest with DomainActorTesting {
 
+  private def enableActor(actor: ActorRef) = requestAndReceive(actor, "1", Domain.enable)
+
   "A DomainActor actor" - {
     "should handle Domain.enable automatically" in {
       val actor = newActorInstance[TestDomainActor]
@@ -51,7 +61,7 @@ class DomainActorTest extends UnitTest with DomainActorTesting {
 
     "should reject Domain.enable if already enabled" in {
       val actor = newActorInstance[TestDomainActor]
-      actor ! Messages.Request("1", Domain.enable)
+      enableActor(actor)
       val ex = intercept[ResponseException] {
         requestAndReceiveResponse(actor, "2", Domain.enable)
       }
@@ -60,14 +70,14 @@ class DomainActorTest extends UnitTest with DomainActorTesting {
 
     "should handle Domain.disable automatically" in {
       val actor = newActorInstance[TestDomainActor]
-      actor ! Messages.Request("1", Domain.enable)
+      enableActor(actor)
       val response = requestAndReceiveResponse(actor, "2", Domain.disable)
       response should be (Accepted)
     }
 
     "should allow a custom response to Domain.disable" in {
       val actor = newActorInstance[EnableDisableDomainActor]
-      actor ! Messages.Request("1", Domain.enable)
+      enableActor(actor)
       val response = requestAndReceiveResponse(actor, "2", Domain.disable)
       response should be ("disabled")
     }
@@ -80,8 +90,8 @@ class DomainActorTest extends UnitTest with DomainActorTesting {
 
     "should disable the domain on receiving Domain.disable" in {
       val actor = newActorInstance[TestDomainActor]
-      actor ! Messages.Request("1", Domain.enable)
-      actor ! Messages.Request("2", Domain.disable)
+      enableActor(actor)
+      requestAndReceive(actor, "2", Domain.disable)
       val ex = intercept[ResponseException](requestAndReceiveResponse(actor, "3", TestDomainActor.echo("test")))
       ex.getMessage should include ("not enabled")
     }
@@ -89,7 +99,7 @@ class DomainActorTest extends UnitTest with DomainActorTesting {
     "should be able to throw an exception when handling a message" in {
       val actor = newActorInstance[TestDomainActor]
 
-      actor ! Messages.Request("1", Domain.enable)
+      enableActor(actor)
 
       val ex = intercept[ResponseException](requestAndReceiveResponse(actor, "2", TestDomainActor.fail))
       ex.getMessage should be ("I failed")
@@ -98,9 +108,18 @@ class DomainActorTest extends UnitTest with DomainActorTesting {
     "should be able to return a value when handling a message" in {
       val actor = newActorInstance[TestDomainActor]
 
-      actor ! Messages.Request("1", Domain.enable)
+      enableActor(actor)
 
       val resp = requestAndReceiveResponse(actor, "2", TestDomainActor.echo("hello"))
+      resp should be ("hello")
+    }
+
+    "should be able to return a Future-wrapped value when handling a message" in {
+      val actor = newActorInstance[TestDomainActor]
+
+      enableActor(actor)
+
+      val resp = requestAndReceiveResponse(actor, "2", TestDomainActor.echoLater("hello"))
       resp should be ("hello")
     }
 
