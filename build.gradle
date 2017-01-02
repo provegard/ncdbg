@@ -24,6 +24,7 @@ test {
 
 repositories {
     mavenCentral()
+    maven { url "https://jitpack.io" }
 }
 
 dependencies {
@@ -34,19 +35,22 @@ dependencies {
     // needed for gradle-scalatest
     testRuntime 'org.pegdown:pegdown:1.6.0'
 
-    testCompile group: 'org.scalatest', name: 'scalatest_2.11', version: '3.0.1'
-    testCompile group: 'com.typesafe.akka', name: 'akka-http-testkit_2.11', version: akkaHttpVersion
+    testCompile group: 'org.scalatest', name: 'scalatest_2.12', version: '3.0.1'
+    testCompile group: 'com.typesafe.akka', name: 'akka-http-testkit_2.12', version: akkaHttpVersion
     testCompile group: 'org.mockito', name: 'mockito-core', version: '2.2.27'
 
     compile files("$jdkHome/lib/tools.jar")
 
     compile group: 'ch.qos.logback', name: 'logback-classic', version: logbackVersion
-    compile group: 'org.slf4s', name: 'slf4s-api_2.11', version: '1.7.13'
 
-    compile group: 'com.typesafe.akka', name: 'akka-actor_2.11', version: akkaVersion
-    compile group: 'com.typesafe.akka', name: 'akka-http_2.11', version: akkaHttpVersion
+    // TODO: Update this once a proper slf4s-api release is available.
+    compile 'com.github.provegard:slf4s:2cbc154cf095d9e2027bf978502bb7443afcfdf3'
+//    compile group: 'org.slf4s', name: 'slf4s-api_2.12', version: '1.7.13'
 
-    compile group: 'com.fasterxml.jackson.module', name: 'jackson-module-scala_2.11', version: '2.8.4'
+    compile group: 'com.typesafe.akka', name: 'akka-actor_2.12', version: akkaVersion
+    compile group: 'com.typesafe.akka', name: 'akka-http_2.12', version: akkaHttpVersion
 
-    compile 'org.scala-lang:scala-library:2.11.8'
+    compile group: 'com.fasterxml.jackson.module', name: 'jackson-module-scala_2.12', version: '2.8.4'
+
+    compile 'org.scala-lang:scala-library:2.12.1'
 }
