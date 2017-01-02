@@ -19,6 +19,8 @@ object Runtime {
 
   case object runIfWaitingForDebugger
 
+  case class releaseObject(objectId: RemoteObjectId)
+
   /**
     * Used when the user interacts with an object in the DevTools console, to list possible completions.
     */
@@ -134,6 +136,9 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport {
 
     case Runtime.runIfWaitingForDebugger =>
       log.debug("Request to run if waiting for debugger")
+
+    case Runtime.releaseObject(objectId) =>
+      log.debug(s"Request to release object with ID $objectId")
   }
 
   /**
