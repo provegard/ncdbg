@@ -278,7 +278,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
             mappingRegistry.register(null, localNode)
 
             try {
-              findBreakableLocation(location).map(w => new StackFrameImpl(thisObj, Option(scopeObj), localNode, w.toBreakpoint, evaluateCodeOnFrame, functionDetails(functionMethod))) match {
+              findBreakableLocation(location).map(w => new StackFrameImpl(thisObj, Option(scopeObj), localNode, w, evaluateCodeOnFrame, functionDetails(functionMethod))) match {
                 case Some(sf) => StackFrameHolder(Some(sf))
                 case None =>
                   log.warn(s"Won't create a stack frame for location ($location) since we don't recognize it.")
@@ -449,38 +449,55 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     Done
   }
 
+  private def enableBreakpointOnce(bl: BreakableLocation): Unit = {
+    bl.enableOnce()
+    enabledBreakpoints += (bl.id -> bl)
+  }
+
   private def expensiveStepInto(): Unit = {
+    // Creating a step request with STEP_INTO didn't work well in my testing, since the VM seems to end up in some
+    // sort of call site method. Therefore we do this one a bit differently.
+    log.debug("Performing expensive step-into by one-off-enabling all breakpoints.")
     // Do a one-off enabling of non-enabled breakpoints
-    breakableLocationsByScriptUri.flatMap(_._2).withFilter(!_.isEnabled).foreach { bl =>
-      bl.enableOnce()
-      enabledBreakpoints += (bl.id -> bl)
+    breakableLocationsByScriptUri.flatMap(_._2).withFilter(!_.isEnabled).foreach(enableBreakpointOnce)
+  }
+
+  private def stepOut(pd: PausedData): Unit = {
+    pd.stackFrames.tail.headOption match {
+      case Some(sf: StackFrameImpl) =>
+        // Set one-off breakpoints in all locations of the method of this stack frame
+        val scriptUri = sf.breakableLocation.script.uri
+        val allBreakableLocations = breakableLocationsByScriptUri(scriptUri)
+        val sfMethod = sf.breakableLocation.location.method()
+        val relevantBreakableLocations = allBreakableLocations.filter(bl => bl.location.method() == sfMethod)
+        if (relevantBreakableLocations.isEmpty) {
+          log.warn("Turning step-out request to normal resume since there no breakable locations were found in the parent script frame.")
+        } else {
+          log.debug("Performing step-out by one-off-enabling breakpoints in the parent stack frame method.")
+          relevantBreakableLocations.foreach(enableBreakpointOnce)
+        }
+
+      case _ =>
+        log.info("Turning step-out request to normal resume since there is no parent script stack frame.")
+        // resumeWhenPaused is called by caller method (step)
     }
   }
 
   override def step(stepType: StepType): Done = pausedData match {
     case Some(pd) =>
       log.info(s"Stepping with type $stepType")
-      val depth = stepType match {
-        case StepInto => StepRequest.STEP_INTO
-        case StepOver => StepRequest.STEP_OVER
-        case StepOut => StepRequest.STEP_OUT
+      stepType match {
+        case StepInto =>
+          expensiveStepInto()
+        case StepOver =>
+          val req = virtualMachine.eventRequestManager().createStepRequest(pd.thread, StepRequest.STEP_LINE, StepRequest.STEP_OVER)
+          req.addCountFilter(1) // next step only
+          req.enable()
+        case StepOut =>
+          stepOut(pd)
       }
 
-      // TODO: Step-out doesn't work because we'll end up in java.lang.invoke.LambdaForm$DMH.653687670.invokeStatic_LL_
-      // TODO: So we need to do something similar to Step-into.
-
-      if (depth == StepRequest.STEP_INTO) {
-        // Creating a step request with STEP_INTO didn't work well in my testing, since the VM seems to end up in some
-        // sort of call site method. Therefore we do this one a bit differently.
-        log.debug("Performing expensive step-into by one-off-enabling all breakpoints.")
-        expensiveStepInto()
-        resumeWhenPaused()
-      } else {
-        val req = virtualMachine.eventRequestManager().createStepRequest(pd.thread, StepRequest.STEP_LINE, depth)
-        req.addCountFilter(1) // next step only
-        req.enable()
-        resumeWhenPaused()
-      }
+      resumeWhenPaused()
       Done
     case None =>
       throw new IllegalStateException("A breakpoint must be active for stepping to work")
@@ -516,18 +533,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     pausedData.stackFrames.find(_.id == id)
   }
 
-  class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame])
-
-  class StackFrameImpl(val thisObj: ValueNode, val scopeObj: Option[ValueNode], val locals: ObjectNode, val breakpoint: Breakpoint,
-                       val eval: CodeEvaluator,
-                       val functionDetails: FunctionDetails) extends StackFrame {
-    // Generate an ID for the stack frame so that we can find it later when asked to evaluate code for a
-    // particular stack frame.
-    val id = stackframeIdGenerator.next
-  }
-
-  case class StackFrameHolder(stackFrame: Option[StackFrame], isAtDebuggerStatement: Boolean = false)
-
   override def pauseOnBreakpoints(): Done = {
     log.info("Will pause on breakpoints")
     willPauseOnBreakpoints = true
@@ -539,4 +544,20 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     willPauseOnBreakpoints = false
     Done
   }
+
+  class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame])
+
+  class StackFrameImpl(val thisObj: ValueNode, val scopeObj: Option[ValueNode], val locals: ObjectNode,
+                       val breakableLocation: BreakableLocation,
+                       val eval: CodeEvaluator,
+                       val functionDetails: FunctionDetails) extends StackFrame {
+    // Generate an ID for the stack frame so that we can find it later when asked to evaluate code for a
+    // particular stack frame.
+    val id = stackframeIdGenerator.next
+
+    val breakpoint = breakableLocation.toBreakpoint
+  }
+
+  case class StackFrameHolder(stackFrame: Option[StackFrame], isAtDebuggerStatement: Boolean = false)
+
 }

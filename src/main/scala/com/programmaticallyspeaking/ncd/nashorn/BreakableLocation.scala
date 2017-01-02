@@ -12,7 +12,7 @@ import com.sun.jdi.request.{BreakpointRequest, EventRequest, EventRequestManager
   * @param eventRequestManager [[EventRequestManager]] instance for creating/removing a breakpoint
   * @param location the location
   */
-class BreakableLocation(val id: String, script: Script, eventRequestManager: EventRequestManager, location: Location) {
+class BreakableLocation(val id: String, val script: Script, eventRequestManager: EventRequestManager, val location: Location) {
   val lineNumber = location.lineNumber
   private var breakpointRequest: BreakpointRequest = _
   private var enabledOnce: Boolean = false
