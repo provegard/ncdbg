@@ -109,7 +109,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
       }
     }
 
-    log.info(s"$typeCount types checked, $scriptCount scripts detected, ${scriptByPath.size} scripts added.")
+    val breakableLocationCount = breakableLocationsByScriptUri.foldLeft(0)((sum, e) => sum + e._2.size)
+    log.info(s"$typeCount types checked, $scriptCount scripts detected, ${scriptByPath.size} scripts added, $breakableLocationCount breakable locations identified")
 
     //TODO: Is resume needed?
 //    vm.resume()
