@@ -414,6 +414,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
         case StepOver => StepRequest.STEP_OVER
         case StepOut => StepRequest.STEP_OUT
       }
+
+      // TODO: Step-out doesn't work because we'll end up in java.lang.invoke.LambdaForm$DMH.653687670.invokeStatic_LL_
+      // TODO: So we need to do something similar to Step-into.
+
       if (depth == StepRequest.STEP_INTO) {
         // Creating a step request with STEP_INTO didn't work well in my testing, since the VM seems to end up in some
         // sort of call site method. Therefore we do this one a bit differently.
