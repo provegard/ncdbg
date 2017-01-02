@@ -165,6 +165,15 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         }
       }
     }
+
+    "runIfWaitingForDebugger" - {
+      "should be supported" in {
+        val runtime = newActorInstance[Runtime]
+        requestAndReceive(runtime, "1", Domain.enable)
+        val response = requestAndReceiveResponse(runtime, "2", Runtime.runIfWaitingForDebugger)
+        response should be (Accepted)
+      }
+    }
   }
 
   // Helper class for matching against arguments of a mocked call to ScriptHost.evaluateOnStackFrame

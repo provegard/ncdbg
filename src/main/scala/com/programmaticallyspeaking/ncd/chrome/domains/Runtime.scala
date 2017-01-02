@@ -17,6 +17,8 @@ object Runtime {
 
   val StaticExecutionContextId = 1 //TODO: When do we vary this?
 
+  case object runIfWaitingForDebugger
+
   /**
     * Used when the user interacts with an object in the DevTools console, to list possible completions.
     */
@@ -129,6 +131,9 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport {
       // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
       val evalResult = evaluate(scriptHost, "$top", expression, namedObjects, reportException, actualReturnByValue)
       CallFunctionOnResult(evalResult.result, evalResult.exceptionDetails)
+
+    case Runtime.runIfWaitingForDebugger =>
+      log.debug("Request to run if waiting for debugger")
   }
 
   /**
