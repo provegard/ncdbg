@@ -75,15 +75,15 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport {
     remoteObjectConverter.toRemoteObject(node, byValue = byValue)
 
   override protected def handle: PartialFunction[AnyRef, Any] = {
-    case Runtime.getProperties(jsonObjectId, _) =>
+    case Runtime.getProperties(strObjectId, _) =>
       // Deserialize JSON object ID (serialized in RemoteObjectConverter)
-      val objectId = ObjectMapping.fromJson[ObjectId](jsonObjectId)
+      val objectId = ObjectId.fromString(strObjectId)
       objectRegistry.objectById(objectId) match {
         case Some(value) =>
           val propDescs = value.entries.map(e => PropertyDescriptor(e._1, toRemoteObject(e._2.resolve(), byValue = false)))
           GetPropertiesResult(propDescs, None)
         case None =>
-          val exceptionDetails = ExceptionDetails(1, s"Error: Unknown object ID: '$jsonObjectId'", 0, 1, None)
+          val exceptionDetails = ExceptionDetails(1, s"Error: Unknown object ID: '$strObjectId'", 0, 1, None)
           GetPropertiesResult(Seq.empty, Some(exceptionDetails))
       }
 
@@ -107,7 +107,7 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport {
       log.debug(s"Request to run script with ID $scriptId")
       RunScriptResult(RemoteObject.forString("TODO: Implement Runtime.runScript"))
 
-    case Runtime.callFunctionOn(jsonObjectId, functionDeclaration, arguments, maybeSilent, maybeReturnByValue) =>
+    case Runtime.callFunctionOn(strObjectId, functionDeclaration, arguments, maybeSilent, maybeReturnByValue) =>
       // TODO: See Debugger.evaluateOnCallFrame - need to have a common impl
       val actualReturnByValue = maybeReturnByValue.getOrElse(false)
       val reportException = !maybeSilent.getOrElse(false)
@@ -121,7 +121,7 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport {
         name
       }
 
-      val targetName = useNamedObject(ObjectMapping.fromJson[ObjectId](jsonObjectId))
+      val targetName = useNamedObject(ObjectId.fromString(strObjectId))
 
       val argsArrayString = serializeArgumentValues(arguments, useNamedObject).mkString("[", ",", "]")
       val expression = s"($functionDeclaration).apply($targetName,$argsArrayString)"
@@ -140,9 +140,9 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport {
         case (Some(value), None, None) =>
           ObjectMapping.toJson(value)
         case (None, Some(unserializableValue), None) => unserializableValue
-        case (None, None, Some(jsonObjectId)) =>
+        case (None, None, Some(strObjectId)) =>
           // Obtain a name for the object with the given ID
-          val objectId = ObjectMapping.fromJson[ObjectId](jsonObjectId)
+          val objectId = ObjectId.fromString(strObjectId)
           useNamedObject(objectId)
         case (None, None, None) => "undefined"
         case _ =>

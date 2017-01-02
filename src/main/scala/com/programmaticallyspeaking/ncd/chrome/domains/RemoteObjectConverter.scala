@@ -3,11 +3,11 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.Undefined
-import com.programmaticallyspeaking.ncd.infra.{ObjectMapping, StringAnyMap}
+import com.programmaticallyspeaking.ncd.infra.StringAnyMap
 
 class RemoteObjectConverter {
 
-  private def objectId(value: ComplexNode) = ObjectMapping.toJson(value.objectId)
+  private def objectId(value: ComplexNode) = value.objectId.toString
 
   def toRemoteObject(value: ValueNode, byValue: Boolean): RemoteObject = value match {
     case array: ArrayNode =>

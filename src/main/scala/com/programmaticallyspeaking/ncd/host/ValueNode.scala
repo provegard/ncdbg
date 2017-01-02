@@ -1,8 +1,29 @@
 package com.programmaticallyspeaking.ncd.host
 
 import com.programmaticallyspeaking.ncd.host.types.ExceptionData
+import com.programmaticallyspeaking.ncd.infra.ObjectMapping
 
-case class ObjectId(id: String)
+/**
+  * Identity of an object (or array, or anything else that carries child entries):
+
+  * @param id the string ID
+  */
+case class ObjectId(id: String) {
+  override def toString: String = ObjectMapping.toJson(this)
+}
+
+object ObjectId {
+  /**
+    * Re-creates an [[ObjectId]] from its string representation
+    * @param str the string representation of an [[ObjectId]] instance
+    */
+  def fromString(str: String): ObjectId = {
+    try ObjectMapping.fromJson[ObjectId](str) catch {
+      case ex: Exception =>
+        throw new IllegalArgumentException(s"Not a valid ObjectId string representation: '$str'")
+    }
+  }
+}
 
 sealed trait ValueNode
 
