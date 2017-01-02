@@ -75,4 +75,14 @@ trait ScriptHost {
   def objectRegistry: ObjectRegistry
 
   def step(stepType: StepType): Unit
+
+  /**
+    * Tells the host to pause when it encounters a breakpoint.
+    */
+  def pauseOnBreakpoints(): Unit
+
+  /**
+    * Tells the host to ignore breakpoints.
+    */
+  def ignoreBreakpoints(): Unit
 }

@@ -9,7 +9,7 @@ import com.programmaticallyspeaking.ncd.infra.IdGenerator
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Subject}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
-import com.sun.jdi.request.{BreakpointRequest, EventRequest, StepRequest}
+import com.sun.jdi.request.{BreakpointRequest, EventRequest, EventRequestManager, StepRequest}
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
@@ -23,12 +23,20 @@ object NashornDebuggerHost {
   val NIR_DebuggerSupport = "jdk.nashorn.internal.runtime.DebuggerSupport"
   val NIR_ScriptRuntime = "jdk.nashorn.internal.runtime.ScriptRuntime"
 
+  // The name of the DEBUGGER method in the ScriptRuntime class
+  val ScriptRuntime_DEBUGGER = "DEBUGGER"
+
   val wantedTypes = Set(
     NIR_DebuggerSupport,
     NIR_ScriptRuntime
   )
 
   type CodeEvaluator = (String, Map[String, AnyRef]) => ValueNode
+
+  def optionToEither[A](opt: Option[A], msg: => String): Either[String, A] = opt match {
+    case Some(a) => Right(a)
+    case None => Left(msg)
+  }
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost with Logging {
@@ -58,8 +66,33 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
   // Data that are defined when the VM has paused on a breakpoint or encountered a step event
   private var pausedData: Option[PausedData] = None
 
+  /**
+    * By default, we don't pause when a breakpoint is hit. This is important since we add a fixed breakpoint for
+    * JS 'debugger' statements, and we don't want that to pause the VM when a debugger hasn't attached yet.
+    */
+  private var willPauseOnBreakpoints = false
+
   private def addBreakableLocations(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
     breakableLocationsByScriptUri.getOrElseUpdate(script.uri, ListBuffer.empty) ++= breakableLocations
+  }
+
+  private def enableBreakingAtDebuggerStatement(erm: EventRequestManager): Unit = {
+    val debuggerLoc = for {
+      scriptRuntime <- optionToEither(foundWantedTypes.get(NIR_ScriptRuntime), "no ScriptRuntime type found")
+      debuggerMethod <- optionToEither(scriptRuntime.methodsByName(ScriptRuntime_DEBUGGER).headOption, "ScriptRuntime.DEBUGGER method not found")
+      location <- optionToEither(debuggerMethod.allLineLocations().headOption, "no line location found in ScriptRuntime.DEBUGGER")
+    } yield location
+
+    debuggerLoc match {
+      case Right(location) =>
+        log.info("Enabling automatic breaking at JavaScript 'debugger' statements")
+        // TODO: BreakableLocation also does this. Reuse code!
+        val br = erm.createBreakpointRequest(location)
+        br.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
+        br.setEnabled(true)
+      case Left(msg) =>
+        log.warn(s"Won't be able to break at JavaScript 'debugger' statements because $msg")
+    }
   }
 
   def startListening(): Unit = {
@@ -111,6 +144,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
 
     val breakableLocationCount = breakableLocationsByScriptUri.foldLeft(0)((sum, e) => sum + e._2.size)
     log.info(s"$typeCount types checked, $scriptCount scripts detected, ${scriptByPath.size} scripts added, $breakableLocationCount breakable locations identified")
+
+    enableBreakingAtDebuggerStatement(erm)
 
     //TODO: Is resume needed?
 //    vm.resume()
@@ -204,12 +239,72 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     }
   }
 
+  // Determines if the location is in ScriptRuntime.DEBUGGER.
+  private def isDebuggerStatementLocation(loc: Location)=
+    loc.declaringType().name() == NIR_ScriptRuntime && loc.method().name() == ScriptRuntime_DEBUGGER
+
+  private def buildStackFramesSequence(perStackFrame: Seq[(Map[String, Value], Location)], thread: ThreadReference, mappingRegistry: MappingRegistry): Seq[StackFrameHolder] = {
+    val marshaller = new Marshaller(thread, mappingRegistry)
+    perStackFrame.map {
+      case (values, location) =>
+        val marshalled = values.map(e => e._1 -> marshaller.marshal(e._2))
+        val functionMethod = location.method()
+
+        // ":this" should always be present, but a function that doesn't capture anything may lack a ":scope" variable
+        marshalled.get(":this") match {
+          case Some(thisObj) =>
+            val scopeObj = marshalled.get(":scope").orNull
+
+            def evaluateCodeOnFrame: CodeEvaluator = {
+              case (code, namedValues) =>
+                val originalThis = values(":this")
+                val originalScope = scopeWithFreeVariables(thread, values.get(":scope").orNull, namedValues)
+
+                try {
+                  val ret = DebuggerSupport_eval(thread, originalThis, originalScope, code)
+                  marshaller.marshal(ret)
+                } catch {
+                  case ex: Exception =>
+                    log.error("Code evaluation failed.", ex)
+                    throw ex
+                }
+            }
+
+            // Variables that don't start with ":" are locals
+            val locals = marshalled.filter(e => !e._1.startsWith(":")).toMap
+
+            // Create an artificial object node to hold the locals
+            val localNode = ObjectNode(locals.map(e => e._1 -> LazyNode.eager(e._2)), ObjectId("$$locals"))
+            mappingRegistry.register(null, localNode)
+
+            try {
+              findBreakableLocation(location).map(w => new StackFrameImpl(thisObj, Option(scopeObj), localNode, w.toBreakpoint, evaluateCodeOnFrame, functionDetails(functionMethod))) match {
+                case Some(sf) => StackFrameHolder(Some(sf))
+                case None =>
+                  log.warn(s"Won't create a stack frame for location ($location) since we don't recognize it.")
+                  StackFrameHolder(None)
+              }
+            } catch {
+              case ex: AbsentInformationException =>
+                log.warn(s"Won't create a stack frame for location ($location) since there's no source information.")
+                StackFrameHolder(None)
+            }
+          case None if isDebuggerStatementLocation(location) =>
+            StackFrameHolder(None, isAtDebuggerStatement = true)
+          case _ => StackFrameHolder(None)
+        }
+
+    }
+  }
+
   private def handleBreakpoint(ev: LocatableEvent): Boolean = {
+    // Resume right away if we're not pausing on breakpoints
+    if (!willPauseOnBreakpoints) return true
+
     log.debug(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")
     val thread = ev.thread()
 
     // Start with a fresh object registry
-//    objectReg.clear()
     objectPairById.clear()
 
     // Get all Values FIRST, before marshalling. This is because marshalling requires us to call methods, which
@@ -217,7 +312,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     val perStackFrame = thread.frames().map { sf =>
       val variables = Try(sf.visibleVariables()).getOrElse(Collections.emptyList())
       val values = sf.getValues(variables).map(e => e._1.name() -> e._2)
-      (values, sf.location())
+      (values.toMap, sf.location())
     }
 
     // Second pass, marshal
@@ -228,68 +323,26 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
         case _ => // ignore
       }
     }
-    val marshaller = new Marshaller(thread, mappingRegistry)
+    val stackFrames = buildStackFramesSequence(perStackFrame, thread, mappingRegistry)
 
-    val stackFrames: Seq[Option[StackFrame]] = perStackFrame.map {
-      case (values, location) =>
-        val marshalled = values.map(e => e._1 -> marshaller.marshal(e._2))
-        val functionMethod = location.method()
-
-        // ":this" should always be present, but a function that doesn't capture anything may lack a ":scope" variable
-        marshalled.get(":this").flatMap { thisObj =>
-          val scopeObj = marshalled.get(":scope").orNull
-
-          def evaluateCodeOnFrame: CodeEvaluator = { case (code, namedValues) =>
-            val originalThis = values(":this")
-            val originalScope = scopeWithFreeVariables(thread, values.get(":scope").orNull, namedValues)
-
-            try {
-              val ret = DebuggerSupport_eval(thread, originalThis, originalScope, code)
-              marshaller.marshal(ret)
-            } catch {
-              case ex: Exception =>
-                log.error("Code evaluation failed.", ex)
-                throw ex
-            }
-          }
-
-          // Variables that don't start with ":" are locals
-          val locals = marshalled.filter(e => !e._1.startsWith(":")).toMap
-
-          // Create an artificial object node to hold the locals
-          val localNode = ObjectNode(locals.map(e => e._1 -> LazyNode.eager(e._2)), ObjectId("$$locals"))
-          mappingRegistry.register(null, localNode)
-
-          try {
-            findBreakableLocation(location).map(w => new StackFrameImpl(thisObj, Option(scopeObj), localNode, w.toBreakpoint, evaluateCodeOnFrame, functionDetails(functionMethod))).orElse {
-              log.warn(s"Won't create a stack frame for location ($location) since we don't recognize it.")
-              None
-            }
-          } catch {
-            case ex: AbsentInformationException =>
-              log.warn(s"Won't create a stack frame for location ($location) since there's no source information.")
-              None
-          }
-        }
-
-    }
-
-    if (stackFrames.isEmpty) {
-      // Hm, no stack frames at all... Resume!
-      log.debug(s"Ignoring breakpoint at ${ev.location()} because no stack frames were found at all.")
-      true
-    } else if (stackFrames.head.isEmpty) {
-      // First/top stack frame doesn't belong to a script. Resume!
-      log.debug(s"Ignoring breakpoint at ${ev.location()} because it doesn't belong to a script.")
-      true
-    } else {
-      pauseOnBreakpoint(thread, stackFrames.flatten)
-      // Resume will be controlled externally
-      false
+    stackFrames.headOption match {
+      case Some(holder) if holder.stackFrame.isEmpty && !holder.isAtDebuggerStatement =>
+        // First/top stack frame doesn't belong to a script. Resume!
+        log.debug(s"Ignoring breakpoint at ${ev.location()} because it doesn't belong to a script.")
+        true
+      case Some(holder) =>
+        if (holder.isAtDebuggerStatement) log.debug("Breakpoint is at JavaScript 'debugger' statement")
+        doPause(thread, stackFrames.flatMap(_.stackFrame))
+        // Resume will be controlled externally
+        false
+      case None =>
+        // Hm, no stack frames at all... Resume!
+        log.debug(s"Ignoring breakpoint at ${ev.location()} because no stack frames were found at all.")
+        true
     }
   }
 
-  private def pauseOnBreakpoint(thread: ThreadReference, stackFrames: Seq[StackFrame]): Unit = {
+  private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame]): Unit = {
     pausedData = Some(new PausedData(thread, stackFrames))
 
     val hitBreakpoint = HitBreakpoint(stackFrames)
@@ -377,6 +430,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
 
   override def reset(): Unit = {
     log.info("Resetting VM...")
+    willPauseOnBreakpoints = false
     removeAllBreakpoints()
     resume()
   }
@@ -466,5 +520,17 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     // Generate an ID for the stack frame so that we can find it later when asked to evaluate code for a
     // particular stack frame.
     val id = stackframeIdGenerator.next
+  }
+
+  case class StackFrameHolder(stackFrame: Option[StackFrame], isAtDebuggerStatement: Boolean = false)
+
+  override def pauseOnBreakpoints(): Unit = {
+    log.info("Will pause on breakpoints")
+    willPauseOnBreakpoints = true
+  }
+
+  override def ignoreBreakpoints(): Unit = {
+    log.info("Will ignore breakpoints")
+    willPauseOnBreakpoints = false
   }
 }

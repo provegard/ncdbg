@@ -19,6 +19,8 @@ object Debugger {
 
   case class ScriptParsedEventParams(scriptId: String, url: String, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int, executionContextId: Int, hash: String)
 
+  case class setBreakpointsActive(active: Boolean)
+
   object ScriptParsedEventParams {
     def apply(script: Script): ScriptParsedEventParams = new ScriptParsedEventParams(script.id,
       script.uri,
@@ -77,6 +79,8 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport {
         emitEvent("Debugger.scriptParsed", ScriptParsedEventParams(script))
       }
 
+      scriptHost.pauseOnBreakpoints()
+
     case Debugger.getScriptSource(scriptId) =>
       log.debug(s"Requested script source for script with ID $scriptId")
       scriptHost.scriptById(scriptId) match {
@@ -118,6 +122,10 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport {
 
       val evalResult = evaluate(scriptHost, callFrameId, expression, Map.empty, reportException, actualReturnByValue)
       EvaluateOnCallFrameResult(evalResult.result, evalResult.exceptionDetails)
+
+    case Debugger.setBreakpointsActive(active) =>
+      if (active) scriptHost.pauseOnBreakpoints()
+      else scriptHost.ignoreBreakpoints()
   }
 
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
