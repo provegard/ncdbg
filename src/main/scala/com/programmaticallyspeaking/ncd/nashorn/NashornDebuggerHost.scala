@@ -20,6 +20,8 @@ import scala.collection.mutable.ListBuffer
 import scala.util.{Failure, Success, Try}
 
 object NashornDebuggerHost {
+  import scala.collection.JavaConverters._
+
   val NIR_DebuggerSupport = "jdk.nashorn.internal.runtime.DebuggerSupport"
   val NIR_ScriptRuntime = "jdk.nashorn.internal.runtime.ScriptRuntime"
 
@@ -37,6 +39,38 @@ object NashornDebuggerHost {
     case Some(a) => Right(a)
     case None => Left(msg)
   }
+
+  /**
+    * This method extracts the source code of an evaluated script, i.e. a script that hasn't been loaded from a file
+    * and therefore doesn't have a path/URL. The official way to do this would be to call `DebuggerSupport.getSourceInfo`,
+    * but we cannot do that because when we connect to the VM and discover all scripts, we don't have a thread that is
+    * in the appropriate state to allow execution of methods. However, extracting field values is fine, so we dive deep
+    * down in the Nashorn internals to grab the raw source code data.
+    *
+    * @param refType the type of the generated script class
+    * @return a source code string
+    */
+  private[NashornDebuggerHost] def shamelesslyExtractEvalSourceFromPrivatePlaces(refType: ReferenceType): String = {
+    // Generated script classes has a field named 'source'
+    val sourceField = Option(refType.fieldByName("source"))
+      .getOrElse(throw new Exception("Found no 'source' field in " + refType.name()))
+    // Get the Source instance in that field
+    val source = refType.getValue(sourceField).asInstanceOf[ObjectReference]
+    // From the instance, get the 'data' field, which is of type Source.Data
+    val dataField = Option(source.referenceType().fieldByName("data"))
+      .getOrElse(throw new Exception("Found no 'data' field in " + source.referenceType().name()))
+    // Get the Source.Data instance, which should be a RawData instance
+    val data = source.getValue(dataField).asInstanceOf[ObjectReference]
+    // Source.RawData has a field 'array' of type char[]
+    val charArrayField = Option(data.referenceType().fieldByName("array"))
+      .getOrElse(throw new Exception("Found no 'array' field in " + data.referenceType().name()))
+    // Get the char[] data
+    val charData = data.getValue(charArrayField).asInstanceOf[ArrayReference]
+    // Get individual char values from the array
+    val chars = charData.getValues.asScala.map(v => v.asInstanceOf[CharValue].charValue())
+    // Finally combine into a string
+    chars.mkString
+  }
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost with Logging {
@@ -51,6 +85,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
   private val scriptIdGenerator = new IdGenerator("nds")
   private val breakpointIdGenerator = new IdGenerator("ndb")
   private val stackframeIdGenerator = new IdGenerator("ndsf")
+  private val evalPathGenerator = new IdGenerator("file:/eval$")
 
   private val eventSubject = Subject.serialized[ScriptEvent]
 
@@ -125,15 +160,25 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
         locations.headOption match {
           case Some(firstLocation) =>
             val scriptPath = scriptPathFromLocation(firstLocation)
-            log.info(s"Adding script at path: $scriptPath")
 
-            // Create and add the Script object. Note that we may hit the same script multiple times, e.g. if the
-            // script contains inner functions, which are compiled into separate classes.
-            getOrAddScript(scriptPath) match {
+            val triedScript: Try[Script] = Try {
+              if (firstLocation.sourceName() == "<eval>") {
+                val path = evalPathGenerator.next
+                val src = shamelesslyExtractEvalSourceFromPrivatePlaces(refType)
+                getOrAddEvalScript(path, src)
+              } else {
+                // Create and add the Script object. Note that we may hit the same script multiple times, e.g. if the
+                // script contains inner functions, which are compiled into separate classes.
+                getOrAddScript(scriptPath)
+              }
+            }
+
+            triedScript match {
               case Success(script) =>
+                log.info(s"Adding script at path '$scriptPath' with ID '${script.id}' and URI '${script.uri}'")
 
-              val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
-              addBreakableLocations(script, breakableLocations)
+                val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
+                addBreakableLocations(script, breakableLocations)
 
               case Failure(ex: FileNotFoundException) =>
                 log.warn(s"Ignoring non-existent script at path '$scriptPath'")
@@ -369,8 +414,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
   }
 
 
-  private def getOrAddScript(path: String): Try[Script] =
-    Try(scriptByPath.getOrElseUpdate(path, ScriptImpl.fromFile(path, scriptIdGenerator.next)))
+  private def getOrAddScript(path: String): Script =
+    scriptByPath.getOrElseUpdate(path, ScriptImpl.fromFile(path, scriptIdGenerator.next))
+
+  private def getOrAddEvalScript(artificialPath: String, source: String): Script =
+    scriptByPath.getOrElseUpdate(artificialPath, ScriptImpl.fromSource(artificialPath, source, scriptIdGenerator.next))
 
   override def scripts: Seq[Script] = scriptByPath.values.toSeq
 
