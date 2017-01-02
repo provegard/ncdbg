@@ -101,6 +101,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     val typeCount = referenceTypes.size()
     var scriptCount = 0
 
+    // Suspend VM while we're looking for types
+    log.info("Suspending virtual machine to do initialization")
+    virtualMachine.suspend()
+
     referenceTypes.foreach { refType =>
       val className = refType.name()
 
@@ -147,9 +151,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
 
     enableBreakingAtDebuggerStatement(erm)
 
-    //TODO: Is resume needed?
-//    vm.resume()
-//    log.info("Virtual Machine resumed, listening for events...")
+    virtualMachine.resume()
+    log.info("Virtual machine resumed, listening for events...")
 
     try {
       listenForEvents()
