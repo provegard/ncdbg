@@ -1,12 +1,8 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import java.io.File
-
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 import com.programmaticallyspeaking.ncd.host._
 import org.slf4s.Logging
-
-import scala.util.{Failure, Success}
 
 object Debugger {
   type CallFrameId = String
@@ -59,7 +55,7 @@ object Debugger {
   case class PausedEventParams(callFrames: Seq[CallFrame], reason: String, hitBreakpoints: Seq[String])
 }
 
-class Debugger extends DomainActor with Logging {
+class Debugger extends DomainActor with Logging with ScriptEvaluateSupport {
   import Debugger._
 
   private var remoteObjectConverter: RemoteObjectConverter = _
@@ -118,37 +114,10 @@ class Debugger extends DomainActor with Logging {
 
       // The protocol says this is optional, but doesn't specify the default value. False is just a guess.
       val actualReturnByValue = maybeReturnByValue.getOrElse(false)
-
-      // TODO: What is the exception ID for?
-      val exceptionId = 1
-
       val reportException = !maybeSilent.getOrElse(false)
-      scriptHost.evaluateOnStackFrame(callFrameId, expression, Map.empty) match {
-        case Success(err: ErrorValue) if reportException && err.isBasedOnThrowable =>
-          val data = err.data
-          // Note that Chrome wants line numbers to be 0-based
-          val details = Runtime.ExceptionDetails(exceptionId, data.message, data.lineNumberBase1 - 1, data.columnNumber, Some(data.url))
-          // Apparently we need to pass an actual value with the exception details
-          EvaluateOnCallFrameResult(RemoteObject.undefinedValue, Some(details))
-        case Success(err: ErrorValue) if err.isBasedOnThrowable =>
-          EvaluateOnCallFrameResult(RemoteObject.undefinedValue)
-        case Success(result) => EvaluateOnCallFrameResult(toRemoteObject(result, actualReturnByValue))
-        case Failure(t) =>
 
-          val exceptionDetails = t.getStackTrace.headOption.flatMap { stackTraceElement =>
-            try {
-              val lineNumberBase1 = stackTraceElement.getLineNumber
-              val url = new File(stackTraceElement.getFileName).toURI.toString
-              Some(Runtime.ExceptionDetails(exceptionId, t.getMessage, lineNumberBase1 - 1, 0, Some(url)))
-            } catch {
-              case e: Exception =>
-                log.error(s"Error when trying to construct ExceptionDetails from $stackTraceElement", e)
-                None
-            }
-          }.getOrElse(Runtime.ExceptionDetails(exceptionId, t.getMessage, 0, 0, None))
-
-          EvaluateOnCallFrameResult(RemoteObject.undefinedValue, Some(exceptionDetails))
-      }
+      val evalResult = evaluate(scriptHost, callFrameId, expression, Map.empty, reportException, actualReturnByValue)
+      EvaluateOnCallFrameResult(evalResult.result, evalResult.exceptionDetails)
   }
 
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
@@ -158,7 +127,7 @@ class Debugger extends DomainActor with Logging {
       emitEvent("Debugger.resumed", null)
   }
 
-  private def toRemoteObject(node: ValueNode, byValue: Boolean): RemoteObject =
+  protected def toRemoteObject(node: ValueNode, byValue: Boolean): RemoteObject =
     remoteObjectConverter.toRemoteObject(node, byValue = byValue)
 
   private def pauseBasedOnBreakpoint(hitBreakpoint: HitBreakpoint): Unit = {

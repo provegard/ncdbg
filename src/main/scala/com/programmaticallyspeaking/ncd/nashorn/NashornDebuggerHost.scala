@@ -426,7 +426,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
   override def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode] = Try {
     pausedData match {
       case Some(pd) =>
-        pd.stackFrames.find(_.id == stackFrameId) match {
+        findStackFrame(pd, stackFrameId) match {
           case Some(sf: StackFrameImpl) =>
 
             // Get the Value instances corresponding to the named objects
@@ -446,6 +446,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
       case None =>
         throw new IllegalStateException("Code evaluation can only be done in a paused state.")
     }
+  }
+
+  private def findStackFrame(pausedData: PausedData, id: String): Option[StackFrame] = {
+    if (id == "$top") return pausedData.stackFrames.headOption
+    pausedData.stackFrames.find(_.id == id)
   }
 
   class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame])
