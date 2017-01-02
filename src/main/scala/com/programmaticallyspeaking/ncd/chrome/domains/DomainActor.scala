@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import akka.actor.{Actor, ActorRef, Stash, Status, TypedActor, TypedProps}
+import akka.actor.{Actor, ActorRef, PoisonPill, Stash, Status, TypedActor, TypedProps}
 import akka.util.Timeout
 import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
@@ -41,7 +41,7 @@ abstract class DomainActor extends Actor with Logging with Stash {
       case Success(actorRef) => self ! ScriptHostRef(actorRef)
       case Failure(t) =>
         log.error("Failed to obtain the ScriptHost reference.", t)
-        context.stop(self)
+        self ! PoisonPill // context.stop doesn't work here, NPE
     }
   }
 
