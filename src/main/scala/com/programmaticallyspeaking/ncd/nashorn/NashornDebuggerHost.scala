@@ -9,7 +9,7 @@ import com.programmaticallyspeaking.ncd.infra.IdGenerator
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Subject}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
-import com.sun.jdi.request.{EventRequest, StepRequest}
+import com.sun.jdi.request.{BreakpointRequest, EventRequest, StepRequest}
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
@@ -35,10 +35,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
   import scala.collection.JavaConversions._
   import NashornDebuggerHost._
 
-  // TODO: These probably don't need to be TrieMaps, given that the host is accessed via a TypedActor wrapper...
-  private val scriptByPath = TrieMap[String, Script]()
-  private val breakpointsByScriptUri = TrieMap[String, ListBuffer[BreakpointRequestWrapper]]()
-  private val breakpointById = TrieMap[String, BreakpointRequestWrapper]()
+  private val scriptByPath = mutable.Map[String, Script]()
+
+  private val breakableLocationsByScriptUri = mutable.Map[String, ListBuffer[BreakableLocation]]()
+  private val enabledBreakpoints = mutable.Map[String, BreakableLocation]()
 
   private val scriptIdGenerator = new IdGenerator("nds")
   private val breakpointIdGenerator = new IdGenerator("ndb")
@@ -58,11 +58,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
   // Data that are defined when the VM has paused on a breakpoint or encountered a step event
   private var pausedData: Option[PausedData] = None
 
-  private def addBreakpoints(script: Script, breakpoints: Seq[BreakpointRequestWrapper]): Unit = {
-    breakpointsByScriptUri.getOrElseUpdate(script.uri, ListBuffer.empty) ++= breakpoints
-    breakpoints.foreach { bp =>
-      breakpointById(bp.id) = bp
-    }
+  private def addBreakableLocations(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
+    breakableLocationsByScriptUri.getOrElseUpdate(script.uri, ListBuffer.empty) ++= breakableLocations
   }
 
   def startListening(): Unit = {
@@ -98,13 +95,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
             getOrAddScript(scriptPath) match {
               case Success(script) =>
 
-                val breakpoints = locations.map(loc => {
-                  val br = erm.createBreakpointRequest(loc)
-                  // Assume script code runs in a single thread, so pausing that thread should be enough.
-                  br.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
-                  br
-                }).map(br => new BreakpointRequestWrapper(script, br, breakpointIdGenerator.next))
-                addBreakpoints(script, breakpoints)
+//                val breakpoints = locations.map(loc => {
+              //                  val br = erm.createBreakpointRequest(loc)
+              //                  // Assume script code runs in a single thread, so pausing that thread should be enough.
+              //                  br.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
+              //                  br
+              //                }).map(br => new BreakpointRequestWrapper(script, br, breakpointIdGenerator.next))
+              //                addBreakpoints(script, breakpoints)
+              val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
+              addBreakableLocations(script, breakableLocations)
 
               case Failure(ex: FileNotFoundException) =>
                 log.warn(s"Ignoring non-existent script at path '$scriptPath'")
@@ -148,8 +147,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
         ev match {
           case ev: BreakpointEvent =>
 
-            // TODO: This is expensive, refactor!
-            breakpointById.values.foreach(_.disableIfEnabledOnce())
+            // Disable breakpoints that were enabled once
+            enabledBreakpoints.filter(_._2.isEnabledOnce).foreach { e =>
+              e._2.disable()
+              enabledBreakpoints -= e._1
+            }
 
             doResume = handleBreakpoint(ev)
           case ev: StepEvent =>
@@ -265,7 +267,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
           mappingRegistry.register(null, localNode)
 
           try {
-            findBreakpointRequestWrapper(location).map(w => new StackFrameImpl(thisObj, Option(scopeObj), localNode, w.toBreakpoint, evaluateCodeOnFrame, functionDetails(functionMethod))).orElse {
+            findBreakableLocation(location).map(w => new StackFrameImpl(thisObj, Option(scopeObj), localNode, w.toBreakpoint, evaluateCodeOnFrame, functionDetails(functionMethod))).orElse {
               log.warn(s"Won't create a stack frame for location ($location) since we don't recognize it.")
               None
             }
@@ -327,14 +329,16 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
   override def events: Observable[ScriptEvent] = eventSubject
 
   override def setBreakpoint(scriptUri: String, lineNumberBase1: Int): Breakpoint = {
-    findBreakpointRequestWrapper(scriptUri, lineNumberBase1) match {
+    findBreakableLocation(scriptUri, lineNumberBase1) match {
       case Some(br) =>
         if (br.lineNumber != lineNumberBase1) {
           log.info(s"Client asked for a breakpoint at line $lineNumberBase1 in $scriptUri, setting it at line ${br.lineNumber}.")
         } else {
           log.info(s"Setting a breakpoint at line ${br.lineNumber} in $scriptUri")
         }
-        br.setEnabled(true)
+
+        br.enable()
+        enabledBreakpoints += (br.id -> br)
         br.toBreakpoint
 
       case None =>
@@ -342,15 +346,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     }
   }
 
-  private def findBreakpointRequestWrapper(location: Location): Option[BreakpointRequestWrapper] = {
-    scriptByPath.get(scriptPathFromLocation(location)).flatMap(s => findBreakpointRequestWrapper(s.uri, location.lineNumber()))
+  private def findBreakableLocation(location: Location): Option[BreakableLocation] = {
+    scriptByPath.get(scriptPathFromLocation(location)).flatMap(s => findBreakableLocation(s.uri, location.lineNumber()))
   }
 
-  private def findBreakpointRequestWrapper(scriptUri: String, lineNumber: Int): Option[BreakpointRequestWrapper] = {
-    breakpointsByScriptUri.get(scriptUri).flatMap { breakpoints =>
+  private def findBreakableLocation(scriptUri: String, lineNumber: Int): Option[BreakableLocation] = {
+    breakableLocationsByScriptUri.get(scriptUri).flatMap { breakableLocations =>
       // TODO: Is it good to filter with >= ? The idea is to create a breakpoint even if the user clicks on a line that
       // TODO: isn't "breakable".
-      val candidates = breakpoints.filter(_.lineNumber >= lineNumber).sortWith((b1, b2) => b1.lineNumber < b2.lineNumber)
+      val candidates = breakableLocations.filter(_.lineNumber >= lineNumber).sortWith((b1, b2) => b1.lineNumber < b2.lineNumber)
       candidates.headOption
     }
   }
@@ -372,32 +376,34 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     resumeWhenPaused()
   }
 
-  private def disableAllBreakpoints(): Unit = {
-    breakpointById.foreach(e => e._2.setEnabled(false))
+  private def removeAllBreakpoints(): Unit = {
+    enabledBreakpoints.foreach(e => e._2.disable())
+    enabledBreakpoints.clear()
   }
 
   override def reset(): Unit = {
     log.info("Resetting VM...")
-    disableAllBreakpoints()
+    removeAllBreakpoints()
     resume()
   }
 
   override def removeBreakpointById(id: String): Unit = {
-    breakpointById.get(id) match {
+    enabledBreakpoints.get(id) match {
       case Some(bp) =>
         log.info(s"Removing breakpoint with id $id")
-        bp.setEnabled(false)
+        bp.disable()
+        enabledBreakpoints -= bp.id
       case None =>
         log.warn(s"Got request to remove an unknown breakpoint with id $id")
     }
   }
 
-  private def doExpensiveStepInto(): Unit = {
-    // Do a one-off enabling of all disabled breakpoint requests
-    breakpointById.values.foreach { brw =>
-      brw.enableOnceIfDisabled()
+  private def expensiveStepInto(): Unit = {
+    // Do a one-off enabling of non-enabled breakpoints
+    breakableLocationsByScriptUri.flatMap(_._2).withFilter(!_.isEnabled).foreach { bl =>
+      bl.enableOnce()
+      enabledBreakpoints += (bl.id -> bl)
     }
-    virtualMachine.resume()
   }
 
   override def step(stepType: StepType): Unit = pausedData match {
@@ -412,6 +418,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
         // Creating a step request with STEP_INTO didn't work well in my testing, since the VM seems to end up in some
         // sort of call site method. Therefore we do this one a bit differently.
         log.debug("Performing expensive step-into by one-off-enabling all breakpoints.")
+        expensiveStepInto()
         resumeWhenPaused()
       } else {
         val req = virtualMachine.eventRequestManager().createStepRequest(pd.thread, StepRequest.STEP_LINE, depth)
