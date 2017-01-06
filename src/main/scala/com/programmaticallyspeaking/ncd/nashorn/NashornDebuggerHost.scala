@@ -9,11 +9,10 @@ import com.programmaticallyspeaking.ncd.infra.IdGenerator
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Subject}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
-import com.sun.jdi.request.{BreakpointRequest, EventRequest, EventRequestManager, StepRequest}
+import com.sun.jdi.request.{EventRequest, EventRequestManager, StepRequest}
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
-import scala.annotation.tailrec
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -73,7 +72,7 @@ object NashornDebuggerHost {
   }
 }
 
-class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost with Logging {
+class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends NashornScriptHost with Logging {
   import scala.collection.JavaConversions._
   import NashornDebuggerHost._
 
@@ -130,7 +129,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     }
   }
 
-  def startListening(): Unit = {
+//  def startListening(): Unit = {
+  def initialize(): Done = {
     val erm = virtualMachine.eventRequestManager()
     val referenceTypes = virtualMachine.allClasses()
     val typeCount = referenceTypes.size()
@@ -199,25 +199,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
     virtualMachine.resume()
     log.info("Virtual machine resumed, listening for events...")
 
-    try {
-      listenForEvents()
-    } catch {
-      case ex: VMDisconnectedException =>
-        log.info("The remote VM disconnected!")
-        eventSubject.onComplete()
-        throw ex
-      case ex: Exception =>
-        log.error("An unknown error occurred.", ex)
-        eventSubject.onComplete()
-        throw ex
-    }
+    Done
   }
 
-  private def listenForEvents(): Unit = {
-    listenIndefinitely(virtualMachine.eventQueue())
-  }
-
-  private def handleEventSet(eventSet: EventSet): Unit = {
+  def handleEventSet(eventSet: EventSet): Done = {
     var doResume = true
     eventSet.foreach { ev =>
       try {
@@ -245,6 +230,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
       }
     }
     if (doResume) eventSet.resume()
+    Done
   }
 
   def functionDetails(functionMethod: Method): FunctionDetails = {
@@ -395,12 +381,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends ScriptHost
 
     val hitBreakpoint = HitBreakpoint(stackFrames)
     eventSubject.onNext(hitBreakpoint)
-  }
-
-  @tailrec
-  private def listenIndefinitely(queue: EventQueue): Unit = {
-    Option(queue.remove(1000)).foreach(handleEventSet)
-    listenIndefinitely(queue)
   }
 
   private def scriptPathFromLocation(location: Location): String = {

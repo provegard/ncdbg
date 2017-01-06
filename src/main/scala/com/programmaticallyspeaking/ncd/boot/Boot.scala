@@ -1,12 +1,11 @@
 package com.programmaticallyspeaking.ncd.boot
 
-import akka.actor.{ActorSystem, TypedActor, TypedProps}
+import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import com.programmaticallyspeaking.ncd.chrome.domains.DefaultDomainFactory
 import com.programmaticallyspeaking.ncd.chrome.net.Webservice
-import com.programmaticallyspeaking.ncd.host.ScriptHost
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebugger
+import com.programmaticallyspeaking.ncd.nashorn.{NashornDebugger, NashornScriptHost}
 import org.slf4s.Logging
 
 import scala.util.{Failure, Success}
@@ -18,10 +17,13 @@ object Boot extends App with Logging {
   implicit val materializer = ActorMaterializer()
 
   val debugger = new NashornDebugger("localhost", 7777)
+
   debugger.start().andThen {
-    case Success(_) =>
+    case Success(host) =>
+      startListening(host)
       startHttpServer()
     case Failure(t) =>
+      log.error("Failed to start the debugger", t)
       system.terminate()
       die(1)
   }
@@ -31,11 +33,11 @@ object Boot extends App with Logging {
     System.exit(code)
   }
 
-  private def startHttpServer(): Unit = {
-    val scriptHostAsActor = TypedActor(system).typedActorOf(TypedProps(classOf[ScriptHost], debugger.scriptHost), "scriptHost")
-    val scriptHostActorRef = TypedActor(system).getActorRefFor(scriptHostAsActor)
-    log.info(s"ScriptHost actor is at ${scriptHostActorRef.path.toStringWithoutAddress}")
+  private def startListening(host: NashornScriptHost) = {
+    debugger.activateAsActor(host)
+  }
 
+  private def startHttpServer(): Unit = {
     val service = new Webservice(new DefaultDomainFactory())
 
     val binding = Http().bindAndHandle(service.route, "localhost", 7778)
