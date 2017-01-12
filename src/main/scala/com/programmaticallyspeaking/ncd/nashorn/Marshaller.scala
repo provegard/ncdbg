@@ -22,8 +22,9 @@ trait MappingRegistry {
 class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) extends ThreadUser {
   import Marshaller._
   import scala.collection.JavaConversions._
+  import VirtualMachineExtensions._
 
-  def marshal(value: Value): ValueNode = {
+  def marshal(value: Value): ValueNode = thread.virtualMachine().withoutClassPrepareRequests {
     val result = marshalInPrivate(value)
     mappingRegistry.register(value, result)
     result

@@ -20,6 +20,7 @@ class ScriptObjectMirror(thread: ThreadReference, val scriptObject: ObjectRefere
   def isArray = invoker.isArray()
 
   def entrySet() = invoker.entrySet().asInstanceOf[ObjectReference]
+  def propertyIterator() = invoker.propertyIterator()
 
   def put(key: AnyRef, value: AnyRef, isStrict: Boolean) =
     invoker.applyDynamic(putObjectObjectBoolSignature)(key, value, isStrict)

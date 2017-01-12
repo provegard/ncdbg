@@ -1,17 +1,16 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import akka.actor.{ActorSystem, TypedActor, TypedProps}
-import com.programmaticallyspeaking.ncd.host.ScriptHost
 import com.sun.jdi.event.EventQueue
-import com.sun.jdi.{StackFrame => _}
+import com.sun.jdi.{VirtualMachine, StackFrame => _}
 import org.slf4s.Logging
 
 import scala.annotation.tailrec
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
-class NashornDebugger(hostName: String, port: Int) extends Logging {
-  def start(): Future[NashornScriptHost] = {
-    val promise = Promise[NashornScriptHost]()
+class NashornDebuggerConnector(hostName: String, port: Int) extends Logging {
+  def connect(): Future[VirtualMachine] = {
+    val promise = Promise[VirtualMachine]()
     // TODO: Make this a daemon thread?
     new Thread(() => try connect(promise) catch {
       case ex: Exception => promise.tryFailure(ex)
@@ -19,14 +18,46 @@ class NashornDebugger(hostName: String, port: Int) extends Logging {
     promise.future
   }
 
+  private def connect(connectionPromise: Promise[VirtualMachine]): Unit = {
+    log.info(s"Connecting to $hostName:$port...")
+    val vm = Connections.connect(hostName, port, 5000)
+    log.info("Connected!")
+    connectionPromise.success(vm)
+  }
+}
+
+class NashornDebugger(implicit executionContext: ExecutionContext) extends Logging {
+
+//  private var typedActorWrappedHost: NashornScriptHost = _
+
+//  def start(): Future[NashornScriptHost] = {
+//    val promise = Promise[NashornScriptHost]()
+//    // TODO: Make this a daemon thread?
+//    new Thread(() => try connect(promise) catch {
+//      case ex: Exception => promise.tryFailure(ex)
+//    }).start()
+//    promise.future
+//  }
+
   private def initAndListen(host: NashornScriptHost): Unit = {
-    host.initialize()
-    new ListenerThread(host).start()
+    // TODO: Do we want to react on init success/failure here? Probably...
+    new NashornScriptHostInteractionThread(host, Promise[Unit]).start()
   }
 
-  def activateAsActor(host: NashornScriptHost)(implicit system: ActorSystem): ScriptHost = {
+  def create(virtualMachine: VirtualMachine)(implicit system: ActorSystem): NashornScriptHost = {
+    var scriptHostAsActor: NashornScriptHost = null
+
+    def asyncInvokeOnHost(invoker: (NashornScriptHost => Unit)): Unit = {
+      Future(invoker(scriptHostAsActor))
+    }
+
+    val theHost = new NashornDebuggerHost(virtualMachine, asyncInvokeOnHost)
+
     // Create a typed actor that ensures that all NashornScriptHost access happens inside an actor
-    val scriptHostAsActor = TypedActor(system).typedActorOf(TypedProps(classOf[NashornScriptHost], host), "scriptHost")
+    scriptHostAsActor = TypedActor(system).typedActorOf(TypedProps(classOf[NashornScriptHost], theHost), "scriptHost")
+
+    // Save for use in asyncInvokeOnHost
+//    typedActorWrappedHost = scriptHostAsActor
 
     // Initialize and start listening *using the TypedActor wrapper*
     initAndListen(scriptHostAsActor)
@@ -36,24 +67,32 @@ class NashornDebugger(hostName: String, port: Int) extends Logging {
     scriptHostAsActor
   }
 
-  private def connect(connectionPromise: Promise[NashornScriptHost]): Unit = {
-    log.info(s"Connecting to $hostName:$port...")
-    val vm = Connections.connect(hostName, port, 5000)
-    val theHost = new NashornDebuggerHost(vm)
-    log.info("Connected!")
-    connectionPromise.success(theHost)
+//  private def connect(connectionPromise: Promise[NashornScriptHost]): Unit = {
+//    log.info(s"Connecting to $hostName:$port...")
+//    val vm = Connections.connect(hostName, port, 5000)
+//    val theHost = new NashornDebuggerHost(vm, asyncInvokeOnHost)
+//    log.info("Connected!")
+//    connectionPromise.success(theHost)
+//  }
+}
+
+// TODO: Daemon thread?
+class NashornScriptHostInteractionThread(host: NashornScriptHost, initPromise: Promise[Unit]) extends Thread with Logging {
+  override def run(): Unit = {
+    try {
+      host.initialize()
+      initPromise.trySuccess()
+      listenIndefinitely(host.virtualMachine.eventQueue())
+    } catch {
+      case ex: Exception =>
+        initPromise.tryFailure(ex)
+        log.error("Interaction failure", ex)
+    }
   }
 
-  // TODO: Daemon thread?
-  private class ListenerThread(host: NashornScriptHost) extends Thread {
-    override def run(): Unit = {
-      listenIndefinitely(host.virtualMachine.eventQueue())
-    }
-
-    @tailrec
-    private def listenIndefinitely(queue: EventQueue): Unit = {
-      Option(queue.remove(1000)).foreach(host.handleEventSet)
-      listenIndefinitely(queue)
-    }
+  @tailrec
+  private def listenIndefinitely(queue: EventQueue): Unit = {
+    Option(queue.remove(1000)).foreach { es => host.handleOperation(NashornEventSet(es)) }
+    listenIndefinitely(queue)
   }
 }

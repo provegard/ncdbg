@@ -5,7 +5,7 @@ import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import com.programmaticallyspeaking.ncd.chrome.domains.DefaultDomainFactory
 import com.programmaticallyspeaking.ncd.chrome.net.Webservice
-import com.programmaticallyspeaking.ncd.nashorn.{NashornDebugger, NashornScriptHost}
+import com.programmaticallyspeaking.ncd.nashorn.{NashornDebugger, NashornDebuggerConnector, NashornScriptHost}
 import org.slf4s.Logging
 
 import scala.util.{Failure, Success}
@@ -16,11 +16,12 @@ object Boot extends App with Logging {
   import system.dispatcher
   implicit val materializer = ActorMaterializer()
 
-  val debugger = new NashornDebugger("localhost", 7777)
+  val connector = new NashornDebuggerConnector("localhost", 7777)
+  val debuggerReady = connector.connect().map(vm => new NashornDebugger().create(vm))
 
-  debugger.start().andThen {
+  debuggerReady.andThen {
     case Success(host) =>
-      startListening(host)
+//      startListening(host)
       startHttpServer()
     case Failure(t) =>
       log.error("Failed to start the debugger", t)
@@ -33,9 +34,9 @@ object Boot extends App with Logging {
     System.exit(code)
   }
 
-  private def startListening(host: NashornScriptHost) = {
-    debugger.activateAsActor(host)
-  }
+//  private def startListening(host: NashornScriptHost) = {
+//    debugger.activateAsActor(host)
+//  }
 
   private def startHttpServer(): Unit = {
     val service = new Webservice(new DefaultDomainFactory())

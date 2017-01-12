@@ -3,20 +3,24 @@ package com.programmaticallyspeaking.ncd.nashorn
 import java.io.{File, FileNotFoundException}
 import java.net.URI
 import java.util.Collections
+import java.util.concurrent.{Executors, TimeUnit}
 
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.infra.IdGenerator
+import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Subject}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
-import com.sun.jdi.request.{EventRequest, EventRequestManager, StepRequest}
+import com.sun.jdi.request.{EventRequest, StepRequest}
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.duration.{FiniteDuration, _}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}
+
 
 object NashornDebuggerHost {
   import scala.collection.JavaConverters._
@@ -39,6 +43,12 @@ object NashornDebuggerHost {
     case None => Left(msg)
   }
 
+  private def scriptSourceField(refType: ReferenceType): Field = {
+    // Generated script classes has a field named 'source'
+    Option(refType.fieldByName("source"))
+      .getOrElse(throw new Exception("Found no 'source' field in " + refType.name()))
+  }
+
   /**
     * This method extracts the source code of an evaluated script, i.e. a script that hasn't been loaded from a file
     * and therefore doesn't have a path/URL. The official way to do this would be to call `DebuggerSupport.getSourceInfo`,
@@ -49,32 +59,41 @@ object NashornDebuggerHost {
     * @param refType the type of the generated script class
     * @return a source code string
     */
-  private[NashornDebuggerHost] def shamelesslyExtractEvalSourceFromPrivatePlaces(refType: ReferenceType): String = {
-    // Generated script classes has a field named 'source'
-    val sourceField = Option(refType.fieldByName("source"))
-      .getOrElse(throw new Exception("Found no 'source' field in " + refType.name()))
+  private[NashornDebuggerHost] def shamelesslyExtractEvalSourceFromPrivatePlaces(refType: ReferenceType): Option[String] = {
+    val sourceField = scriptSourceField(refType)
     // Get the Source instance in that field
-    val source = refType.getValue(sourceField).asInstanceOf[ObjectReference]
-    // From the instance, get the 'data' field, which is of type Source.Data
-    val dataField = Option(source.referenceType().fieldByName("data"))
-      .getOrElse(throw new Exception("Found no 'data' field in " + source.referenceType().name()))
-    // Get the Source.Data instance, which should be a RawData instance
-    val data = source.getValue(dataField).asInstanceOf[ObjectReference]
-    // Source.RawData has a field 'array' of type char[]
-    val charArrayField = Option(data.referenceType().fieldByName("array"))
-      .getOrElse(throw new Exception("Found no 'array' field in " + data.referenceType().name()))
-    // Get the char[] data
-    val charData = data.getValue(charArrayField).asInstanceOf[ArrayReference]
-    // Get individual char values from the array
-    val chars = charData.getValues.asScala.map(v => v.asInstanceOf[CharValue].charValue())
-    // Finally combine into a string
-    chars.mkString
+    Option(refType.getValue(sourceField).asInstanceOf[ObjectReference]).map { source =>
+      // From the instance, get the 'data' field, which is of type Source.Data
+      val dataField = Option(source.referenceType().fieldByName("data"))
+        .getOrElse(throw new Exception("Found no 'data' field in " + source.referenceType().name()))
+      // Get the Source.Data instance, which should be a RawData instance
+      val data = source.getValue(dataField).asInstanceOf[ObjectReference]
+      // Source.RawData has a field 'array' of type char[]
+      val charArrayField = Option(data.referenceType().fieldByName("array"))
+        .getOrElse(throw new Exception("Found no 'array' field in " + data.referenceType().name()))
+      // Get the char[] data
+      val charData = data.getValue(charArrayField).asInstanceOf[ArrayReference]
+      // Get individual char values from the array
+      val chars = charData.getValues.asScala.map(v => v.asInstanceOf[CharValue].charValue())
+      // Finally combine into a string
+      chars.mkString
+    }
   }
+
+  /**
+    * TODO:doc
+    * @param referenceType
+    */
+  case class ConsiderReferenceType(referenceType: ReferenceType, howManyTimes: Int) extends NashornScriptOperation
+
+  case object PostponeInitialize extends NashornScriptOperation
 }
 
-class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends NashornScriptHost with Logging {
-  import scala.collection.JavaConversions._
+class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis: ((NashornScriptHost) => Unit) => Unit) extends NashornScriptHost with Logging {
   import NashornDebuggerHost._
+
+  import ExecutionContext.Implicits._
+  import scala.collection.JavaConversions._
 
   private val scriptByPath = mutable.Map[String, Script]()
 
@@ -84,7 +103,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends NashornScr
   private val scriptIdGenerator = new IdGenerator("nds")
   private val breakpointIdGenerator = new IdGenerator("ndb")
   private val stackframeIdGenerator = new IdGenerator("ndsf")
-  private val evalPathGenerator = new IdGenerator("file:/eval$")
 
   private val eventSubject = Subject.serialized[ScriptEvent]
 
@@ -106,11 +124,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends NashornScr
     */
   private var willPauseOnBreakpoints = false
 
+  private var seenClassPrepareRequests = 0
+  private var lastSeenClassPrepareRequests = -1L
+
   private def addBreakableLocations(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
     breakableLocationsByScriptUri.getOrElseUpdate(script.uri, ListBuffer.empty) ++= breakableLocations
   }
 
-  private def enableBreakingAtDebuggerStatement(erm: EventRequestManager): Unit = {
+  private def enableBreakingAtDebuggerStatement(/*scriptRuntime: ClassType*/): Unit = {
     val debuggerLoc = for {
       scriptRuntime <- optionToEither(foundWantedTypes.get(NIR_ScriptRuntime), "no ScriptRuntime type found")
       debuggerMethod <- optionToEither(scriptRuntime.methodsByName(ScriptRuntime_DEBUGGER).headOption, "ScriptRuntime.DEBUGGER method not found")
@@ -121,7 +142,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends NashornScr
       case Right(location) =>
         log.info("Enabling automatic breaking at JavaScript 'debugger' statements")
         // TODO: BreakableLocation also does this. Reuse code!
-        val br = erm.createBreakpointRequest(location)
+        val br = virtualMachine.eventRequestManager().createBreakpointRequest(location)
         br.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
         br.setEnabled(true)
       case Left(msg) =>
@@ -129,108 +150,164 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends NashornScr
     }
   }
 
-//  def startListening(): Unit = {
+  private def considerReferenceType(refType: ReferenceType, attemptsLeft: Int): Unit = {
+    if (attemptsLeft == 0) return
+
+    val className = refType.name()
+
+    if (wantedTypes.contains(className)) {
+      refType match {
+        case ct: ClassType =>
+          log.debug(s"Found the $className type")
+          foundWantedTypes += className -> ct
+        case other =>
+          log.warn(s"Found the $className type but it's a ${other.getClass.getName} rather than a ClassType")
+      }
+    } else if (className.startsWith("jdk.nashorn.internal.scripts.Script$")) {
+      // This is a compiled Nashorn script class.
+      log.debug(s"Script reference type: ${refType.name} ($attemptsLeft attempts left)")
+
+      val locations = refType.allLineLocations().toSeq
+      locations.headOption match {
+        case Some(firstLocation) =>
+          val scriptPath = scriptPathFromLocation(firstLocation)
+
+          val triedScript: Try[Either[String, Script]] = Try {
+            if (firstLocation.sourceName() == "<eval>") {
+              shamelesslyExtractEvalSourceFromPrivatePlaces(refType) match {
+                case Some(src) => Right(getOrAddEvalScript(scriptPath, src))
+                case None =>
+                  val willRetry = attemptsLeft > 2
+                  if (willRetry) {
+                    // I couldn't get a modification watchpoint to work (be triggered). Perhaps it's because the 'source'
+                    // field is set using reflection? So instead retry in a short while.
+                    val item = ConsiderReferenceType(refType, attemptsLeft - 1)
+                    DelayedFuture(50.milliseconds) {
+                      asyncInvokeOnThis(_.handleOperation(item))
+                    }
+                  }
+
+                  val retryStr = if (willRetry) ", will retry" else ""
+                  Left(s"no source available (yet$retryStr)")
+              }
+            } else {
+              // Create and add the Script object. Note that we may hit the same script multiple times, e.g. if the
+              // script contains inner functions, which are compiled into separate classes.
+              Right(getOrAddScript(scriptPath))
+            }
+          }
+
+          triedScript match {
+            case Success(Right(script)) =>
+              log.info(s"Adding script at path '$scriptPath' with ID '${script.id}' and URI '${script.uri}'")
+
+              val erm = virtualMachine.eventRequestManager()
+              val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
+              addBreakableLocations(script, breakableLocations)
+
+            case Success(Left(msg)) =>
+              log.info(s"Ignoring script because $msg")
+            case Failure(ex: FileNotFoundException) =>
+              log.warn(s"Ignoring non-existent script at path '$scriptPath'")
+            case Failure(t) =>
+              log.error(s"Ignoring script at path '$scriptPath'", t)
+          }
+        case None =>
+          log.info(s"Ignoring script type '${refType.name} because it has no line locations.")
+      }
+    }
+  }
+
+  private def watchAddedClasses(): Unit = {
+    val request = virtualMachine.eventRequestManager().createClassPrepareRequest()
+    request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
+    request.setEnabled(true)
+  }
+
+  private def retryInitLater(): Unit = {
+    DelayedFuture(200.milliseconds) {
+      asyncInvokeOnThis(_.handleOperation(PostponeInitialize))
+    }
+  }
+
   def initialize(): Done = {
+    watchAddedClasses()
+    log.debug("Postponing initialization until classes have stabilized")
+    retryInitLater()
+    Done
+  }
+
+
+  private def doInitialize(): Unit = {
     val erm = virtualMachine.eventRequestManager()
     val referenceTypes = virtualMachine.allClasses()
     val typeCount = referenceTypes.size()
-    var scriptCount = 0
 
-    // Suspend VM while we're looking for types
-    log.info("Suspending virtual machine to do initialization")
-    virtualMachine.suspend()
+//    // Suspend VM while we're looking for types
+//    log.info("Suspending virtual machine to do initialization")
+//    virtualMachine.suspend()
 
-    referenceTypes.foreach { refType =>
-      val className = refType.name()
-
-      if (wantedTypes.contains(className)) {
-        refType match {
-          case ct: ClassType =>
-            log.debug(s"Found the $className type")
-            foundWantedTypes += className -> ct
-          case other =>
-            log.warn(s"Found the $className type but it's a ${other.getClass.getName} rather than a ClassType")
-        }
-      } else if (className.startsWith("jdk.nashorn.internal.scripts.Script$")) {
-        // This is a compiled Nashorn script class.
-        log.debug(s"Script reference type: ${refType.name}")
-        scriptCount += 1
-
-        val locations = refType.allLineLocations().toSeq
-        locations.headOption match {
-          case Some(firstLocation) =>
-            val scriptPath = scriptPathFromLocation(firstLocation)
-
-            val triedScript: Try[Script] = Try {
-              if (firstLocation.sourceName() == "<eval>") {
-                val path = evalPathGenerator.next
-                val src = shamelesslyExtractEvalSourceFromPrivatePlaces(refType)
-                getOrAddEvalScript(path, src)
-              } else {
-                // Create and add the Script object. Note that we may hit the same script multiple times, e.g. if the
-                // script contains inner functions, which are compiled into separate classes.
-                getOrAddScript(scriptPath)
-              }
-            }
-
-            triedScript match {
-              case Success(script) =>
-                log.info(s"Adding script at path '$scriptPath' with ID '${script.id}' and URI '${script.uri}'")
-
-                val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
-                addBreakableLocations(script, breakableLocations)
-
-              case Failure(ex: FileNotFoundException) =>
-                log.warn(s"Ignoring non-existent script at path '$scriptPath'")
-              case Failure(t) =>
-                log.error(s"Ignoring script at path '$scriptPath'", t)
-            }
-          case None =>
-            log.info(s"Ignoring script type '${refType.name} because it has no line locations.")
-        }
-      }
-    }
+    referenceTypes.foreach(considerReferenceType(_: ReferenceType, 5)) // TODO: Constant for initial no of attempts
 
     val breakableLocationCount = breakableLocationsByScriptUri.foldLeft(0)((sum, e) => sum + e._2.size)
-    log.info(s"$typeCount types checked, $scriptCount scripts detected, ${scriptByPath.size} scripts added, $breakableLocationCount breakable locations identified")
+    log.info(s"$typeCount types checked, ${scriptByPath.size} scripts added, $breakableLocationCount breakable locations identified")
 
-    enableBreakingAtDebuggerStatement(erm)
+    enableBreakingAtDebuggerStatement()
 
-    virtualMachine.resume()
-    log.info("Virtual machine resumed, listening for events...")
+//    virtualMachine.resume()
+//    log.info("Virtual machine resumed, listening for events...")
 
     Done
   }
 
-  def handleEventSet(eventSet: EventSet): Done = {
-    var doResume = true
-    eventSet.foreach { ev =>
-      try {
-        ev match {
-          case ev: BreakpointEvent =>
+  def handleOperation(eventQueueItem: NashornScriptOperation): Done = eventQueueItem match {
+    case NashornEventSet(eventSet) =>
+      var doResume = true
+      eventSet.foreach { ev =>
+        try {
+          ev match {
+            case ev: BreakpointEvent =>
 
-            // Disable breakpoints that were enabled once
-            enabledBreakpoints.filter(_._2.isEnabledOnce).foreach { e =>
-              e._2.disable()
-              enabledBreakpoints -= e._1
-            }
+              // Disable breakpoints that were enabled once
+              enabledBreakpoints.filter(_._2.isEnabledOnce).foreach { e =>
+                e._2.disable()
+                enabledBreakpoints -= e._1
+              }
 
-            doResume = handleBreakpoint(ev)
-          case ev: StepEvent =>
-            // Only one step event per thread is allowed, so delete this one right away
-            ev.virtualMachine().eventRequestManager().deleteEventRequest(ev.request())
+              doResume = handleBreakpoint(ev)
+            case ev: StepEvent =>
+              // Only one step event per thread is allowed, so delete this one right away
+              ev.virtualMachine().eventRequestManager().deleteEventRequest(ev.request())
 
-            doResume = handleBreakpoint(ev)
-          case other =>
-            log.debug("Unknown event: " + other)
+              doResume = handleBreakpoint(ev)
+
+            case ev: ClassPrepareEvent =>
+              // TODO: If this happens after init is done, handle it fully
+              seenClassPrepareRequests += 1
+
+            case other =>
+              log.debug("Unknown event: " + other)
+          }
+        } catch {
+          case ex: Exception =>
+            log.error(s"Failed to handle event ${ev.getClass.getName}", ex)
         }
-      } catch {
-        case ex: Exception =>
-          log.error(s"Failed to handle event $ev", ex)
       }
-    }
-    if (doResume) eventSet.resume()
-    Done
+      if (doResume) eventSet.resume()
+      Done
+    case ConsiderReferenceType(refType, attemptsLeft) =>
+      considerReferenceType(refType, attemptsLeft)
+      Done
+    case x@PostponeInitialize =>
+
+      if (lastSeenClassPrepareRequests == seenClassPrepareRequests) doInitialize()
+      else {
+        lastSeenClassPrepareRequests = seenClassPrepareRequests
+        retryInitLater()
+      }
+      Done
+    case operation =>
+      throw new IllegalArgumentException("Unknown operation: " + operation)
   }
 
   def functionDetails(functionMethod: Method): FunctionDetails = {
@@ -325,7 +402,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends NashornScr
             }
           case None if isDebuggerStatementLocation(location) =>
             StackFrameHolder(None, isAtDebuggerStatement = true)
-          case _ => StackFrameHolder(None)
+          case _ =>
+            StackFrameHolder(None)
         }
 
     }
@@ -390,6 +468,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends NashornScr
     // package-qualified file name in path form, whereas name is the unqualified file name (e.g.:
     // java\lang\Thread.java vs Thread.java).
     val path = location.sourceName()
+    if (path == "<eval>") {
+      // For evaluated scripts, convert the type name into something that resembles a file URI.
+      val typeName = location.declaringType().name()
+      return "file:/" + typeName.replace('.', '/').replace('\\', '/').replaceAll("[$^]", "_")
+    }
     if (path.startsWith("file:/")) new File(new URI(path)).getAbsolutePath else path
   }
 
@@ -425,6 +508,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine) extends NashornScr
   }
 
   private def findBreakableLocation(location: Location): Option[BreakableLocation] = {
+    log.info("xx: " + scriptPathFromLocation(location))
     scriptByPath.get(scriptPathFromLocation(location)).flatMap(s => findBreakableLocation(s.uri, location.lineNumber()))
   }
 

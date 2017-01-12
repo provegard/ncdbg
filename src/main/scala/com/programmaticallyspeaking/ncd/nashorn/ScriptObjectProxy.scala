@@ -25,6 +25,8 @@ class ScriptObjectProxy(val mirror: ScriptObjectMirror, thread: ThreadReference,
   def isDate = className == "Date"
 
   def entrySet(): Map[ValueNode, LazyNode] = {
+    val foo = mirror.propertyIterator()
+
     val entrySet = mirror.entrySet()
     val entrySetInvoker = new DynamicInvoker(thread, entrySet)
     val array = entrySetInvoker.toArray().asInstanceOf[ArrayReference]
