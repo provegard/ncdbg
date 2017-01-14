@@ -92,7 +92,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   import NashornDebuggerHost._
 
   import ExecutionContext.Implicits._
-  import scala.collection.JavaConversions._
+  import scala.collection.JavaConverters._
 
   private val scriptByPath = mutable.Map[String, Script]()
 
@@ -133,8 +133,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private def enableBreakingAtDebuggerStatement(/*scriptRuntime: ClassType*/): Unit = {
     val debuggerLoc = for {
       scriptRuntime <- optionToEither(foundWantedTypes.get(NIR_ScriptRuntime), "no ScriptRuntime type found")
-      debuggerMethod <- optionToEither(scriptRuntime.methodsByName(ScriptRuntime_DEBUGGER).headOption, "ScriptRuntime.DEBUGGER method not found")
-      location <- optionToEither(debuggerMethod.allLineLocations().headOption, "no line location found in ScriptRuntime.DEBUGGER")
+      debuggerMethod <- optionToEither(scriptRuntime.methodsByName(ScriptRuntime_DEBUGGER).asScala.headOption, "ScriptRuntime.DEBUGGER method not found")
+      location <- optionToEither(debuggerMethod.allLineLocations().asScala.headOption, "no line location found in ScriptRuntime.DEBUGGER")
     } yield location
 
     debuggerLoc match {
@@ -166,7 +166,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       // This is a compiled Nashorn script class.
       log.debug(s"Script reference type: ${refType.name} ($attemptsLeft attempts left)")
 
-      val locations = refType.allLineLocations().toSeq
+      val locations = refType.allLineLocations().asScala
       locations.headOption match {
         case Some(firstLocation) =>
           val scriptPath = scriptPathFromLocation(firstLocation)
@@ -246,7 +246,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 //    log.info("Suspending virtual machine to do initialization")
 //    virtualMachine.suspend()
 
-    referenceTypes.foreach(considerReferenceType(_: ReferenceType, 5)) // TODO: Constant for initial no of attempts
+    referenceTypes.asScala.foreach(considerReferenceType(_: ReferenceType, 5)) // TODO: Constant for initial no of attempts
 
     val breakableLocationCount = breakableLocationsByScriptUri.foldLeft(0)((sum, e) => sum + e._2.size)
     log.info(s"$typeCount types checked, ${scriptByPath.size} scripts added, $breakableLocationCount breakable locations identified")
@@ -262,7 +262,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   def handleOperation(eventQueueItem: NashornScriptOperation): Done = eventQueueItem match {
     case NashornEventSet(eventSet) =>
       var doResume = true
-      eventSet.foreach { ev =>
+      eventSet.asScala.foreach { ev =>
         try {
           ev match {
             case ev: BreakpointEvent =>
@@ -420,9 +420,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
     // Get all Values FIRST, before marshalling. This is because marshalling requires us to call methods, which
     // will temporarily resume threads, which causes the stack frames to become invalid.
-    val perStackFrame = thread.frames().map { sf =>
+    val perStackFrame = thread.frames().asScala.map { sf =>
       val variables = Try(sf.visibleVariables()).getOrElse(Collections.emptyList())
-      val values = sf.getValues(variables).map(e => e._1.name() -> e._2)
+      val values = sf.getValues(variables).asScala.map(e => e._1.name() -> e._2)
       (values.toMap, sf.location())
     }
 

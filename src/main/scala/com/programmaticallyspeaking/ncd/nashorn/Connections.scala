@@ -9,8 +9,8 @@ object Connections {
     connect(getConnector, host, port, timeoutMillis)
 
   private def getConnector: AttachingConnector = {
-    import scala.collection.JavaConversions._
-    Bootstrap.virtualMachineManager.attachingConnectors()
+    import scala.collection.JavaConverters._
+    Bootstrap.virtualMachineManager.attachingConnectors().asScala
       .find(connector => "com.sun.jdi.SocketAttach" == connector.name)
       .getOrElse(throw new IllegalStateException("Failed to find a SocketAttach connector"))
   }

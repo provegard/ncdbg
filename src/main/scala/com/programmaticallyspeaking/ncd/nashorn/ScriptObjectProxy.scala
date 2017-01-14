@@ -12,7 +12,7 @@ import com.sun.jdi.{ArrayReference, ObjectReference, ThreadReference}
   * @param marshaller marshaller for marshalling JDI `Value` into [[ValueNode]]
   */
 class ScriptObjectProxy(val mirror: ScriptObjectMirror, thread: ThreadReference, marshaller: Marshaller) {
-  import scala.collection.JavaConversions._
+  import scala.collection.JavaConverters._
 
   val scriptObject = mirror.scriptObject
 
@@ -30,7 +30,7 @@ class ScriptObjectProxy(val mirror: ScriptObjectMirror, thread: ThreadReference,
     val entrySet = mirror.entrySet()
     val entrySetInvoker = new DynamicInvoker(thread, entrySet)
     val array = entrySetInvoker.toArray().asInstanceOf[ArrayReference]
-    array.getValues.map { v =>
+    array.getValues.asScala.map { v =>
       val entry = v.asInstanceOf[ObjectReference]
       val entryInvoker = new DynamicInvoker(thread, entry)
       val key = entryInvoker.getKey()

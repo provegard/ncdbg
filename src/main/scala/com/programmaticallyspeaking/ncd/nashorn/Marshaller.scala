@@ -21,7 +21,7 @@ trait MappingRegistry {
 
 class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) extends ThreadUser {
   import Marshaller._
-  import scala.collection.JavaConversions._
+  import scala.collection.JavaConverters._
   import VirtualMachineExtensions._
 
   def marshal(value: Value): ValueNode = thread.virtualMachine().withoutClassPrepareRequests {
@@ -115,7 +115,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case _ => false
   }
 
-  private def toArray(ref: ArrayReference) = ArrayNode(ref.getValues.map(marshalLater), objectId(ref))
+  private def toArray(ref: ArrayReference) = ArrayNode(ref.getValues.asScala.map(marshalLater), objectId(ref))
 
   private def toArray(proxy: ScriptObjectProxy) = {
     val entrySet = proxy.entrySet()

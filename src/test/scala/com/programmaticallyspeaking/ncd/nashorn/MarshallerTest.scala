@@ -13,7 +13,7 @@ import scala.collection.mutable
 class MarshallerTest extends UnitTest with MockitoSugar {
   import org.mockito.Mockito._
 
-  import scala.collection.JavaConversions._
+  import scala.collection.JavaConverters._
 
   val registered = mutable.Map[ObjectId, (Value, ComplexNode)]()
   val mappingRegistry = new MappingRegistry {
@@ -116,7 +116,7 @@ class MarshallerTest extends UnitTest with MockitoSugar {
 
   private def arrayOfStrings(strings: Seq[String]): ArrayReference = {
     val ar = mock[ArrayReference]
-    val list: java.util.List[Value] = strings.map(stringRef)
+    val list: java.util.List[Value] = strings.map(s => stringRef(s).asInstanceOf[Value]).asJava
     when(ar.getValues).thenReturn(list)
     ar
   }
