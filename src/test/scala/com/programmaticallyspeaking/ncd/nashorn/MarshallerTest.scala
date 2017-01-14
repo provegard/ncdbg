@@ -1,8 +1,11 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import java.util.Collections
+
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import com.sun.jdi._
+import com.sun.jdi.request.{ClassPrepareRequest, EventRequestManager}
 import org.scalatest.mockito.MockitoSugar
 
 import scala.collection.mutable
@@ -20,7 +23,16 @@ class MarshallerTest extends UnitTest with MockitoSugar {
       case _ =>
     }
   }
-  def newMarshaller = new Marshaller(null, mappingRegistry)
+  def fakeThread = {
+    val erm = mock[EventRequestManager]
+    val vm = mock[VirtualMachine]
+    when(vm.eventRequestManager()).thenReturn(erm)
+    when(erm.classPrepareRequests()).thenReturn(Collections.emptyList[ClassPrepareRequest]())
+    val thread = mock[ThreadReference]
+    when(thread.virtualMachine()).thenReturn(vm)
+    thread
+  }
+  def newMarshaller = new Marshaller(fakeThread, mappingRegistry)
   
   "Marshaller" - {
     "should marshal null" in {
