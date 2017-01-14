@@ -3,7 +3,6 @@ package com.programmaticallyspeaking.ncd.nashorn
 import java.io.{File, FileNotFoundException}
 import java.net.URI
 import java.util.Collections
-import java.util.concurrent.{Executors, TimeUnit}
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
@@ -17,8 +16,8 @@ import org.slf4s.Logging
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.duration.{FiniteDuration, _}
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 
