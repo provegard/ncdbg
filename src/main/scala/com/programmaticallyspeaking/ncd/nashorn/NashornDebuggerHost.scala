@@ -116,6 +116,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   private val foundWantedTypes = mutable.Map[String, ClassType]()
 
+  private val scriptTypesWaitingForSource = ListBuffer[ReferenceType]()
+
   // Data that are defined when the VM has paused on a breakpoint or encountered a step event
   private var pausedData: Option[PausedData] = None
 
@@ -151,8 +153,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  private def considerReferenceType(refType: ReferenceType, attemptsLeft: Int): Unit = {
-    if (attemptsLeft == 0) return
+  private def considerReferenceType(refType: ReferenceType, attemptsLeft: Int): Option[Script] = {
+    if (attemptsLeft == 0) return None
 
     val className = refType.name()
 
@@ -164,6 +166,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         case other =>
           log.warn(s"Found the $className type but it's a ${other.getClass.getName} rather than a ClassType")
       }
+      None
     } else if (className.startsWith("jdk.nashorn.internal.scripts.Script$")) {
       // This is a compiled Nashorn script class.
       log.debug(s"Script reference type: ${refType.name} ($attemptsLeft attempts left)")
@@ -180,6 +183,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
                 case None =>
                   val willRetry = attemptsLeft > 2
                   if (willRetry) {
+
+                    // Since a breakpoint may be hit before our retry attempt, we add the reference type to our list
+                    // ouf source-less types. If we hit a breakpoint, we try to "resolve" all references in that list.
+                    scriptTypesWaitingForSource += refType
+
                     // I couldn't get a modification watchpoint to work (be triggered). Perhaps it's because the 'source'
                     // field is set using reflection? So instead retry in a short while.
                     val item = ConsiderReferenceType(refType, attemptsLeft - 1)
@@ -206,17 +214,22 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
               addBreakableLocations(script, breakableLocations)
 
+              Some(script)
             case Success(Left(msg)) =>
               log.info(s"Ignoring script because $msg")
+              None
             case Failure(ex: FileNotFoundException) =>
               log.warn(s"Ignoring non-existent script at path '$scriptPath'")
+              None
             case Failure(t) =>
               log.error(s"Ignoring script at path '$scriptPath'", t)
+              None
           }
         case None =>
           log.info(s"Ignoring script type '${refType.name} because it has no line locations.")
+          None
       }
-    }
+    } else None
   }
 
   private def watchAddedClasses(): Unit = {
@@ -264,6 +277,19 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     Done
   }
 
+  private def attemptToResolveSourceLessReferenceTypes(): Unit = {
+    log.info(s"Attempting to source-resolve ${scriptTypesWaitingForSource.size} script type(s)")
+    // toList => iterate over a copy since we mutate inside the foreach
+    scriptTypesWaitingForSource.toList.foreach { refType =>
+      // Only 1 attempt because we don't want retry on this, since we don't want multiple retry "loops" going on in
+      // parallel.
+      considerReferenceType(refType, 1) match {
+        case Some(_) => scriptTypesWaitingForSource -= refType
+        case None => // no luck
+      }
+    }
+  }
+
   def handleOperation(eventQueueItem: NashornScriptOperation): Done = eventQueueItem match {
     case NashornEventSet(eventSet) =>
       var doResume = true
@@ -271,6 +297,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         try {
           ev match {
             case ev: BreakpointEvent =>
+
+              attemptToResolveSourceLessReferenceTypes()
 
               // Disable breakpoints that were enabled once
               enabledBreakpoints.filter(_._2.isEnabledOnce).foreach { e =>
@@ -302,7 +330,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       if (doResume) eventSet.resume()
       Done
     case ConsiderReferenceType(refType, attemptsLeft) =>
-      considerReferenceType(refType, attemptsLeft)
+      // We may have resolved the reference type when hitting a breakpoint, and in that case we can ignore this retry
+      // attempt.
+      if (!scriptTypesWaitingForSource.contains(refType)) {
+        considerReferenceType(refType, attemptsLeft)
+      }
       Done
     case x@PostponeInitialize =>
 
