@@ -4,7 +4,7 @@ import java.io._
 
 import com.programmaticallyspeaking.ncd.host.ScriptEvent
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
-import com.programmaticallyspeaking.ncd.testing.{ActorTesting, StringUtils, UnitTest}
+import com.programmaticallyspeaking.ncd.testing.{ActorTesting, FreeActorTesting, StringUtils, UnitTest}
 import com.sun.jdi.connect.LaunchingConnector
 import com.sun.jdi.event.VMStartEvent
 import com.sun.jdi.{Bootstrap, VirtualMachine}
@@ -16,7 +16,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.control.NonFatal
 
-trait NashornScriptHostTestFixture extends UnitTest with Logging with ActorTesting {
+trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorTesting {
   import scala.collection.JavaConverters._
 
   def logVirtualMachineOutput(output: String) = log.info("VM output: " + output)
@@ -35,7 +35,7 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with ActorTesti
   private val eventSubject = new SerializedSubject[ScriptEvent]
   private val subscriptions = new ListBuffer[Subscription]()
 
-  override def beforeTest(): Unit = {
+  override def beforeAllTests(): Unit = {
     vm = launchVm()
     vmStdinWriter = new PrintWriter(new OutputStreamWriter(vm.process().getOutputStream()), true)
     val debugger = new NashornDebugger()
@@ -71,7 +71,7 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with ActorTesti
     host.pauseOnBreakpoints()
   }
 
-  override def afterTest(): Unit = {
+  override def afterAllTests(): Unit = {
     vm.process().destroy()
   }
 

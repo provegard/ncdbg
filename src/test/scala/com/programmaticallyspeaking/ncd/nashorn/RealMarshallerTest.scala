@@ -5,15 +5,17 @@ import com.programmaticallyspeaking.ncd.host.SimpleValue
 class RealMarshallerTest extends RealMarshallerTestFixture {
 
   val marshalledValues = Table(
-    ("expression", "expected"),
-    ("'hello world'", SimpleValue("hello world")),
-    ("42", SimpleValue(42))
+    ("desc", "expression", "expected"),
+    ("string", "'hello world'", SimpleValue("hello world")),
+    ("integer value", "42", SimpleValue(42))
   )
 
-  "Nashorn values can be marshalled" in {
-    forAll(marshalledValues) { (expr, expected) =>
-      evaluateExpression(expr) { actual =>
-        actual should be(expected)
+  "Marshalling works for" - {
+    forAll(marshalledValues) { (desc, expr, expected) =>
+      desc in {
+        evaluateExpression(expr) { actual =>
+          actual should be(expected)
+        }
       }
     }
   }

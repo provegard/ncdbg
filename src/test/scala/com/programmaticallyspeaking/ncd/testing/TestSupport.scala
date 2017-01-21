@@ -27,29 +27,10 @@ object SelectiveActorLogging {
   }
 }
 
-trait ActorTesting extends BeforeAndAfterEach with OneInstancePerTest { self: UnitTest =>
-  val receiveTimeout = 1.second
+trait ActorOperations {
+  val receiveTimeout: FiniteDuration
 
-  implicit var system: ActorSystem = _
-
-  def createActorSystem = ActorSystem(getClass.getName.replace('.', '_'), SelectiveActorLogging.config)
-
-  final override protected def beforeEach(): Unit = {
-    system = createActorSystem
-    beforeTest()
-  }
-
-  def beforeTest(): Unit = {}
-
-  final override protected def afterEach(): Unit = {
-    afterTest()
-    system.terminate()
-  }
-
-  def afterTest(): Unit = {}
-
-  def newActorInstance[A <: Actor : ClassTag]: ActorRef =
-    system.actorOf(Props[A]())
+  implicit val system: ActorSystem
 
   def sendAndReceive(actorRef: ActorRef, msg: AnyRef): Any = {
     val inbox = Inbox.create(system)
@@ -73,6 +54,60 @@ trait ActorTesting extends BeforeAndAfterEach with OneInstancePerTest { self: Un
       case Terminated(a) if a == actor => // ok
     }
   }
+
+}
+
+trait ActorTesting extends BeforeAndAfterEach with OneInstancePerTest with ActorOperations { self: UnitTest =>
+  val receiveTimeout = 1.second
+
+  implicit val system: ActorSystem = createActorSystem
+
+  def createActorSystem = ActorSystem(getClass.getName.replace('.', '_'), SelectiveActorLogging.config)
+
+  final override protected def beforeEach(): Unit = {
+    beforeTest()
+  }
+
+  def beforeTest(): Unit = {}
+
+  final override protected def afterEach(): Unit = {
+    afterTest()
+    system.terminate()
+  }
+
+  def afterTest(): Unit = {}
+
+  def newActorInstance[A <: Actor : ClassTag]: ActorRef =
+    system.actorOf(Props[A]())
+}
+
+/**
+  * Free as in less constraints than [[ActorTesting]], which mixes in [[OneInstancePerTest]]
+  */
+trait FreeActorTesting extends BeforeAndAfterEach with BeforeAndAfterAll with ActorOperations { self: UnitTest =>
+  val receiveTimeout = 1.second
+
+  implicit val system: ActorSystem = createActorSystem
+
+  def createActorSystem = ActorSystem(getClass.getName.replace('.', '_'), SelectiveActorLogging.config)
+
+  final override protected def beforeEach(): Unit = {
+    beforeTest()
+  }
+
+  def beforeTest(): Unit = {}
+  def afterTest(): Unit = {}
+  def beforeAllTests(): Unit = {}
+  def afterAllTests(): Unit = {}
+
+  final override protected def afterEach(): Unit = {
+    afterTest()
+  }
+
+  final override protected def beforeAll(): Unit = beforeAllTests()
+
+  final override protected def afterAll(): Unit =  try afterAllTests() finally system.terminate()
+
 }
 
 // TODO: Why can't we have a trait Mocking that does `import Mocking._` where Mocking is this object??
