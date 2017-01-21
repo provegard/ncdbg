@@ -20,7 +20,8 @@ class RealMarshallerTest extends RealMarshallerTestFixture {
 
   val complexValues = Table(
     ("desc", "expression", "expected"),
-    ("array", "[1]", Internal(Seq("0" -> Leaf(SimpleValue(1)))))
+    ("array", "[1]", Map("0" -> 1)),
+    ("object", "{'a':'b'}", Map("a" -> "b"))
   )
 
   "Marshalling of simple values works for" - {
@@ -46,15 +47,12 @@ class RealMarshallerTest extends RealMarshallerTestFixture {
 }
 
 object RealMarshallerTest {
-  sealed trait ExpandedNode
-  case class Leaf(node: ValueNode) extends ExpandedNode
-  case class Internal(children: Seq[(String, ExpandedNode)]) extends ExpandedNode
-
-  def expand(node: ValueNode): ExpandedNode = node match {
+  def expand(node: ValueNode): Any = node match {
     case complex: ComplexNode =>
-      Internal(complex.entries.map(e => e._1 -> expand(e._2.resolve())))
-    case other =>
-      Leaf(other)
+      complex.entries.map(e => e._1 -> expand(e._2.resolve())).toMap
+    case EmptyNode => null
+    case SimpleValue(simple) => simple
+    case other => throw new Exception("Unhandled: " + other)
   }
 
   implicit val valueNodeEq: Equality[ValueNode] =
