@@ -286,9 +286,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               doResume = handleBreakpoint(ev)
 
             case ev: ClassPrepareEvent =>
-              // TODO: If this happens after init is done, handle it fully
-              seenClassPrepareRequests += 1
-
+              if (isInitialized) {
+                considerReferenceType(ev.referenceType(), 5) // TODO: constant
+              } else {
+                seenClassPrepareRequests += 1
+              }
             case other =>
               log.debug("Unknown event: " + other)
           }
