@@ -24,6 +24,8 @@ import scala.util.{Failure, Success, Try}
 object NashornDebuggerHost {
   import scala.collection.JavaConverters._
 
+  val InitialScriptResolveAttempts = 5
+
   val NIR_DebuggerSupport = "jdk.nashorn.internal.runtime.DebuggerSupport"
   val NIR_ScriptRuntime = "jdk.nashorn.internal.runtime.ScriptRuntime"
 
@@ -80,8 +82,10 @@ object NashornDebuggerHost {
   }
 
   /**
-    * TODO:doc
-    * @param referenceType
+    * An operation that [[NashornDebuggerHost]] send to itself after a small delay in order to retry script resolution
+    * for a given referent type.
+    *
+    * @param referenceType a reference type that is a script but doesn't have an attached source yet.
     */
   case class ConsiderReferenceType(referenceType: ReferenceType, howManyTimes: Int) extends NashornScriptOperation
 
@@ -260,7 +264,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 //    log.info("Suspending virtual machine to do initialization")
 //    virtualMachine.suspend()
 
-    referenceTypes.asScala.foreach(considerReferenceType(_: ReferenceType, 5)) // TODO: Constant for initial no of attempts
+    referenceTypes.asScala.foreach(considerReferenceType(_: ReferenceType, InitialScriptResolveAttempts))
 
     val breakableLocationCount = breakableLocationsByScriptUri.foldLeft(0)((sum, e) => sum + e._2.size)
     log.info(s"$typeCount types checked, ${scriptByPath.size} scripts added, $breakableLocationCount breakable locations identified")
@@ -315,7 +319,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
             case ev: ClassPrepareEvent =>
               if (isInitialized) {
-                considerReferenceType(ev.referenceType(), 5) // TODO: constant
+                considerReferenceType(ev.referenceType(), InitialScriptResolveAttempts)
               } else {
                 seenClassPrepareRequests += 1
               }
