@@ -1,15 +1,20 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import java.io.{BufferedReader, IOException, InputStream, InputStreamReader}
+import java.io._
 
-import com.programmaticallyspeaking.ncd.testing.{ActorTesting, UnitTest}
+import com.programmaticallyspeaking.ncd.host.ScriptEvent
+import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
+import com.programmaticallyspeaking.ncd.testing.{ActorTesting, StringUtils, UnitTest}
 import com.sun.jdi.connect.LaunchingConnector
 import com.sun.jdi.event.VMStartEvent
 import com.sun.jdi.{Bootstrap, VirtualMachine}
+import jdk.nashorn.api.scripting.NashornScriptEngineFactory
 import org.slf4s.Logging
 
+import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
+import scala.util.control.NonFatal
 
 trait NashornScriptHostTestFixture extends UnitTest with Logging with ActorTesting {
   import scala.collection.JavaConverters._
@@ -21,29 +26,80 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with ActorTesti
 
   val resultTimeout: FiniteDuration
 
-  val targetVmClass: Class[_]
+  private var vm: VirtualMachine = _
+  private var host: NashornScriptHost = _
 
-  protected def runTestAgainstHost[R](targetVmArguments: Seq[String])(handler: (NashornScriptHost) => Future[R]): R = {
-    val vm = launchVm(targetVmArguments)
+  private var vmStdinWriter: PrintWriter = _
+  private var vmRunningFuture: Promise[Unit] = _
+
+  private val eventSubject = new SerializedSubject[ScriptEvent]
+  private val subscriptions = new ListBuffer[Subscription]()
+
+  override def beforeTest(): Unit = {
+    vm = launchVm()
+    vmStdinWriter = new PrintWriter(new OutputStreamWriter(vm.process().getOutputStream()), true)
     val debugger = new NashornDebugger()
-    val host = debugger.create(vm)
-    val f = handler(host)
-    try Await.result(f, resultTimeout) finally {
-      try vm.process().destroy() catch {
-        case e: Exception => // ignore
-      }
-    }
+    host = debugger.create(vm)
+
+    vmRunningFuture = Promise[Unit]()
+
+    setupHost()
   }
 
-  private def launchVm(targetVmArguments: Seq[String]): VirtualMachine = {
+  private def sendToVm(data: String, encodeBase64: Boolean = false): Unit = {
+    val dataToSend = if (encodeBase64) StringUtils.toBase64(data) else data
+    vmStdinWriter.println(dataToSend)
+  }
+
+  protected def setupHost(): Unit = {
+    host.events.subscribe(new Observer[ScriptEvent] {
+      override def onError(error: Throwable): Unit = vmRunningFuture.tryFailure(error)
+
+      override def onComplete(): Unit = vmRunningFuture.tryFailure(new Exception("complete"))
+
+      override def onNext(item: ScriptEvent): Unit = item match {
+        case InitialInitializationComplete =>
+          // Host initialization is complete, so let ScriptExecutor know that it can continue.
+          sendToVm("go")
+
+          // Resolve the promise on which we chain script execution in runScript. This means that any script execution
+          // will wait until the infrastructure is ready.
+          vmRunningFuture.trySuccess(())
+        case other => eventSubject.onNext(item)
+      }
+    })
+    host.pauseOnBreakpoints()
+  }
+
+  override def afterTest(): Unit = {
+    vm.process().destroy()
+  }
+
+  private def addObserver(observer: Observer[ScriptEvent]): Unit = {
+    subscriptions.foreach(_.unsubscribe())
+    subscriptions.clear()
+
+    subscriptions += eventSubject.subscribe(observer)
+  }
+
+  protected def runScript[R](script: String, observer: Observer[ScriptEvent])(handler: (NashornScriptHost) => Future[R]): Unit = {
+    addObserver(observer)
+
+    val f = vmRunningFuture.future.flatMap { _ =>
+      sendToVm(script, encodeBase64 = true)
+      handler(host)
+    }
+    Await.result(f, resultTimeout)
+  }
+
+  private def launchVm(): VirtualMachine = {
     val conn = findLaunchingConnector()
     val args = conn.defaultArguments()
 
     val cp = System.getProperty("java.class.path")
-    val className = targetVmClass.getName.replaceAll("\\$$", "")
+    val className = ScriptExecutor.getClass.getName.replaceAll("\\$$", "")
     val mainArg = args.get("main")
-    val quotedArguments = targetVmArguments.mkString("\"", "\" \"", "\"")
-    mainArg.setValue(s"""-cp "$cp" $className $quotedArguments""")
+    mainArg.setValue(s"""-cp "$cp" $className""")
 
     val vm = conn.launch(args)
 
@@ -80,6 +136,34 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with ActorTesti
     //      case _ => throw new IllegalStateException("Found no LaunchingConnector")
     //    }
   }
+}
+
+
+object ScriptExecutor extends App {
+  println("ScriptExecutor starting. Java version: " + System.getProperty("java.version"))
+  val scriptEngine = new NashornScriptEngineFactory().getScriptEngine
+  val reader = new BufferedReader(new InputStreamReader(System.in))
+  println("Awaiting go signal")
+  val signal = readStdin()
+  if (signal != "go") {
+    println("Didn't get go signal, got: " + signal)
+    System.exit(1)
+  }
+
+  while (true) {
+    println("Awaiting script on stdin...")
+    val script = StringUtils.fromBase64(readStdin())
+    println("Got script: " + script)
+    try {
+      scriptEngine.eval(script)
+      println("Script evaluation completed without errors")
+    } catch {
+      case NonFatal(t) =>
+        t.printStackTrace(System.err)
+    }
+  }
+
+  private def readStdin(): String = reader.readLine()
 }
 
 class StreamReadingThread(in: InputStream, appender: (String) => Unit) extends Thread {

@@ -1,26 +1,21 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host._
-
-import scala.concurrent.ExecutionContext
-import scala.concurrent.duration._
+import com.programmaticallyspeaking.ncd.host.SimpleValue
 
 class RealMarshallerTest extends RealMarshallerTestFixture {
-  override val resultTimeout: FiniteDuration = 5.seconds
-  implicit val executionContext = ExecutionContext.global
 
-  "Marshalling from an actual VM" - {
+  val marshalledValues = Table(
+    ("expression", "expected"),
+    ("'hello world'", SimpleValue("hello world")),
+    ("42", SimpleValue(42))
+  )
 
-    "should handle a string" in {
-      runMarshallerTest("'hello world'") { node =>
-        node should be(SimpleValue("hello world"))
-      }
-    }
-
-    "should handle a number" in {
-      runMarshallerTest("42") { node =>
-        node should be(SimpleValue(42))
+  "Nashorn values can be marshalled" in {
+    forAll(marshalledValues) { (expr, expected) =>
+      evaluateExpression(expr) { actual =>
+        actual should be(expected)
       }
     }
   }
+
 }
