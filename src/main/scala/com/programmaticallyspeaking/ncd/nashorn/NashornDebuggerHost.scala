@@ -238,7 +238,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
 
   private def doInitialize(): Unit = {
-    val erm = virtualMachine.eventRequestManager()
     val referenceTypes = virtualMachine.allClasses()
     val typeCount = referenceTypes.size()
 
@@ -507,7 +506,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def findBreakableLocation(location: Location): Option[BreakableLocation] = {
-    log.info("xx: " + scriptPathFromLocation(location))
     scriptByPath.get(scriptPathFromLocation(location)).flatMap(s => findBreakableLocation(s.uri, location.lineNumber()))
   }
 
