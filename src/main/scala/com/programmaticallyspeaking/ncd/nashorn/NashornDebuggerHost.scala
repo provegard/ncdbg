@@ -105,6 +105,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   private val eventSubject = Subject.serialized[ScriptEvent]
 
+  private var isInitialized = false
+
   // Since we effectively hand out this map via the `objectRegistry` method, it needs to be thread safe.
   private val objectPairById = TrieMap[ObjectId, (Option[Value], ComplexNode)]()
 
@@ -254,6 +256,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
 //    virtualMachine.resume()
 //    log.info("Virtual machine resumed, listening for events...")
+
+    isInitialized = true
+
+    eventSubject.onNext(InitialInitializationComplete)
 
     Done
   }
@@ -673,3 +679,5 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   case class StackFrameHolder(stackFrame: Option[StackFrame], isAtDebuggerStatement: Boolean = false)
 
 }
+
+object InitialInitializationComplete extends ScriptEvent
