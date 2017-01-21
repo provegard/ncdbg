@@ -1,11 +1,13 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.types.Undefined
-import com.programmaticallyspeaking.ncd.host.{EmptyNode, SimpleValue}
+import com.programmaticallyspeaking.ncd.host.{ComplexNode, EmptyNode, SimpleValue, ValueNode}
+import org.scalactic.Equality
 
 class RealMarshallerTest extends RealMarshallerTestFixture {
+  import RealMarshallerTest._
 
-  val marshalledValues = Table(
+  val simpleValues = Table(
     ("desc", "expression", "expected"),
     ("string", "'hello world'", SimpleValue("hello world")),
     ("integer value", "42", SimpleValue(42)),
@@ -16,24 +18,60 @@ class RealMarshallerTest extends RealMarshallerTestFixture {
     ("NaN", "NaN", SimpleValue(Double.NaN))
   )
 
-  "Marshalling works for" - {
-    forAll(marshalledValues) { (desc, expr, expected) =>
+  val complexValues = Table(
+    ("desc", "expression", "expected"),
+    ("array", "[1]", Internal(Seq("0" -> Leaf(SimpleValue(1)))))
+  )
+
+  "Marshalling of simple values works for" - {
+    forAll(simpleValues) { (desc, expr, expected) =>
       desc in {
         evaluateExpression(expr) { actual =>
-          expected match {
-            case SimpleValue(d: Double) =>
-              actual match {
-                case SimpleValue(ad: Double) =>
-                  // Required for NaN comparison
-                  java.lang.Double.compare(d, ad) should be (0)
-                case other => fail(s"Expected $other to be a SimpleValue(Double)")
-              }
-            case _ =>
-              actual should be(expected)
-          }
+          actual should equal (expected)
         }
       }
     }
   }
 
+  "Marshalling of complex values works for" - {
+    forAll(complexValues) { (desc, expr, expected) =>
+      desc in {
+        evaluateExpression(expr) { actual =>
+          expand(actual) should equal (expected)
+        }
+      }
+    }
+  }
+
+}
+
+object RealMarshallerTest {
+  sealed trait ExpandedNode
+  case class Leaf(node: ValueNode) extends ExpandedNode
+  case class Internal(children: Seq[(String, ExpandedNode)]) extends ExpandedNode
+
+  def expand(node: ValueNode): ExpandedNode = node match {
+    case complex: ComplexNode =>
+      Internal(complex.entries.map(e => e._1 -> expand(e._2.resolve())))
+    case other =>
+      Leaf(other)
+  }
+
+  implicit val valueNodeEq: Equality[ValueNode] =
+    (a: ValueNode, b: Any) => b match {
+      case vn: ValueNode =>
+        a match {
+          case SimpleValue(d: Double) =>
+            vn match {
+              case SimpleValue(ad: Double) =>
+                // Required for NaN comparison
+                java.lang.Double.compare(d, ad) == 0
+              case other => false
+            }
+          case _ =>
+            a == vn
+        }
+
+      case other => false
+    }
 }
