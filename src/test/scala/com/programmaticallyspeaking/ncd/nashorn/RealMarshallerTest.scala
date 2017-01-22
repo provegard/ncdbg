@@ -4,8 +4,9 @@ import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, Undefined}
 import com.programmaticallyspeaking.ncd.host._
 import org.scalactic.Equality
 import org.scalatest.Inside
+import org.scalatest.prop.TableDrivenPropertyChecks
 
-class RealMarshallerTest extends RealMarshallerTestFixture with Inside {
+class RealMarshallerTest extends RealMarshallerTestFixture with Inside with TableDrivenPropertyChecks {
   import RealMarshallerTest._
 
   val simpleValues = Table(

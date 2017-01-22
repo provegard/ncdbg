@@ -3,12 +3,11 @@ package com.programmaticallyspeaking.ncd.nashorn
 import com.programmaticallyspeaking.ncd.host.{HitBreakpoint, ScriptEvent, ValueNode}
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.UnitTest
-import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Promise}
 
-trait RealMarshallerTestFixture extends UnitTest with TableDrivenPropertyChecks with NashornScriptHostTestFixture {
+trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
   override val resultTimeout: FiniteDuration = 5.seconds
