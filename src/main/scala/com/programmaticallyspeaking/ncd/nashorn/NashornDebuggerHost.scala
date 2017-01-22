@@ -9,15 +9,15 @@ import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Subject}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
-import com.sun.jdi.request.{EventRequest, StepRequest}
+import com.sun.jdi.request.EventRequest
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 
@@ -121,6 +121,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private val foundWantedTypes = mutable.Map[String, ClassType]()
 
   private val scriptTypesWaitingForSource = ListBuffer[ReferenceType]()
+  private val scriptTypesToBreakRetryCycleFor = ListBuffer[ReferenceType]()
 
   // Data that are defined when the VM has paused on a breakpoint or encountered a step event
   private var pausedData: Option[PausedData] = None
@@ -276,22 +277,32 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
     isInitialized = true
 
-    eventSubject.onNext(InitialInitializationComplete)
+    emitEvent(InitialInitializationComplete)
 
     Done
   }
 
-  private def attemptToResolveSourceLessReferenceTypes(): Unit = {
-    log.info(s"Attempting to source-resolve ${scriptTypesWaitingForSource.size} script type(s)")
-    // toList => iterate over a copy since we mutate inside the foreach
-    scriptTypesWaitingForSource.toList.foreach { refType =>
-      // Only 1 attempt because we don't want retry on this, since we don't want multiple retry "loops" going on in
-      // parallel.
-      considerReferenceType(refType, 1) match {
-        case Some(_) => scriptTypesWaitingForSource -= refType
-        case None => // no luck
+  private def emitEvent(event: ScriptEvent): Unit = {
+    // Emit asynchronously so that code that observes the event can interact with the host without deadlocking it.
+    log.debug(s"Emitting event of type ${event.getClass.getSimpleName}")
+    Future(eventSubject.onNext(event))
+  }
+
+  // toList => iterate over a copy since we mutate inside the foreach
+  private def attemptToResolveSourceLessReferenceTypes(): Unit = scriptTypesWaitingForSource.toList match {
+    case Nil => // noop
+    case xs =>
+      log.info(s"Attempting to source-resolve ${scriptTypesWaitingForSource.size} script type(s)")
+      xs.foreach { refType =>
+        // Only 1 attempt because we don't want retry on this, since we don't want multiple retry "loops" going on in
+        // parallel.
+        considerReferenceType(refType, 1) match {
+          case Some(_) =>
+            scriptTypesWaitingForSource -= refType
+            scriptTypesToBreakRetryCycleFor += refType
+          case None => // no luck
+        }
       }
-    }
   }
 
   def handleOperation(eventQueueItem: NashornScriptOperation): Done = eventQueueItem match {
@@ -309,11 +320,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
                 e._2.disable()
                 enabledBreakpoints -= e._1
               }
-
-              doResume = handleBreakpoint(ev)
-            case ev: StepEvent =>
-              // Only one step event per thread is allowed, so delete this one right away
-              ev.virtualMachine().eventRequestManager().deleteEventRequest(ev.request())
 
               doResume = handleBreakpoint(ev)
 
@@ -336,7 +342,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     case ConsiderReferenceType(refType, attemptsLeft) =>
       // We may have resolved the reference type when hitting a breakpoint, and in that case we can ignore this retry
       // attempt.
-      if (!scriptTypesWaitingForSource.contains(refType)) {
+      if (scriptTypesToBreakRetryCycleFor.contains(refType)) {
+        scriptTypesToBreakRetryCycleFor -= refType
+      } else {
         considerReferenceType(refType, attemptsLeft)
       }
       Done
@@ -455,7 +463,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     // Resume right away if we're not pausing on breakpoints
     if (!willPauseOnBreakpoints) return true
 
-    log.debug(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")
+    log.info(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")
     val thread = ev.thread()
 
     // Start with a fresh object registry
@@ -464,7 +472,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     // Get all Values FIRST, before marshalling. This is because marshalling requires us to call methods, which
     // will temporarily resume threads, which causes the stack frames to become invalid.
     val perStackFrame = thread.frames().asScala.map { sf =>
-      val variables = Try(sf.visibleVariables()).getOrElse(Collections.emptyList())
+      // In the step tests, I get JDWP error 35 (INVALID SLOT) for ':return' and since we don't use it, leave it for
+      // now. If we need it, we can get it separately.
+      val variables = Try(sf.visibleVariables()).getOrElse(Collections.emptyList()).asScala.filter(_.name() != ":return").asJava
       val values = sf.getValues(variables).asScala.map(e => e._1.name() -> e._2)
       (values.toMap, sf.location())
     }
@@ -499,8 +509,16 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame]): Unit = {
     pausedData = Some(new PausedData(thread, stackFrames))
 
+    val breakpoint = stackFrames.head.breakpoint
+    scriptById(breakpoint.scriptId).foreach {
+      case s: ScriptImpl =>
+        val line = s.lines(breakpoint.lineNumberBase1 - 1)
+        log.debug(s"Pausing at ${s.uri}:${breakpoint.lineNumberBase1}: $line")
+      case _ =>
+    }
+
     val hitBreakpoint = HitBreakpoint(stackFrames)
-    eventSubject.onNext(hitBreakpoint)
+    emitEvent(hitBreakpoint)
   }
 
   private def scriptPathFromLocation(location: Location): String = {
@@ -570,7 +588,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       virtualMachine.resume()
       pausedData = None
       objectPairById.clear() // only valid when paused
-      eventSubject.onNext(Resumed)
+      emitEvent(Resumed)
     case None =>
       log.debug("Ignoring resume request when not paused (no pause data).")
   }
@@ -618,37 +636,58 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     breakableLocationsByScriptUri.flatMap(_._2).withFilter(!_.isEnabled).foreach(enableBreakpointOnce)
   }
 
+  private def setTemporaryBreakpointsInStackFrame(stackFrame: StackFrame): Int = stackFrame match {
+    case sf: StackFrameImpl =>
+      // Set one-off breakpoints in all locations of the method of this stack frame
+      val scriptUri = sf.breakableLocation.script.uri
+      val allBreakableLocations = breakableLocationsByScriptUri(scriptUri)
+      val sfMethod = sf.breakableLocation.location.method()
+      val sfLineNumber = sf.breakableLocation.location.lineNumber()
+      val relevantBreakableLocations = allBreakableLocations.filter(bl => bl.location.method() == sfMethod && bl.location.lineNumber() > sfLineNumber)
+      relevantBreakableLocations.foreach(enableBreakpointOnce)
+      relevantBreakableLocations.size
+    case other =>
+      log.warn("Unknown stack frame type: " + other)
+      0
+  }
+
   private def stepOut(pd: PausedData): Unit = {
+    // For step out, we set breakpoints in the parent stackframe (head of the tail)
     pd.stackFrames.tail.headOption match {
-      case Some(sf: StackFrameImpl) =>
-        // Set one-off breakpoints in all locations of the method of this stack frame
-        val scriptUri = sf.breakableLocation.script.uri
-        val allBreakableLocations = breakableLocationsByScriptUri(scriptUri)
-        val sfMethod = sf.breakableLocation.location.method()
-        val relevantBreakableLocations = allBreakableLocations.filter(bl => bl.location.method() == sfMethod)
-        if (relevantBreakableLocations.isEmpty) {
-          log.warn("Turning step-out request to normal resume since there no breakable locations were found in the parent script frame.")
+      case Some(sf) =>
+        val breakpointCount = setTemporaryBreakpointsInStackFrame(sf)
+        if (breakpointCount > 0) {
+          log.debug(s"Performing step-out by one-off-enabling $breakpointCount breakpoints in the parent stack frame.")
         } else {
-          log.debug("Performing step-out by one-off-enabling breakpoints in the parent stack frame method.")
-          relevantBreakableLocations.foreach(enableBreakpointOnce)
+          log.warn("Turning step-out request to normal resume since no breakable locations were found in the parent script frame.")
         }
 
-      case _ =>
+      case None =>
         log.info("Turning step-out request to normal resume since there is no parent script stack frame.")
         // resumeWhenPaused is called by caller method (step)
+    }
+  }
+
+  private def stepOver(pd: PausedData): Unit = {
+    // For step over, we set breakpoints in the top stackframe _and_ the parent stack frame
+    val breakpointCount = pd.stackFrames.take(2).map(setTemporaryBreakpointsInStackFrame).sum
+    if (breakpointCount > 0) {
+      log.debug(s"Performing step-over by one-off-enabling $breakpointCount breakpoints in the current and parent stack frames.")
+    } else {
+      log.warn("Turning step-over request to normal resume since no breakable locations were found in the current and parent script frames.")
     }
   }
 
   override def step(stepType: StepType): Done = pausedData match {
     case Some(pd) =>
       log.info(s"Stepping with type $stepType")
+      // Note that we don't issue normal step requests to the remove VM, because a script line != a Java line, so if we
+      // were to request step out, for example, we might end up in some method that acts as a script bridge.
       stepType match {
         case StepInto =>
           expensiveStepInto()
         case StepOver =>
-          val req = virtualMachine.eventRequestManager().createStepRequest(pd.thread, StepRequest.STEP_LINE, StepRequest.STEP_OVER)
-          req.addCountFilter(1) // next step only
-          req.enable()
+          stepOver(pd)
         case StepOut =>
           stepOut(pd)
       }

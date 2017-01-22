@@ -11,7 +11,7 @@ import com.sun.jdi.{Bootstrap, VirtualMachine}
 import jdk.nashorn.api.scripting.NashornScriptEngineFactory
 import org.slf4s.Logging
 
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.control.NonFatal
@@ -33,7 +33,7 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorT
   private var vmRunningFuture: Promise[Unit] = _
 
   private val eventSubject = new SerializedSubject[ScriptEvent]
-  private val subscriptions = new ListBuffer[Subscription]()
+  private val subscriptions = mutable.Queue[Subscription]()
 
   override def beforeAllTests(): Unit = {
     vm = launchVm()
@@ -76,13 +76,19 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorT
   }
 
   private def addObserver(observer: Observer[ScriptEvent]): Unit = {
-    subscriptions.foreach(_.unsubscribe())
-    subscriptions.clear()
+    while (subscriptions.nonEmpty) {
+      subscriptions.dequeue().unsubscribe()
+    }
 
-    subscriptions += eventSubject.subscribe(observer)
+    subscriptions.enqueue(eventSubject.subscribe(observer))
   }
 
-  protected def runScript[R](script: String, observer: Observer[ScriptEvent])(handler: (NashornScriptHost) => Future[R]): Unit = {
+  protected def getHost = {
+    if (host == null) throw new IllegalStateException("Host not set")
+    host
+  }
+
+  protected def runScriptWithObserverSync[R](script: String, observer: Observer[ScriptEvent])(handler: (NashornScriptHost) => Future[R]): Unit = {
     addObserver(observer)
 
     val f = vmRunningFuture.future.flatMap { _ =>

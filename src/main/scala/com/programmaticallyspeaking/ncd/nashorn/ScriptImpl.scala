@@ -13,7 +13,7 @@ class ScriptImpl(val uri: String, scriptData: Array[Byte], val id: String) exten
 
   val contents = new String(scriptData, UTF8)
 
-  private val lines: Array[String] = contents.split("\r?\n")
+  val lines: Seq[String] = contents.split("\r?\n")
 
   val lineCount = lines.length
   val lastLineLength = lines.lastOption.map(_.length).getOrElse(0)
