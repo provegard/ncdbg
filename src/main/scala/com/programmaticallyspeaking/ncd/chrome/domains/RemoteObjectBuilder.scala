@@ -64,6 +64,9 @@ trait RemoteObjectBuilder {
   def forDate(stringRepresentation: String, objectId: String) =
     RemoteObject("object", "date", "Date", stringRepresentation, null, null, validObjectId(objectId))
 
+  def forRegExp(stringRepresentation: String, objectId: String) =
+    RemoteObject("object", "regexp", "RegExp", stringRepresentation, null, null, validObjectId(objectId))
+
   //        { type: 'object',
   //                subtype: 'regexp',
   //                className: 'RegExp',

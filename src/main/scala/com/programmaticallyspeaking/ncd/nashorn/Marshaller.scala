@@ -85,6 +85,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     else if (proxy.isFunction) toFunction(proxy)
     else if (proxy.isError) toError(proxy)
     else if (proxy.isDate) toDate(mirror)
+    else if (proxy.isRegExp) toRegExp(mirror)
     else {
       //TODO: Date + regexp - but how to marshal to Chrome later?
       // Assume object
@@ -137,6 +138,12 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     // The Chrome debugging protocol (in particular, RemoteObject) doesn't seem to care about Date details.
     val stringRep = marshalledAs[String](mirror.actualToString)
     DateNode(stringRep, objectId(mirror.scriptObject))
+  }
+
+  private def toRegExp(mirror: ScriptObjectMirror) = {
+    val stringRep = marshalledAs[String](mirror.actualToString)
+    val lastIndex = marshalledAs[Integer](mirror.get("lastIndex"))
+    RegExpNode(stringRep, lastIndex, objectId(mirror.scriptObject))
   }
 
   private def toObject(proxy: ScriptObjectProxy) = {

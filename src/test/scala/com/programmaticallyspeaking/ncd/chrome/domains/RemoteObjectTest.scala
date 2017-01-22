@@ -160,5 +160,13 @@ class RemoteObjectTest extends UnitTest {
         ro should be (RemoteObject("object", "date", "Date", stringRep, null, null, "an-id"))
       }
     }
+
+    "forRegExp" - {
+      "should create an object based on a string representation" in {
+        val stringRep = "/.*/"
+        val ro = RemoteObject.forRegExp(stringRep, "an-id")
+        ro should be (RemoteObject("object", "regexp", "RegExp", stringRep, null, null, "an-id"))
+      }
+    }
   }
 }

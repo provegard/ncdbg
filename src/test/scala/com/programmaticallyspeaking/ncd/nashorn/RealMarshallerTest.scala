@@ -22,7 +22,8 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside {
   val complexValues = Table(
     ("desc", "expression", "expected"),
     ("array", "[1]", Map("0" -> 1)),
-    ("object", "{'a':'b'}", Map("a" -> "b"))
+    ("object", "{'a':'b'}", Map("a" -> "b")),
+    ("RegExp", "/.*/", Map("lastIndex" -> 0))
   )
 
   "Marshalling of simple values works for" - {
@@ -63,7 +64,6 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside {
             case err: ErrorValue => handler(err)
           }
         }
-
       }
 
       "with appropriate exception data" in {
@@ -87,6 +87,32 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside {
       "with a flag indicating it's Throwable based" in {
         evalException { err =>
           err.isBasedOnThrowable should be (true)
+        }
+      }
+    }
+
+    "RegExp" - {
+      // Note: flags 'u' and 'y' are not supported by Nashorn
+      // See https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/RegExp
+      val expr = "/.*/gim"
+
+      def evalRegexp(handler: (RegExpNode) => Unit): Unit = {
+        evaluateExpression(expr) { actual =>
+          inside(actual) {
+            case re: RegExpNode => handler(re)
+          }
+        }
+      }
+
+      "with a string representation" in {
+        evalRegexp { re =>
+          re.stringRepresentation should be ("/.*/gim")
+        }
+      }
+
+      "with lastIndex" in {
+        evalRegexp { re =>
+          re.lastIndex should be (0)
         }
       }
     }

@@ -23,6 +23,7 @@ class ScriptObjectProxy(val mirror: ScriptObjectMirror, thread: ThreadReference,
   def isFunction = className == "Function"
   def isError = className == "Error"
   def isDate = className == "Date"
+  def isRegExp = className == "RegExp"
 
   def entrySet(): Map[ValueNode, LazyNode] = {
     val foo = mirror.propertyIterator()
