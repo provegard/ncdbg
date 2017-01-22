@@ -6,7 +6,7 @@ import com.programmaticallyspeaking.ncd.testing.UnitTest
 class ValueNodeTest extends UnitTest {
 
   "ErrorValue" - {
-    val exData = ExceptionData("TypeError", "oops", 10, 0, "<eval>", None)
+    val exData = ExceptionData("TypeError", "oops", 10, 0, "<eval>", None, None)
     def errValue(data: ExceptionData) =
       ErrorValue(data, isBasedOnThrowable = false, ObjectId("$err"))
 
@@ -28,10 +28,21 @@ class ValueNodeTest extends UnitTest {
       result should be (None)
     }
 
+    "should not expose a 'javaStack' entry if there is no stack" in {
+      val result = valueFor(errValue(exData), "javaStack")
+      result should be (None)
+    }
+
     "should expose a 'stack' entry if there is a stack" in {
-      val exData = ExceptionData("TypeError", "oops", 10, 0, "<eval>", Some("the stack"))
+      val exData = ExceptionData("TypeError", "oops", 10, 0, "<eval>", Some("the stack"), None)
       val result = valueFor(errValue(exData), "stack")
       result should be (Some(SimpleValue("the stack")))
+    }
+
+    "should expose a 'javaStack' entry if there is a Java stack" in {
+      val exData = ExceptionData("TypeError", "oops", 10, 0, "<eval>", None, Some("Java stack"))
+      val result = valueFor(errValue(exData), "javaStack")
+      result should be (Some(SimpleValue("Java stack")))
     }
   }
 

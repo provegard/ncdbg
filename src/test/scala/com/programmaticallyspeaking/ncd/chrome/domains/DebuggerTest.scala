@@ -249,21 +249,21 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "should return a response with value 'undefined' when ScriptHost evaluation returns a Throwable-based error value" in {
-        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
+        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None, None)
         testEvalHandling(ErrorValue(exData, isBasedOnThrowable = true, ObjectId("$$err"))) { resp =>
           resp.result should be (RemoteObject.undefinedValue)
         }
       }
 
       "should return a response with an error value when ScriptHost evaluation returns a non-Throwable-based error value" in {
-        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
+        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None, None)
         testEvalHandling(ErrorValue(exData, isBasedOnThrowable = false, ObjectId("$$err"))) { resp =>
           resp.result should be (RemoteObject.forError("Error", "oops", None, """{"id":"$$err"}"""))
         }
       }
 
       "should return a response with exception details when ScriptHost evaluation returns a Throwable-based error value" in {
-        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
+        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None, None)
         testEvalHandling(ErrorValue(exData, isBasedOnThrowable = true, ObjectId("$$err"))) { resp =>
           // Remember, Chrome line numbers are 0-based, so 10 => 9
           resp.exceptionDetails should be (Some(ExceptionDetails(1, "oops", 9, 1, Some("<eval>"), None, Runtime.StaticExecutionContextId)))
@@ -271,7 +271,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "should return a response with _only_ value 'undefined' when ScriptHost evaluation returns a Throwable-based error value but silent mode is requested" in {
-        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
+        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None, None)
         testEvalHandling(ErrorValue(exData, isBasedOnThrowable = true, ObjectId("$$err")), Some(true)) { resp =>
           resp should be (Debugger.EvaluateOnCallFrameResult(RemoteObject.undefinedValue, None))
         }

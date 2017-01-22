@@ -51,7 +51,7 @@ class ValueNodeExtractorTest extends UnitTest {
     }
 
     "should convert ErrorNode to a string rep" in {
-      val e = ErrorValue(ExceptionData("TypeError", "oops", 0, 0, "", None), isBasedOnThrowable = false, ObjectId("e"))
+      val e = ErrorValue(ExceptionData("TypeError", "oops", 0, 0, "", None, None), isBasedOnThrowable = false, ObjectId("e"))
       newExtractor.extract(e) should be ("<TypeError: oops>")
     }
 

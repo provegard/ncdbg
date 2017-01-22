@@ -61,7 +61,9 @@ case class ErrorValue(data: ExceptionData, isBasedOnThrowable: Boolean, objectId
   override def entries: Seq[(String, LazyNode)] = Seq(
     "message" -> LazyNode.eager(SimpleValue(data.message)),
     "name" -> LazyNode.eager(SimpleValue(data.name))
-  ) ++ data.stackIncludingMessage.map(st => "stack" -> LazyNode.eager(SimpleValue(st)))
+  ) ++
+    data.stackIncludingMessage.map(st => "stack" -> LazyNode.eager(SimpleValue(st))) ++
+    data.javaStackIncludingMessage.map(st => "javaStack" -> LazyNode.eager(SimpleValue(st)))
 }
 case class ArrayNode(items: Seq[LazyNode], objectId: ObjectId) extends ComplexNode {
   def entries = items.zipWithIndex.map(e => e._2.toString -> e._1)

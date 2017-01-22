@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.types.Undefined
+import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, Undefined}
 import com.programmaticallyspeaking.ncd.host._
 import org.scalactic.Equality
 import org.scalatest.Inside
@@ -39,6 +39,54 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside {
         inside(actual) {
           case DateNode(str, _) =>
             str should fullyMatch regex "Sat Jan 21 2017 00:00:00 [A-Z]{3}[0-9+]{5} (.*)"
+        }
+      }
+    }
+
+    "Error" in {
+      evaluateExpression("new TypeError('oops')") { actual =>
+        inside(actual) {
+          case ErrorValue(data, isBasedOnThrowable, _) =>
+            val stack = "TypeError: oops\n\tat <program> (<eval>:1)"
+            data should be (ExceptionData("TypeError", "oops", 1, -1, "<eval>", Some(stack), None))
+            isBasedOnThrowable should be (false)
+        }
+      }
+    }
+
+    "Java Exception" - {
+      val expr = "(function(){try{throw new java.lang.IllegalArgumentException('oops');}catch(e){return e;}})()"
+
+      def evalException(handler: (ErrorValue) => Unit): Unit = {
+        evaluateExpression(expr) { actual =>
+          inside(actual) {
+            case err: ErrorValue => handler(err)
+          }
+        }
+
+      }
+
+      "with appropriate exception data" in {
+        evalException { err =>
+          err.data.copy(javaStackIncludingMessage = None) should be (ExceptionData("java.lang.IllegalArgumentException", "oops", 3, -1, "<eval>",
+            Some("java.lang.IllegalArgumentException: oops"), None))
+        }
+      }
+
+      "with Java stack trace data" in {
+        evalException { err =>
+          err.data.javaStackIncludingMessage match {
+            case Some(stack) =>
+              stack should fullyMatch regex ("(?s)^java\\.lang\\.IllegalArgumentException: oops\n\tat.*<eval>.*".r)
+
+            case None => fail("No Java stack")
+          }
+        }
+      }
+
+      "with a flag indicating it's Throwable based" in {
+        evalException { err =>
+          err.isBasedOnThrowable should be (true)
         }
       }
     }

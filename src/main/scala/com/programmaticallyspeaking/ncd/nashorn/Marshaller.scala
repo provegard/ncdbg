@@ -13,6 +13,7 @@ import scala.util.Try
 
 object Marshaller {
   val objectIdGenerator = new IdGenerator("objid-")
+  case class ExceptionInfo(stack: String, lineNumber: Int, fileName: String)
 }
 
 trait MappingRegistry {
@@ -181,7 +182,8 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
         marshalledAsOptionally[Integer](lineNumberValue).getOrElse(Integer.valueOf(0)).intValue(),
         marshalledAsOptionally[Integer](colNumberValue).getOrElse(Integer.valueOf(-1)).intValue(),
         marshalledAsOptionally[String](fileNameValue).getOrElse("<unknown>"), //TODO: To URL?
-        Option(stack)
+        Option(stack),
+        None
       )
     ErrorValue(exData, isBasedOnThrowable = false, objectId(so))
   }
@@ -226,8 +228,29 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       case _ => None
     }
 
+    private def extractJavaExceptionInfo(exception: ObjectReference): Option[ExceptionInfo] = {
+      val invoker = new DynamicInvoker(thread, exception)
+      val stackTraceElements = invoker.getStackTrace().asInstanceOf[ArrayReference]
+
+      if (stackTraceElements.length() > 0) {
+        val elemInvoker = new DynamicInvoker(thread, stackTraceElements.getValue(0).asInstanceOf[ObjectReference])
+        val lineNumber = marshalledAs[Integer](elemInvoker.getLineNumber())
+        val fileName = marshalledAs[String](elemInvoker.getFileName())
+
+        val stack = stackTraceElements.getValues.asScala.map(stackTraceElement => {
+          val stInvoker = new DynamicInvoker(thread, stackTraceElement.asInstanceOf[ObjectReference])
+          "\tat " + marshalledAs[String](stInvoker.applyDynamic("toString")())
+        }).mkString("\n")
+        Some(ExceptionInfo(stack, lineNumber, fileName))
+      } else None
+    }
+
     private def exceptionDataOf(objRef: ObjectReference, nashornException: Option[ClassType]): ExceptionData = {
       val invoker = new DynamicInvoker(thread, objRef)
+
+      // Extract information about the Exception from a Java point of view. This is different than the Nashorn point
+      // of view, where only script frames are considered.
+      val javaExceptionInfo = extractJavaExceptionInfo(objRef)
 
       val data: (LocationData, String) = nashornException match {
         case Some(classType) =>
@@ -239,16 +262,29 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
             marshalledAs[Integer](invoker.getColumnNumber()),
             marshalledAs[String](invoker.getFileName()) //TODO: new File(_).toURI.toString??
             ), stackWithoutMessage)
-        case None => (LocationData(0, -1, "<unknown>"), null)
+        case None =>
+          javaExceptionInfo match {
+            case Some(info) =>
+              // Note that we don't include the Java stack here, because we want the stack trace to be a script stack
+              // trace always, for consistency. Instead we include the Java stack trace as an extra Error property.
+              (LocationData(info.lineNumber, -1, info.fileName), null)
+            case None =>
+              (LocationData(0, -1, "<unknown>"), null)
+          }
       }
 
-      val name = "Error"
+      // Use full Exception type name, e.g. java.lang.IllegalArgumentException
+      val name = objRef.referenceType().name()
       val message = marshalledAs[String](invoker.getMessage())
-      val fullStack = s"$name: $message" + Option(data._2).map(st => "\n" + st)
-//      val cause = marshal(invoker.invokeParameterLessMethod(objRef, "getCause")) // ErrorValue
-//      val stack = marshal(invoker.invokeParameterLessMethod(objRef, "getStackTrace")) // ArrayNode
-      // NashornException.getScriptStackString
-      ExceptionData(name, message, data._1.lineNumber, data._1.columnNumber, data._1.url, Option(fullStack))
+      val fullStack = s"$name: $message" + Option(data._2).map(st => "\n" + st).getOrElse("")
+
+      // Note the slight implementation inconsistency wrt `fullStack`: we don't prefix with name and message outside
+      // of the Option map. The reason is that we always expect Java exception info including stack to be present
+      // (we get None if there are no stack frames at all, which would be odd).
+      val fullJavaStack = javaExceptionInfo.map(info => s"$name: $message\n${info.stack}")
+
+      ExceptionData(name, message, data._1.lineNumber, data._1.columnNumber, data._1.url, Option(fullStack),
+        fullJavaStack)
     }
   }
 
