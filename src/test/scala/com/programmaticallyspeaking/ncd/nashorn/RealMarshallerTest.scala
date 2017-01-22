@@ -1,10 +1,11 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.types.Undefined
-import com.programmaticallyspeaking.ncd.host.{ComplexNode, EmptyNode, SimpleValue, ValueNode}
+import com.programmaticallyspeaking.ncd.host._
 import org.scalactic.Equality
+import org.scalatest.Inside
 
-class RealMarshallerTest extends RealMarshallerTestFixture {
+class RealMarshallerTest extends RealMarshallerTestFixture with Inside {
   import RealMarshallerTest._
 
   val simpleValues = Table(
@@ -29,6 +30,15 @@ class RealMarshallerTest extends RealMarshallerTestFixture {
       desc in {
         evaluateExpression(expr) { actual =>
           actual should equal (expected)
+        }
+      }
+    }
+
+    "Date" in {
+      evaluateExpression("new Date(2017,0,21)") { actual =>
+        inside(actual) {
+          case DateNode(str, _) =>
+            str should fullyMatch regex "Sat Jan 21 2017 00:00:00 [A-Z]{3}[0-9+]{5} (.*)"
         }
       }
     }
