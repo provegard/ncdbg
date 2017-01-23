@@ -1,8 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn.mirrors
 
-import com.programmaticallyspeaking.ncd.host.{LazyNode, SimpleValue, ValueNode}
-import com.programmaticallyspeaking.ncd.nashorn.DynamicInvoker
-import com.sun.jdi.{ArrayReference, ObjectReference, ThreadReference}
+import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, MissingMethodException}
+import com.sun.jdi._
 
 /**
   * Mirror for `jdk.nashorn.internal.runtime.ScriptObject`. This class doesn't do marshalling - the return value of
@@ -13,6 +12,7 @@ import com.sun.jdi.{ArrayReference, ObjectReference, ThreadReference}
   */
 class ScriptObjectMirror(thread: ThreadReference, val scriptObject: ObjectReference) {
   import ScriptObjectMirror._
+
   lazy val invoker = new DynamicInvoker(thread, scriptObject)
 
   def getClassName = invoker.getClassName()
@@ -22,8 +22,24 @@ class ScriptObjectMirror(thread: ThreadReference, val scriptObject: ObjectRefere
   def entrySet() = invoker.entrySet().asInstanceOf[ObjectReference]
   def propertyIterator() = invoker.propertyIterator()
 
-  def put(key: AnyRef, value: AnyRef, isStrict: Boolean) =
-    invoker.applyDynamic(putObjectObjectBoolSignature)(key, value, isStrict)
+  def set(key: AnyRef, value: AnyRef, isStrict: Boolean) = {
+    val scriptObjectFlags = if (isStrict) 2 else 0; // taken from ScriptObject.put
+    // Figure out set overload
+    val valueSigType = value match {
+      case i: IntegerValue => "I"
+      case _ => "Ljava/lang/Object;"
+    }
+    // Different Java versions have different parameter lists
+    val withFlags = s"set(Ljava/lang/Object;${valueSigType}I)V"
+    try {
+      invoker.applyDynamic(withFlags)(key, value, scriptObjectFlags)
+    } catch {
+      case ex: MissingMethodException =>
+        // Retry with a method that doesn't take a flags (int) argument
+        val withoutFlags = s"set(Ljava/lang/Object;$valueSigType)V"
+        invoker.applyDynamic(withoutFlags)(key, value)
+    }
+  }
 
   def get(key: AnyRef) =
     invoker.applyDynamic(getObjectSignature)(key)
@@ -34,6 +50,5 @@ class ScriptObjectMirror(thread: ThreadReference, val scriptObject: ObjectRefere
 }
 
 object ScriptObjectMirror {
-  val putObjectObjectBoolSignature = "put(Ljava/lang/Object;Ljava/lang/Object;Z)Ljava/lang/Object;"
   val getObjectSignature = "get(Ljava/lang/Object;)Ljava/lang/Object;"
 }

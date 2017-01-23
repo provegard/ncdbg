@@ -365,6 +365,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def scopeWithFreeVariables(thread: ThreadReference, scopeObject: Value, freeVariables: Map[String, AnyRef]): Value = {
+    require(scopeObject != null, "Scope object must be non-null")
     // If there aren't any free variables, we don't need to create a wrapper scope
     if (freeVariables.isEmpty) return scopeObject
 
@@ -374,12 +375,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         // Just using "{}" returns undefined - don't know why - but "Object.create" works well.
         val anObject = DebuggerSupport_eval(thread, null, null, "Object.create(null)").asInstanceOf[ObjectReference]
         val mirror = new ScriptObjectMirror(thread, anObject)
+        val names = freeVariables.keys.mkString(", ")
         freeVariables.foreach {
           case (name, value) =>
-            mirror.put(name, value, isStrict = false)
+            mirror.set(name, value, isStrict = false)
         }
 
-        new StaticInvoker(thread, scriptRuntime).openWith(scopeObject, anObject)
+        anObject
 
       case None =>
         log.warn("Don't have the ScriptRuntime type available to wrap the scope.")
@@ -416,10 +418,19 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           case Some(thisObj) =>
             val scopeObj = marshalled.get(":scope").orNull
 
+            // Variables that don't start with ":" are locals
+            val localValues = values.filter(e => !e._1.startsWith(":")) // for use in evaluateCodeOnFrame
+            val locals = marshalled.filter(e => !e._1.startsWith(":"))
+
+            // Create an artificial object node to hold the locals
+            val localNode = ObjectNode(locals.map(e => e._1 -> LazyNode.eager(e._2)), ObjectId("$$locals"))
+            mappingRegistry.register(null, localNode)
+
             def evaluateCodeOnFrame: CodeEvaluator = {
               case (code, namedValues) =>
                 val originalThis = values(":this")
-                val originalScope = scopeWithFreeVariables(thread, values.get(":scope").orNull, namedValues)
+                // If we don't have :scope, use :this - it's used as a parent object for the created 'with' object.
+                val originalScope = scopeWithFreeVariables(thread, values.getOrElse(":scope", originalThis), namedValues ++ localValues)
 
                 try {
                   val ret = DebuggerSupport_eval(thread, originalThis, originalScope, code)
@@ -430,13 +441,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
                     throw ex
                 }
             }
-
-            // Variables that don't start with ":" are locals
-            val locals = marshalled.filter(e => !e._1.startsWith(":")).toMap
-
-            // Create an artificial object node to hold the locals
-            val localNode = ObjectNode(locals.map(e => e._1 -> LazyNode.eager(e._2)), ObjectId("$$locals"))
-            mappingRegistry.register(null, localNode)
 
             try {
               findBreakableLocation(location).map(w => new StackFrameImpl(thisObj, Option(scopeObj), localNode, w, evaluateCodeOnFrame, functionDetails(functionMethod))) match {

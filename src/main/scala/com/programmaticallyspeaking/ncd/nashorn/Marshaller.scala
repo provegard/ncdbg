@@ -23,9 +23,8 @@ trait MappingRegistry {
 class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) extends ThreadUser {
   import Marshaller._
   import scala.collection.JavaConverters._
-  import VirtualMachineExtensions._
 
-  def marshal(value: Value): ValueNode = thread.virtualMachine().withoutClassPrepareRequests {
+  def marshal(value: Value): ValueNode = {
     val result = marshalInPrivate(value)
     mappingRegistry.register(value, result)
     result
@@ -320,6 +319,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   def marshalledAsOptionally[R <: Any : ClassTag](v: Value): Option[R] = {
     marshal(v) match {
       case SimpleValue(value: R) => Some(value)
+      case EmptyNode => Some(null.asInstanceOf[R])
       case other => None
     }
   }
