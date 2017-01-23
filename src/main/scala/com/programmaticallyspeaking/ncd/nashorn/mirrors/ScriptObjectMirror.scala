@@ -25,8 +25,12 @@ class ScriptObjectMirror(thread: ThreadReference, val scriptObject: ObjectRefere
   def set(key: AnyRef, value: AnyRef, isStrict: Boolean) = {
     val scriptObjectFlags = if (isStrict) 2 else 0; // taken from ScriptObject.put
     // Figure out set overload
+    // The LongValue case is untested since Nashorn since 8u91 or something has removed the use of Long. However the
+    // case is kept for completeness.
     val valueSigType = value match {
       case i: IntegerValue => "I"
+      case d: DoubleValue => "D"
+      case l: LongValue => "J" // note: untested
       case _ => "Ljava/lang/Object;"
     }
     // Different Java versions have different parameter lists
