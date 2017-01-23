@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn.mirrors
 
-import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, MissingMethodException}
+import com.programmaticallyspeaking.ncd.nashorn.DynamicInvoker
 import com.sun.jdi._
 
 /**
@@ -22,28 +22,8 @@ class ScriptObjectMirror(thread: ThreadReference, val scriptObject: ObjectRefere
   def entrySet() = invoker.entrySet().asInstanceOf[ObjectReference]
   def propertyIterator() = invoker.propertyIterator()
 
-  def set(key: AnyRef, value: AnyRef, isStrict: Boolean) = {
-    val scriptObjectFlags = if (isStrict) 2 else 0; // taken from ScriptObject.put
-    // Figure out set overload
-    // The LongValue case is untested since Nashorn since 8u91 or something has removed the use of Long. However the
-    // case is kept for completeness.
-    val valueSigType = value match {
-      case i: IntegerValue => "I"
-      case d: DoubleValue => "D"
-      case l: LongValue => "J" // note: untested
-      case _ => "Ljava/lang/Object;"
-    }
-    // Different Java versions have different parameter lists
-    val withFlags = s"set(Ljava/lang/Object;${valueSigType}I)V"
-    try {
-      invoker.applyDynamic(withFlags)(key, value, scriptObjectFlags)
-    } catch {
-      case ex: MissingMethodException =>
-        // Retry with a method that doesn't take a flags (int) argument
-        val withoutFlags = s"set(Ljava/lang/Object;$valueSigType)V"
-        invoker.applyDynamic(withoutFlags)(key, value)
-    }
-  }
+  def put(key: AnyRef, value: AnyRef, isStrict: Boolean) =
+    invoker.applyDynamic(putObjectObjectBoolSignature)(key, value, isStrict)
 
   def get(key: AnyRef) =
     invoker.applyDynamic(getObjectSignature)(key)
@@ -54,5 +34,6 @@ class ScriptObjectMirror(thread: ThreadReference, val scriptObject: ObjectRefere
 }
 
 object ScriptObjectMirror {
+  val putObjectObjectBoolSignature = "put(Ljava/lang/Object;Ljava/lang/Object;Z)Ljava/lang/Object;"
   val getObjectSignature = "get(Ljava/lang/Object;)Ljava/lang/Object;"
 }

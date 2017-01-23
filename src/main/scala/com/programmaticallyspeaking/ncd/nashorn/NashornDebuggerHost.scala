@@ -28,13 +28,21 @@ object NashornDebuggerHost {
 
   val NIR_DebuggerSupport = "jdk.nashorn.internal.runtime.DebuggerSupport"
   val NIR_ScriptRuntime = "jdk.nashorn.internal.runtime.ScriptRuntime"
+  val JL_Boolean = "java.lang.Boolean"
+  val JL_Integer = "java.lang.Integer"
+  val JL_Long = "java.lang.Long"
+  val JL_Double = "java.lang.Double"
 
   // The name of the DEBUGGER method in the ScriptRuntime class
   val ScriptRuntime_DEBUGGER = "DEBUGGER"
 
   val wantedTypes = Set(
     NIR_DebuggerSupport,
-    NIR_ScriptRuntime
+    NIR_ScriptRuntime,
+    JL_Boolean,
+    JL_Integer,
+    JL_Long,
+    JL_Double
   )
 
   type CodeEvaluator = (String, Map[String, AnyRef]) => ValueNode
@@ -364,6 +372,33 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     FunctionDetails(functionMethod.name())
   }
 
+  private def boxed(thread: ThreadReference, prim: PrimitiveValue, typeName: String, method: String): Value = {
+    foundWantedTypes.get(typeName) match {
+      case Some(aType) =>
+        val invoker = new StaticInvoker(thread, aType)
+        invoker.applyDynamic(method)(prim)
+      case None => throw new IllegalArgumentException(s"Failed to find the '$typeName' type.")
+    }
+  }
+
+  /**
+    * Performs boxing of a primitive value, e.g. int => Integer
+    * @param thread the thread to run boxing methods on
+    * @param prim the primitive value to box
+    * @return the boxed value
+    */
+  // TODO: Move this method to some class where it fits better. Marshaller? VirtualMachineExtensions?
+  private def boxed(thread: ThreadReference, prim: PrimitiveValue): Value = prim match {
+    case b: BooleanValue => boxed(thread, b, JL_Boolean, "valueOf(Z)Ljava/lang/Boolean;")
+    case i: IntegerValue => boxed(thread, i, JL_Integer, "valueOf(I)Ljava/lang/Integer;")
+    case l: LongValue =>
+      // LongValue is kept for completeness - Nashorn since8 8u91 or something like that doesn't use Long for
+      // representing numbers anymore.
+      boxed(thread, l, JL_Long, "valueOf(J)Ljava/lang/Long;")
+    case d: DoubleValue => boxed(thread, d, JL_Double, "valueOf(D)Ljava/lang/Double;")
+    case _ => throw new IllegalArgumentException("Cannot box " + prim)
+  }
+
   private def scopeWithFreeVariables(thread: ThreadReference, scopeObject: Value, freeVariables: Map[String, AnyRef]): Value = {
     require(scopeObject != null, "Scope object must be non-null")
     // If there aren't any free variables, we don't need to create a wrapper scope
@@ -375,10 +410,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         // Just using "{}" returns undefined - don't know why - but "Object.create" works well.
         val anObject = DebuggerSupport_eval(thread, null, null, "Object.create(null)").asInstanceOf[ObjectReference]
         val mirror = new ScriptObjectMirror(thread, anObject)
-        val names = freeVariables.keys.mkString(", ")
         freeVariables.foreach {
           case (name, value) =>
-            mirror.set(name, value, isStrict = false)
+            val valueToPut = value match {
+              case prim: PrimitiveValue => boxed(thread, prim)
+              case other => other
+            }
+            mirror.put(name, valueToPut, isStrict = false)
         }
 
         anObject

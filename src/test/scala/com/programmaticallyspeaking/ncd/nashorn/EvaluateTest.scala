@@ -39,7 +39,12 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
       """var y = 21.6;
         |debugger;
         |y.toString(); // make sure x isn't optimized away
-      """.stripMargin, "y+y", SimpleValue(43.2d))
+      """.stripMargin, "y+y", SimpleValue(43.2d)),
+      ("local bool variable on the topmost stack frame",
+        """var y = true;
+          |debugger;
+          |y.toString(); // make sure x isn't optimized away
+        """.stripMargin, "!y", SimpleValue(false))
   )
 
   "Evaluating on a stack frame" - {
