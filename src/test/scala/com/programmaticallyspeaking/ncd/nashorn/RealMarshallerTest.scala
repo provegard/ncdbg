@@ -12,6 +12,7 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
   val simpleValues = Table(
     ("desc", "expression", "expected"),
     ("string", "'hello world'", SimpleValue("hello world")),
+    ("concatenated string", "'hello ' + 'world'", SimpleValue("hello world")),
     ("integer value", "42", SimpleValue(42)),
     ("floating-point value", "42.5", SimpleValue(42.5d)),
     ("boolean value", "true", SimpleValue(true)),
