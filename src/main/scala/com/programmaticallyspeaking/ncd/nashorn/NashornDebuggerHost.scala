@@ -408,7 +408,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     foundWantedTypes.get(NIR_ScriptRuntime) match {
       case Some(scriptRuntime) =>
         // Just using "{}" returns undefined - don't know why - but "Object.create" works well.
-        val anObject = DebuggerSupport_eval(thread, null, null, "Object.create(null)").asInstanceOf[ObjectReference]
+        // Use the passed scope object as prototype object so that scope variables will be seen as well.
+        val anObject = DebuggerSupport_eval(thread, scopeObject, null, "Object.create(this)").asInstanceOf[ObjectReference]
         val mirror = new ScriptObjectMirror(thread, anObject)
         freeVariables.foreach {
           case (name, value) =>

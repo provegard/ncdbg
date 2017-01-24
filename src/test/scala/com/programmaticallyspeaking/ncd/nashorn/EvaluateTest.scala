@@ -40,11 +40,21 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
         |debugger;
         |y.toString(); // make sure x isn't optimized away
       """.stripMargin, "y+y", SimpleValue(43.2d)),
-      ("local bool variable on the topmost stack frame",
-        """var y = true;
-          |debugger;
-          |y.toString(); // make sure x isn't optimized away
-        """.stripMargin, "!y", SimpleValue(false))
+    ("local bool variable on the topmost stack frame",
+      """var y = true;
+        |debugger;
+        |y.toString(); // make sure x isn't optimized away
+      """.stripMargin, "!y", SimpleValue(false)),
+    ("closure-captured value when there also is a local",
+      """var x = 21;
+        |var fun = function () {
+        |  var local = 22;
+        |  debugger;
+        |  x.toString(); // capture x
+        |  local.toString(); // don't optimize away local
+        |};
+        |fun();
+      """.stripMargin, "x", SimpleValue(21))
   )
 
   "Evaluating on a stack frame" - {
