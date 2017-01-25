@@ -8,53 +8,53 @@ class RemoteObjectTest extends UnitTest {
   "RemoteObject" - {
     "forNumber" - {
       "should handle a normal number" in {
-        RemoteObject.forNumber(42.0d) should be (RemoteObject("number", null, null, "42.0", 42.0d, null, null))
+        RemoteObject.forNumber(42.0d) should be (RemoteObject("number", None, None, Some("42.0"), Some(42.0d), None, None))
       }
 
       "should handle NaN" in {
-        RemoteObject.forNumber(Double.NaN) should be (RemoteObject("number", null, null, "NaN", null, "NaN", null))
+        RemoteObject.forNumber(Double.NaN) should be (RemoteObject("number", None, None, Some("NaN"), None, Some("NaN"), None))
       }
 
       "should handle positive Infinity" in {
-        RemoteObject.forNumber(Double.PositiveInfinity) should be (RemoteObject("number", null, null, "Infinity", null, "Infinity", null))
+        RemoteObject.forNumber(Double.PositiveInfinity) should be (RemoteObject("number", None, None, Some("Infinity"), None, Some("Infinity"), None))
       }
 
       "should handle negative Infinity" in {
-        RemoteObject.forNumber(Double.NegativeInfinity) should be (RemoteObject("number", null, null, "-Infinity", null, "-Infinity", null))
+        RemoteObject.forNumber(Double.NegativeInfinity) should be (RemoteObject("number", None, None, Some("-Infinity"), None, Some("-Infinity"), None))
       }
 
       "should handle 0 (integer)" in {
-        RemoteObject.forNumber(0) should be (RemoteObject("number", null, null, "0", 0, null, null))
+        RemoteObject.forNumber(0) should be (RemoteObject("number", None, None, Some("0"), Some(0), None, None))
       }
 
       "should handle a long number" in {
-        RemoteObject.forNumber(42L).value shouldBe a[java.lang.Long]
+        RemoteObject.forNumber(42L).value.map(_.getClass.getName) shouldBe Some("java.lang.Long")
       }
 
       "should handle -0" in {
-        RemoteObject.forNumber(-0d) should be (RemoteObject("number", null, null, "-0", null, "-0", null))
+        RemoteObject.forNumber(-0d) should be (RemoteObject("number", None, None, Some("-0"), None, Some("-0"), None))
       }
     }
 
     "trueValue should be a boolean" in {
-      RemoteObject.trueValue should be (RemoteObject("boolean", null, null, null, true, null, null))
+      RemoteObject.trueValue should be (RemoteObject("boolean", None, None, None, Some(true), None, None))
     }
 
     "falseValue should be a boolean" in {
-      RemoteObject.falseValue should be (RemoteObject("boolean", null, null, null, false, null, null))
+      RemoteObject.falseValue should be (RemoteObject("boolean", None, None, None, Some(false), None, None))
     }
 
-    "nullValue should be an object" in {
-      RemoteObject.nullValue should be (RemoteObject("object", "null", null, null, null, null, null))
+    "NoneValue should be an object" in {
+      RemoteObject.nullValue should be (RemoteObject("object", Some("null"), None, None, Some(null), None, None))
     }
 
     "undefinedValue should have type 'undefined'" in {
-      RemoteObject.undefinedValue should be (RemoteObject("undefined", null, null, null, null, null, null))
+      RemoteObject.undefinedValue should be (RemoteObject("undefined", None, None, None, None, None, None))
     }
 
     "forString" - {
       "should handle a string" in {
-        RemoteObject.forString("test") should be (RemoteObject("string", null, null, null, "test", null, null))
+        RemoteObject.forString("test") should be (RemoteObject("string", None, None, None, Some("test"), None, None))
       }
 
       "should handle null" in {
@@ -64,11 +64,11 @@ class RemoteObjectTest extends UnitTest {
 
     "forArray" - {
       "should handle an empty array" in {
-        RemoteObject.forArray(0, "arr-id") should be (RemoteObject("object", "array", "Array", "Array[0]", null, null, "arr-id"))
+        RemoteObject.forArray(0, "arr-id") should be (RemoteObject("object", Some("array"), Some("Array"), Some("Array[0]"), None, None, Some("arr-id")))
       }
 
       "should handle an array with a size" in {
-        RemoteObject.forArray(3, "arr-id") should be (RemoteObject("object", "array", "Array", "Array[3]", null, null, "arr-id"))
+        RemoteObject.forArray(3, "arr-id") should be (RemoteObject("object", Some("array"), Some("Array"), Some("Array[3]"), None, None, Some("arr-id")))
       }
 
       "should reject a negative size" in {
@@ -85,13 +85,13 @@ class RemoteObjectTest extends UnitTest {
 
       "should accept an Array" in {
         val data = Seq("foo")
-        RemoteObject.forArray(data) should be (RemoteObject("object", "array", "Array", "Array[1]", data, null, null))
+        RemoteObject.forArray(data) should be (RemoteObject("object", Some("array"), Some("Array"), Some("Array[1]"), Some(data), None, None))
       }
     }
 
     "forObject" - {
       "should handle an object" in {
-        RemoteObject.forObject("an-id") should be (RemoteObject("object", null, "Object", "Object", null, null, "an-id"))
+        RemoteObject.forObject("an-id") should be (RemoteObject("object", None, Some("Object"), Some("Object"), None, None, Some("an-id")))
       }
 
       "should reject null object ID" in {
@@ -104,17 +104,19 @@ class RemoteObjectTest extends UnitTest {
 
       "should accept an object Map" in {
         val data = Map("foo" -> "bar")
-        RemoteObject.forObject(data) should be (RemoteObject("object", null, "Object", "Object", data, null, null))
+        RemoteObject.forObject(data) should be (RemoteObject("object", None, Some("Object"), Some("Object"), Some(data), None, None))
       }
     }
 
     "forFunction" - {
       "should handle name and source (and assume source includes the entire function definition)" in {
-        RemoteObject.forFunction("fun", "function fun() { return 42; }", "an-id") should be (RemoteObject("function", null, "Function", "function fun() { return 42; }", null, null, "an-id"))
+        RemoteObject.forFunction("fun", "function fun() { return 42; }", "an-id") should be (RemoteObject("function", None,
+          Some("Function"), Some("function fun() { return 42; }"), None, None, Some("an-id")))
       }
 
       "should handle unknown/null source" in {
-        RemoteObject.forFunction("fun", null, "an-id") should be (RemoteObject("function", null, "Function", "function fun() { [unknown] }", null, null, "an-id"))
+        RemoteObject.forFunction("fun", null, "an-id") should be (RemoteObject("function", None, Some("Function"),
+          Some("function fun() { [unknown] }"), None, None, Some("an-id")))
       }
 
       "should reject null object ID" in {
@@ -134,22 +136,22 @@ class RemoteObjectTest extends UnitTest {
 
       "should create an object with subtype 'error'" in {
         val ro = RemoteObject.forError("Error", "oops", None, "an-id")
-        ro.subtype should be ("error")
+        ro.subtype should be (Some("error"))
       }
 
       "should create an object with class name from the name" in {
         val ro = RemoteObject.forError("SomeError", "oops", None, "an-id")
-        ro.className should be ("SomeError")
+        ro.className should be (Some("SomeError"))
       }
 
       "should create an object with a description based on name and message if there is no stack" in {
         val ro = RemoteObject.forError("SomeError", "oops", None, "an-id")
-        ro.description should be ("SomeError: oops")
+        ro.description should be (Some("SomeError: oops"))
       }
 
       "should create an object with a description based on the stack if there is one" in {
         val ro = RemoteObject.forError("SomeError", "oops", Some("stack"), "an-id")
-        ro.description should be ("stack")
+        ro.description should be (Some("stack"))
       }
     }
 
@@ -157,7 +159,7 @@ class RemoteObjectTest extends UnitTest {
       "should create an object based on a string representation" in {
         val stringRep = "Thu Dec 29 2016 23:29:30 GMT+0100 (CET)"
         val ro = RemoteObject.forDate(stringRep, "an-id")
-        ro should be (RemoteObject("object", "date", "Date", stringRep, null, null, "an-id"))
+        ro should be (RemoteObject("object", Some("date"), Some("Date"), Some(stringRep), None, None, Some("an-id")))
       }
     }
 
@@ -165,7 +167,7 @@ class RemoteObjectTest extends UnitTest {
       "should create an object based on a string representation" in {
         val stringRep = "/.*/"
         val ro = RemoteObject.forRegExp(stringRep, "an-id")
-        ro should be (RemoteObject("object", "regexp", "RegExp", stringRep, null, null, "an-id"))
+        ro should be (RemoteObject("object", Some("regexp"), Some("RegExp"), Some(stringRep), None, None, Some("an-id")))
       }
     }
   }

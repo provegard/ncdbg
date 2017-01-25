@@ -1,17 +1,18 @@
 package com.programmaticallyspeaking.ncd.infra
 
-import com.fasterxml.jackson.annotation.JsonInclude
+import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.core.JsonGenerator
-import com.fasterxml.jackson.databind.`type`.ReferenceType
-import com.fasterxml.jackson.databind.jsontype.TypeSerializer
-import com.fasterxml.jackson.databind.ser.Serializers
 import com.fasterxml.jackson.databind._
+import com.fasterxml.jackson.databind.ser.Serializers
 import com.fasterxml.jackson.databind.ser.std.StdSerializer
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, JacksonModule}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 
 import scala.reflect.ClassTag
 
+/**
+  * This class exists because Jackson's `OptionModule` cannot write `Some(null)`
+  */
 private class RemoteObjectSerializer extends StdSerializer[RemoteObject](classOf[RemoteObject]) {
   override def serialize(value: RemoteObject, gen: JsonGenerator, provider: SerializerProvider): Unit = {
     assert(value.productArity == 7, "Expected RemoteObject to have 7 product elements, but it has " + value.productArity)
@@ -27,16 +28,10 @@ private class RemoteObjectSerializer extends StdSerializer[RemoteObject](classOf
     gen.writeEndObject()
   }
 
-  private def write(remoteObject: RemoteObject, value: Any, field: String, gen: JsonGenerator): Unit = {
-    if (value == null && shouldIgnoreNullValue(remoteObject, field)) return
-    gen.writeObjectField(field, value)
-  }
-
-  private def shouldIgnoreNullValue(remoteObject: RemoteObject, field: String): Boolean = {
-    // Always ignore null value, except for 'value' if subtype is 'null'.
-    // I explored the option of changing most RemoteObject fields to be Option, and setting Include.NON_EMPTY on the
-    // mapper, but I got an NPE when serializing Some(null).
-    remoteObject.subtype != "null" || field != "value"
+  private def write(remoteObject: RemoteObject, value: Any, field: String, gen: JsonGenerator): Unit = value match {
+    case Some(x) => gen.writeObjectField(field, x)
+    case None => // omit
+    case other => gen.writeObjectField(field, other)
   }
 }
 
@@ -58,6 +53,7 @@ object ObjectMapping {
 
   private val mapper = new ObjectMapper()
   mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+  mapper.setSerializationInclusion(Include.NON_ABSENT)
   mapper.registerModule(new DefaultScalaModule with RemoteObjectModule)
 
   def fromJson[R <: Any : ClassTag](json: String): R = {

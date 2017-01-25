@@ -36,11 +36,11 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
     }
 
     "convert SimpleValue with an integer-number to an integer-based RemoteObject" in {
-      converter.toRemoteObject(SimpleValue(42), byValue = false).value shouldBe a[java.lang.Integer]
+      converter.toRemoteObject(SimpleValue(42), byValue = false).value.map(_.getClass.getName) shouldBe Some("java.lang.Integer")
     }
 
     "convert SimpleValue with a long-number to a long-based RemoteObject" in {
-      converter.toRemoteObject(SimpleValue(42L), byValue = false).value shouldBe a[java.lang.Long]
+      converter.toRemoteObject(SimpleValue(42L), byValue = false).value.map(_.getClass.getName) shouldBe Some("java.lang.Long")
     }
 
     "convert SimpleValue with Undefined to RemoteObject.undefined" in {
@@ -75,7 +75,7 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
     "convert DateNode to a RemoteObject with a string representation of the date" in {
       val stringRep = "Thu Dec 29 2016 23:29:30 GMT+0100 (CET)"
       val date = DateNode(stringRep, ObjectId("obj-1"))
-      converter.toRemoteObject(date, byValue = false).description should be (stringRep)
+      converter.toRemoteObject(date, byValue = false).description should be (Some(stringRep))
     }
 
     "convert ObjectNode by-value to an object value without object ID" in {
@@ -95,7 +95,7 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
     "convert RegExpNode to a RemoteObject with a string representation of the regular expression" in {
       val stringRep = "/.*/"
       val regexp = RegExpNode(stringRep, 0, ObjectId("obj-1"))
-      converter.toRemoteObject(regexp, byValue = false).description should be (stringRep)
+      converter.toRemoteObject(regexp, byValue = false).description should be (Some(stringRep))
     }
   }
 }

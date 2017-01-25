@@ -11,7 +11,7 @@ class ObjectMappingTest extends UnitTest {
       json should be ("""{"type":"undefined"}""")
     }
 
-    "should serialize RemoteObject.nullValue without null value" in {
+    "should serialize RemoteObject.nullValue with null value" in {
       val json = ObjectMapping.toJson(RemoteObject.nullValue)
       json should be ("""{"type":"object","subtype":"null","value":null}""")
     }
@@ -20,5 +20,22 @@ class ObjectMappingTest extends UnitTest {
       val json = ObjectMapping.toJson(RemoteObject.trueValue)
       json should be ("""{"type":"boolean","value":true}""")
     }
+
+    "should not write anything for None" in {
+      val json = ObjectMapping.toJson(OptionTester(None))
+      json should be ("{}")
+    }
+
+    "should write something for Some" in {
+      val json = ObjectMapping.toJson(OptionTester(Some("testing")))
+      json should be ("""{"value":"testing"}""")
+    }
+
+    "should write something for Some(null)" in {
+      val json = ObjectMapping.toJson(OptionTester(Some(null)))
+      json should be ("""{"value":null}""")
+    }
   }
+
+  case class OptionTester(value: Option[String])
 }
