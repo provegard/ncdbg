@@ -778,8 +778,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = pausedData match {
     case Some(pd) =>
-      objectPairById.get (objectId).flatMap (_._1) match {
-        case Some(value) =>
+      objectPairById.get(objectId) match {
+        case Some((Some(value), _)) =>
 
           val marshaller = new Marshaller(pd.thread, createMappingRegistry())
           val scriptObject = value.asInstanceOf[ObjectReference] //TODO: Make the cast unnecessary
@@ -839,8 +839,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             case other => throw new IllegalStateException(s"Got ($other) instead of Seq when marshalling object keys")
           }
 
+        case Some((_, node)) =>
+          // Create data properties for node entries instead
+          // TODO: node entries should only contain locally added props.
+          // TODO 2: What about adding 'javaStack' to Error??
+          node.entries.map(e => {
+            e._1 -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, false, true, Some(e._2.resolve()), None, None)
+          }).toMap
+
         case None =>
-          // TODO: Can we handle this for $$locals? Fake properties?
           log.warn (s"Unknown object ($objectId), cannot get properties")
           Map.empty
       }
