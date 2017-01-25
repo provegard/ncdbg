@@ -8,6 +8,7 @@ import com.sun.jdi._
 import jdk.nashorn.api.scripting.NashornException
 import jdk.nashorn.internal.runtime.ScriptObject
 
+import scala.collection.mutable.ListBuffer
 import scala.reflect.ClassTag
 import scala.util.Try
 
@@ -44,6 +45,8 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     ObjectId(id)
   }
 
+  private def isIterator(obj: ObjectReference) = inherits(obj, "java.util.Iterator")
+
   private def marshalInPrivate(value: Value): ValueNode = value match {
     case primitive: PrimitiveValue => SimpleValue(marshalPrimitive(primitive))
     case s: StringReference => SimpleValue(s.value())
@@ -52,6 +55,9 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case BoxedValue(vn) => vn
     case UndefinedValue(vn) => vn
     case ExceptionValue(vn) => vn
+    case obj: ObjectReference if isIterator(obj) =>
+      // Marshal as array - assume we're interested in all values at once
+      arrayFromIterator(obj)
     case obj: ObjectReference =>
       // Unknown, so return something inspectable
       ObjectNode(Map(
@@ -114,6 +120,18 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
         classOf[ScriptObject].isAssignableFrom(clazz)
       }.getOrElse(false)
     case _ => false
+  }
+
+  private def arrayFromIterator(obj: ObjectReference) = {
+    val invoker = new DynamicInvoker(thread, obj)
+    val lazyValues = ListBuffer[LazyNode]()
+    while (marshalledAs[Boolean](invoker.hasNext())) {
+      val nextValue = invoker.next()
+      lazyValues += new LazyNode {
+        override def resolve(): ValueNode = marshal(nextValue)
+      }
+    }
+    ArrayNode(lazyValues, objectId(obj))
   }
 
   private def toArray(ref: ArrayReference) = ArrayNode(ref.getValues.asScala.map(marshalLater), objectId(ref))
@@ -223,9 +241,9 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     def unapply(v: Value): Option[ErrorValue] = v match {
       case objRef: ObjectReference =>
 
-        val classes = collectClassTypes(objRef.referenceType())
-        val isThrowable = classes.exists(_.name() == classOf[Throwable].getName)
-        val nashornException = classes.find(_.name() == classOf[NashornException].getName)
+        val types = allReachableTypesIncluding(objRef.referenceType())
+        val isThrowable = types.exists(_.name() == classOf[Throwable].getName)
+        val nashornException = types.find(_.name() == classOf[NashornException].getName)
 
         if (isThrowable) {
           Some(ErrorValue(exceptionDataOf(objRef, nashornException), isBasedOnThrowable = true, objectId(v)))
@@ -251,7 +269,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       } else None
     }
 
-    private def exceptionDataOf(objRef: ObjectReference, nashornException: Option[ClassType]): ExceptionData = {
+    private def exceptionDataOf(objRef: ObjectReference, nashornException: Option[ReferenceType]): ExceptionData = {
       val invoker = new DynamicInvoker(thread, objRef)
 
       // Extract information about the Exception from a Java point of view. This is different than the Nashorn point
@@ -259,7 +277,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       val javaExceptionInfo = extractJavaExceptionInfo(objRef)
 
       val data: (LocationData, String) = nashornException match {
-        case Some(classType) =>
+        case Some(classType: ClassType) =>
           val staticInvoker = new StaticInvoker(thread, classType)
           val stackWithoutMessage = marshalledAs[String](staticInvoker.getScriptStackString(objRef))
 
@@ -268,7 +286,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
             marshalledAs[Integer](invoker.getColumnNumber()),
             marshalledAs[String](invoker.getFileName()) //TODO: new File(_).toURI.toString??
             ), stackWithoutMessage)
-        case None =>
+        case _ =>
           javaExceptionInfo match {
             case Some(info) =>
               // Note that we don't include the Java stack here, because we want the stack trace to be a script stack
@@ -324,11 +342,20 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     }
   }
 
-  private def collectClassTypes(refType: ReferenceType): Seq[ClassType] = refType match {
+  private def allReachableTypesIncluding(refType: ReferenceType): Seq[ReferenceType] = refType match {
     case ct: ClassType =>
-      Seq(ct) ++ collectClassTypes(ct.superclass())
+      Seq(ct) ++ allReachableTypesIncluding(ct.superclass()) ++ ct.interfaces().asScala.flatMap(allReachableTypesIncluding)
+    case it: InterfaceType =>
+      Seq(it) ++ it.superinterfaces().asScala.flatMap(allReachableTypesIncluding)
     case _ => Seq.empty
   }
+
+  /**
+    * Tests if the given object inherits a type (class or interface) with the given name.
+    * @param obj the object
+    * @param typeName the full type name
+    */
+  private def inherits(obj: ObjectReference, typeName: String) = allReachableTypesIncluding(obj.referenceType()).exists(_.name() == typeName)
 
   private case class LocationData(lineNumber: Int, columnNumber: Int, url: String)
 }

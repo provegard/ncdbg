@@ -25,7 +25,23 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
     ("desc", "expression", "expected"),
     ("array", "[1]", Map("0" -> 1)),
     ("object", "{'a':'b'}", Map("a" -> "b")),
-    ("RegExp", "/.*/", Map("lastIndex" -> 0))
+    ("RegExp", "/.*/", Map("lastIndex" -> 0)),
+    ("Java Array",
+      """(function() {
+        |var StringArray = Java.type("java.lang.String[]");
+        |var arr = new StringArray(1);
+        |arr[0] = "testing";
+        |return arr;
+        |})()
+      """.stripMargin, Map("0" -> "testing")),
+    ("Java Iterator",
+      """(function() {
+        |var ArrayList = Java.type("java.util.ArrayList");
+        |var list = new ArrayList(1);
+        |list.add("testing");
+        |return list.iterator();
+        |})()
+      """.stripMargin, Map("0" -> "testing"))
   )
 
   "Marshalling of simple values works for" - {
