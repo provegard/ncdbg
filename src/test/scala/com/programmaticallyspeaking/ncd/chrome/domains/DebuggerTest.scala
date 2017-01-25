@@ -172,7 +172,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
           val ev = simulateHitBreakpoint(Seq(stackFrame))
           val params = getEventParams(ev)
           val closureScope = params.callFrames.head.scopeChain.find(_.`type` == "closure")
-          closureScope.map(_.`object`.value) should be (Some(null))
+          closureScope.map(_.`object`.value) should be (Some(None))
         }
 
         "should have a local scope in the event params" in {
@@ -185,7 +185,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
           val ev = simulateHitBreakpoint(Seq(stackFrame))
           val params = getEventParams(ev)
           val localScope = params.callFrames.head.scopeChain.find(_.`type` == "local")
-          localScope.map(_.`object`.value) should be (Some(null))
+          localScope.map(_.`object`.value) should be (Some(None))
         }
 
         "should have the correct function name in the call frame" in {
