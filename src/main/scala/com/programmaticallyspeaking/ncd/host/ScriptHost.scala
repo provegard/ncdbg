@@ -1,5 +1,6 @@
 package com.programmaticallyspeaking.ncd.host
 
+import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
 import com.programmaticallyspeaking.ncd.messaging.Observable
 
 import scala.util.Try
@@ -81,8 +82,6 @@ trait ScriptHost {
     */
   def setBreakpoint(scriptUri: String, lineNumberBase1: Int): Breakpoint
 
-  def objectRegistry: ObjectRegistry
-
   def step(stepType: StepType): Done
 
   /**
@@ -94,4 +93,6 @@ trait ScriptHost {
     * Tells the host to ignore breakpoints.
     */
   def ignoreBreakpoints(): Done
+
+  def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor]
 }

@@ -42,6 +42,17 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
         |return list.iterator();
         |})()
       """.stripMargin, Map("0" -> "testing"))
+//    ("property with get/set",
+//      """(function() {
+//        |var obj = {};
+//        |var foo = 0;
+//        |Object.defineProperty(obj, "foo", {
+//        |  get: function () { return foo; },
+//        |  set: function (value) { foo = value; }
+//        |});
+//        |return obj;
+//        |})()
+//      """.stripMargin, Map("get" -> "x"))
   )
 
   "Marshalling of simple values works for" - {

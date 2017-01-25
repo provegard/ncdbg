@@ -1,5 +1,7 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
+import java.lang.reflect.UndeclaredThrowableException
+
 import akka.actor.{Actor, ActorRef, PoisonPill, Stash, Status, TypedActor, TypedProps}
 import akka.util.Timeout
 import com.programmaticallyspeaking.ncd.host.{Done, ScriptEvent, ScriptHost}
@@ -181,4 +183,10 @@ abstract class DomainActor extends Actor with Logging with Stash {
 
   protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = PartialFunction.empty[ScriptEvent, Unit]
 
+  protected def tryHostCall[R](fun: (ScriptHost) => R): Try[R] = {
+    Try(fun(scriptHost)).recoverWith {
+      case ex: UndeclaredThrowableException => Failure(ex.getUndeclaredThrowable)
+      case ex => Failure(ex)
+    }
+  }
 }

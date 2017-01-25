@@ -16,4 +16,32 @@ package object types {
     */
   case class ExceptionData(name: String, message: String, lineNumberBase1: Int, columnNumber: Int, url: String, stackIncludingMessage: Option[String],
                            javaStackIncludingMessage: Option[String])
+
+
+  sealed trait PropertyDescriptorType
+  object PropertyDescriptorType {
+    object Generic extends PropertyDescriptorType
+    object Data extends PropertyDescriptorType
+    object Accessor extends PropertyDescriptorType
+  }
+  case class ObjectPropertyDescriptor(descriptorType: PropertyDescriptorType, isConfigurable: Boolean, isEnumerable: Boolean, isWritable: Boolean,
+                                      isOwn: Boolean,
+                                      value: Option[ValueNode], getter: Option[ValueNode], setter: Option[ValueNode]) {
+    // Validate input
+    descriptorType match {
+      case PropertyDescriptorType.Generic =>
+        require(value.isEmpty, "Generic descriptor must have no value")
+        require(getter.isEmpty, "Generic descriptor must have no getter")
+        require(setter.isEmpty, "Generic descriptor must have no setter")
+
+      case PropertyDescriptorType.Data =>
+        require(value.isDefined, "Data descriptor must have a value")
+        require(getter.isEmpty, "Data descriptor must have no getter")
+        require(setter.isEmpty, "Data descriptor must have no setter")
+
+      case PropertyDescriptorType.Accessor =>
+        require(value.isEmpty, "Accessor descriptor must have no value")
+        require(getter.isDefined || setter.isDefined, "Data descriptor must have getter and/or setter")
+    }
+  }
 }

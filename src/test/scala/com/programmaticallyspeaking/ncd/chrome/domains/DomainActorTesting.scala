@@ -20,9 +20,7 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
 
   private val scripts = ListBuffer[Script]()
   private var scriptEventSubject: Subject[ScriptEvent] = _
-  protected var objectRegistry: ObjectRegistry = _
   protected var currentScriptHost: ScriptHost = _
-  protected val objectsById = mutable.Map[ObjectId, ComplexNode]()
 
   def requestAndReceive(actorRef: ActorRef, id: String, msg: AnyRef): Any = {
     val request = Messages.Request(id, msg)
@@ -73,12 +71,7 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
 
   def createScriptHost(): ScriptHost = {
     scriptEventSubject = Subject.serialized[ScriptEvent]
-    objectRegistry = new ObjectRegistry {
-      override def objectById(id: ObjectId): Option[ComplexNode] = objectsById.get(id)
-    }
-
     val mockScriptHost = mock[ScriptHost]
-    when(mockScriptHost.objectRegistry).thenReturn(objectRegistry)
     when(mockScriptHost.scripts).thenReturn(scripts) // mutable list
     when(mockScriptHost.events).thenReturn(scriptEventSubject)
     when(mockScriptHost.scriptById(any[String])).thenAnswerWith({

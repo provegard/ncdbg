@@ -36,6 +36,8 @@ dependencies {
     testRuntime 'org.pegdown:pegdown:1.6.0'
 
     testCompile group: 'org.scalatest', name: 'scalatest_2.12', version: '3.0.1'
+    testCompile group: 'org.scalacheck', name: 'scalacheck_2.12', version: '1.13.4'
+
     testCompile group: 'com.typesafe.akka', name: 'akka-http-testkit_2.12', version: akkaHttpVersion
     testCompile group: 'org.mockito', name: 'mockito-core', version: '2.2.27'
 

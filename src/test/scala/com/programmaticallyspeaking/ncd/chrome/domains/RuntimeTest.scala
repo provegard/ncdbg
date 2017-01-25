@@ -2,10 +2,12 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{CallArgument, ExceptionDetails, GetPropertiesResult}
 import com.programmaticallyspeaking.ncd.host._
+import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.mockito.ArgumentCaptor
-import org.mockito.Mockito._
 import org.mockito.ArgumentMatchers._
+import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
 
 import scala.util.{Success, Try}
 
@@ -47,48 +49,57 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
     }
 
     "getProperties" - {
+      val arbitraryObjectId = ObjectId("x")
+      val arbitraryObjectIdStr = arbitraryObjectId.toString
 
-      def testGet(obj: ComplexNode, requestedId: String)(fun: (Any) => Unit) = {
+      def testGet(ret: Either[Exception, Map[String, ObjectPropertyDescriptor]], requestedId: String, own: Option[Boolean], accessor: Option[Boolean])(fun: (Any) => Unit) = {
 
-        objectsById += (obj.objectId -> obj)
+        when(currentScriptHost.getObjectProperties(any[ObjectId], any[Boolean], any[Boolean])).thenAnswer((invocation: InvocationOnMock) => ret match {
+          case Right(value) => value
+          case Left(ex) => throw ex
+        })
 
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
-        val response = requestAndReceiveResponse(runtime, "2", Runtime.getProperties(requestedId, ownProperties = false))
+        val response = requestAndReceiveResponse(runtime, "2", Runtime.getProperties(requestedId, own, accessor))
         fun(response)
       }
 
-      "should get an object that exist" in {
-        val obj = ObjectNode(Map.empty, ObjectId("x"))
-        testGet(obj, """{"id":"x"}""") { response =>
+      "should call getObjectProperties on the host" in {
+        testGet(Right(Map.empty), arbitraryObjectIdStr, None, None) { _ =>
+          verify(currentScriptHost).getObjectProperties(arbitraryObjectId, false, false)
+        }
+      }
+
+      "should call getObjectProperties on the host with own-properties request" in {
+        testGet(Right(Map.empty), arbitraryObjectIdStr, Some(true), None) { _ =>
+          verify(currentScriptHost).getObjectProperties(arbitraryObjectId, true, false)
+        }
+      }
+
+      "should call getObjectProperties on the host with accessor-properties request" in {
+        testGet(Right(Map.empty), arbitraryObjectIdStr, None, Some(true)) { _ =>
+          verify(currentScriptHost).getObjectProperties(arbitraryObjectId, false, true)
+        }
+      }
+
+      "should return properties in the success case" in {
+        testGet(Right(Map.empty), arbitraryObjectIdStr, None, None) { response =>
           response should be (GetPropertiesResult(Seq.empty, None))
         }
       }
 
-      "should return an exception for an object that doesn't exist" in {
-        val obj = ObjectNode(Map.empty, ObjectId("x"))
-        testGet(obj, """{"id":"y"}""") { response =>
+      "should return exception details in the failure case" in {
+        testGet(Left(new Exception("oops")), arbitraryObjectIdStr, None, None) { response =>
           // Note: Unsure if property descriptors should be empty sequence here or null. The protocol spec doesn't say.
           response should be (GetPropertiesResult(Seq.empty,
-            Some(ExceptionDetails(1, """Error: Unknown object ID: '{"id":"y"}'""", 0, 1, None, None, Runtime.StaticExecutionContextId))))
-        }
-      }
-
-      "should return a property value by-reference" in {
-        val sub = ObjectNode(Map.empty, ObjectId("a"))
-        val obj = ObjectNode(Map("sub" -> LazyNode.eager(sub)), ObjectId("x"))
-        testGet(obj, """{"id":"x"}""") {
-          case GetPropertiesResult(props, _) =>
-            props.headOption.map(_.value.value) should be (Some(null))
-          case other => fail("Unknown response: " + other)
+            Some(ExceptionDetails(1, s"""Error: 'oops' for object '$arbitraryObjectIdStr'""", 0, 1, None, None, Runtime.StaticExecutionContextId))))
         }
       }
     }
 
     "callFunctionOn" - {
       def testCall(obj: ComplexNode, targetId: String, args: Seq[CallArgument], retVal: Option[Try[ValueNode]] = None, silent: Option[Boolean] = None, returnByValue: Option[Boolean] = None)(fun: (Any) => Unit) = {
-
-        objectsById += (obj.objectId -> obj)
 
         val actualRetVal = retVal.getOrElse(Success(SimpleValue("ok")))
         when(currentScriptHost.evaluateOnStackFrame(any[String], any[String], any[Map[String, ObjectId]])).thenReturn(actualRetVal)

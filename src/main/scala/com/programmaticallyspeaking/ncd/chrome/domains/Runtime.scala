@@ -5,6 +5,7 @@ import com.programmaticallyspeaking.ncd.infra.{IdGenerator, ObjectMapping}
 import org.slf4s.Logging
 
 import scala.collection.mutable
+import scala.util.{Failure, Success, Try}
 
 object Runtime {
   type ExecutionContextId = Int
@@ -27,7 +28,7 @@ object Runtime {
   case class callFunctionOn(objectId: RemoteObjectId, functionDeclaration: String, arguments: Seq[CallArgument], silent: Option[Boolean],
                             returnByValue: Option[Boolean])
 
-  case class getProperties(objectId: String, ownProperties: Boolean)
+  case class getProperties(objectId: String, ownProperties: Option[Boolean], accessorPropertiesOnly: Option[Boolean])
 
   case class releaseObjectGroup(objectGroup: String)
 
@@ -37,11 +38,16 @@ object Runtime {
 
   case class runScript(scriptId: ScriptId, executionContextId: Option[ExecutionContextId])
 
-  case class RemoteObject(`type`: String, subtype: String, className: String, description: String, value: Any, unserializableValue: String, objectId: String)
+  case class RemoteObject(`type`: String, subtype: Option[String],
+                          className: Option[String], description: Option[String], value: Option[Any], unserializableValue: Option[String], objectId: Option[String])
 
   case class GetPropertiesResult(result: Seq[PropertyDescriptor], exceptionDetails: Option[ExceptionDetails])
 
-  case class PropertyDescriptor(name: String, value: RemoteObject, writable: Boolean = false, configurable: Boolean = false, enumerable: Boolean = false)
+  // TODO: wasThrown
+  case class PropertyDescriptor(name: String, writable: Boolean, configurable: Boolean, enumerable: Boolean,
+                                isOwn: Boolean,
+                                value: Option[RemoteObject],
+                                get: Option[RemoteObject], set: Option[RemoteObject])
 
   case class ExecutionContextCreatedEventParams(context: ExecutionContextDescription)
 
@@ -61,17 +67,17 @@ object Runtime {
   case class CallArgument(value: Option[Any], unserializableValue: Option[UnserializableValue], objectId: Option[RemoteObjectId])
 
   object RemoteObject extends RemoteObjectBuilder
+
+  object PropertyDescriptor extends PropertyDescriptorBuilder
 }
 
 class Runtime extends DomainActor with Logging with ScriptEvaluateSupport {
   import Runtime._
 
-  private var objectRegistry: ObjectRegistry = _
   private var remoteObjectConverter: RemoteObjectConverter = _
   private val compiledScriptIdGenerator = new IdGenerator("compscr")
 
   override protected def scriptHostReceived(): Unit = {
-    objectRegistry = scriptHost.objectRegistry
     remoteObjectConverter = new RemoteObjectConverter()
   }
 
@@ -79,15 +85,19 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport {
     remoteObjectConverter.toRemoteObject(node, byValue = byValue)
 
   override protected def handle: PartialFunction[AnyRef, Any] = {
-    case Runtime.getProperties(strObjectId, _) =>
+    case Runtime.getProperties(strObjectId, ownProperties, accessorPropertiesOnly) =>
+
+      log.info(s"Runtime.getProperties: ownProperties = $ownProperties, accessorPropertiesOnly = $accessorPropertiesOnly")
+
       // Deserialize JSON object ID (serialized in RemoteObjectConverter)
       val objectId = ObjectId.fromString(strObjectId)
-      objectRegistry.objectById(objectId) match {
-        case Some(value) =>
-          val propDescs = value.entries.map(e => PropertyDescriptor(e._1, toRemoteObject(e._2.resolve(), byValue = false)))
+      tryHostCall(_.getObjectProperties(objectId, ownProperties.getOrElse(false), accessorPropertiesOnly.getOrElse(false))) match {
+        case Success(props) =>
+          val propDescs = props.map((PropertyDescriptor.from _).tupled).toSeq
           GetPropertiesResult(propDescs, None)
-        case None =>
-          val exceptionDetails = ExceptionDetails(1, s"Error: Unknown object ID: '$strObjectId'", 0, 1, None)
+
+        case Failure(t) =>
+          val exceptionDetails = ExceptionDetails(1, s"Error: '${t.getMessage}' for object '$strObjectId'", 0, 1, None)
           GetPropertiesResult(Seq.empty, Some(exceptionDetails))
       }
 

@@ -5,6 +5,7 @@ import java.net.URI
 import java.util.Collections
 
 import com.programmaticallyspeaking.ncd.host._
+import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Subject}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
@@ -119,12 +120,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   private var isInitialized = false
 
-  // Since we effectively hand out this map via the `objectRegistry` method, it needs to be thread safe.
-  private val objectPairById = TrieMap[ObjectId, (Option[Value], ComplexNode)]()
-
-  private lazy val objectReg = new ObjectRegistry {
-    override def objectById(id: ObjectId): Option[ComplexNode] = objectPairById.get(id).map(_._2)
-  }
+  private val objectPairById = mutable.Map[ObjectId, (Option[Value], ComplexNode)]()
 
   private val foundWantedTypes = mutable.Map[String, ClassType]()
 
@@ -502,6 +498,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
+  private def createMappingRegistry(): MappingRegistry = (value: Value, valueNode: ValueNode) => valueNode match {
+    case c: ComplexNode =>
+      objectPairById += c.objectId -> (Option(value), c)
+    case _ => // ignore
+  }
+
   private def handleBreakpoint(ev: LocatableEvent): Boolean = {
     // Resume right away if we're not pausing on breakpoints
     if (!willPauseOnBreakpoints) return true
@@ -523,14 +525,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
 
     // Second pass, marshal
-    val mappingRegistry = new MappingRegistry {
-      override def register(value: Value, valueNode: ValueNode): Unit = valueNode match {
-        case c: ComplexNode =>
-          objectPairById += c.objectId -> (Option(value), c)
-        case _ => // ignore
-      }
-    }
-    val stackFrames = buildStackFramesSequence(perStackFrame, thread, mappingRegistry)
+    val stackFrames = buildStackFramesSequence(perStackFrame, thread, createMappingRegistry())
 
     stackFrames.headOption match {
       case Some(holder) if holder.stackFrame.isEmpty && !holder.isAtDebuggerStatement =>
@@ -622,8 +617,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       candidates.headOption
     }
   }
-
-  override def objectRegistry: ObjectRegistry = objectReg
 
   private def resumeWhenPaused(): Unit = pausedData match {
     case Some(data) =>
@@ -783,6 +776,78 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     Done
   }
 
+  override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = pausedData match {
+    case Some(pd) =>
+      objectPairById.get (objectId).flatMap (_._1) match {
+        case Some(value) =>
+
+          val marshaller = new Marshaller(pd.thread, createMappingRegistry())
+          val scriptObject = value.asInstanceOf[ObjectReference] //TODO: Make the cast unnecessary
+          val mirror = new ScriptObjectMirror(pd.thread, scriptObject)
+
+          val propertiesAsArrayOrIterator = if (onlyOwn) {
+            // Get own properties, pass true to get non-enumerable ones as well (because they are relevant for debugging)
+            mirror.getOwnKeys(true)
+          } else {
+            // Get all properties - this method walks the prototype chain
+            mirror.propertyIterator()
+          }
+          marshaller.marshal(propertiesAsArrayOrIterator) match {
+            case a: ArrayNode =>
+              val props: Seq[String] = a.items.map(_.resolve()).collect { case SimpleValue(s: String) => s }
+
+              props.map { prop =>
+                // Get either only the own descriptor or try both ways (own + proto). This is required for us to know
+                // if the descriptor represents an own property.
+                val ownDescriptor = mirror.getOwnPropertyDescriptor(prop)
+                // TODO ugly, ugly.. make nicer
+                val hasOwnDescriptor = marshaller.marshal(ownDescriptor) match {
+                  case SimpleValue(Undefined) => false
+                  case _ => true
+                }
+                val protoDescriptor = if (onlyOwn || hasOwnDescriptor) None else Some(mirror.getPropertyDescriptor(prop))
+                val descriptorToUse = protoDescriptor.getOrElse(ownDescriptor)
+                val invoker = new DynamicInvoker(pd.thread, descriptorToUse)
+
+                // Read descriptor-generic information
+                val theType = marshaller.marshalledAs[Integer](invoker.`type`()).toInt
+                val isConfigurable = marshaller.marshalledAs[Boolean](invoker.isConfigurable())
+                val isEnumerable = marshaller.marshalledAs[Boolean](invoker.isEnumerable())
+                val isWritable = marshaller.marshalledAs[Boolean](invoker.isWritable())
+
+                prop -> (theType match {
+                  case 0 =>
+                    // Generic
+                    ObjectPropertyDescriptor(PropertyDescriptorType.Generic, isConfigurable, isEnumerable, isWritable, hasOwnDescriptor,
+                      None, None, None)
+                  case 1 =>
+                    // Data, value is ok to use
+                    val theValue = marshaller.marshal(invoker.getValue())
+                    ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable, isEnumerable, isWritable, hasOwnDescriptor,
+                      Some(theValue), None, None)
+                  case 2 =>
+                    // Accessor, getter/setter are ok to use
+                    val getter = marshaller.marshal(invoker.getGetter())
+                    val setter = marshaller.marshal(invoker.getSetter())
+                    ObjectPropertyDescriptor(PropertyDescriptorType.Accessor, isConfigurable, isEnumerable, isWritable, hasOwnDescriptor,
+                      None,
+                      Some(getter), Some(setter))
+                  case other => throw new IllegalArgumentException("Unknown property descriptor type: " + other)
+                })
+              }.filter(e => !onlyAccessors || e._2.descriptorType == PropertyDescriptorType.Accessor).toMap
+
+            case other => throw new IllegalStateException(s"Got ($other) instead of Seq when marshalling object keys")
+          }
+
+        case None =>
+          // TODO: Can we handle this for $$locals? Fake properties?
+          log.warn (s"Unknown object ($objectId), cannot get properties")
+          Map.empty
+      }
+    case None =>
+      throw new IllegalStateException("Property extraction can only be done in a paused state.")
+  }
+
   class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame])
 
   class StackFrameImpl(val thisObj: ValueNode, val scopeObj: Option[ValueNode], val locals: ObjectNode,
@@ -797,7 +862,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   case class StackFrameHolder(stackFrame: Option[StackFrame], isAtDebuggerStatement: Boolean = false)
-
 }
 
 object InitialInitializationComplete extends ScriptEvent
