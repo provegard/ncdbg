@@ -65,8 +65,8 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case obj: ObjectReference =>
       // Unknown, so return something inspectable
       ObjectNode(Map(
-        "className" -> LazyNode.eager(SimpleValue(value.getClass.getName)),
-        "typeName" -> LazyNode.eager(SimpleValue(value.`type`().name()))
+        "referenceType" -> LazyNode.eager(SimpleValue(obj.referenceType().name())),
+        "uniqueID" -> LazyNode.eager(SimpleValue(obj.uniqueID()))
       ), objectId(obj))
     case x if x == null => EmptyNode
     case other => throw new IllegalArgumentException("Don't know how to marshal: " + other)
