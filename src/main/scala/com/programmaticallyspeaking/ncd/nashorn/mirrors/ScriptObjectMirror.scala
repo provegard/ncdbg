@@ -19,8 +19,8 @@ class ScriptObjectMirror(thread: ThreadReference, val scriptObject: ObjectRefere
 
   def isArray = invoker.isArray()
 
-  def entrySet() = invoker.entrySet().asInstanceOf[ObjectReference]
   def propertyIterator() = invoker.propertyIterator()
+  def values() = invoker.values()
 
   def getOwnKeys(all: Boolean) = invoker.getOwnKeys(all)
 

@@ -41,8 +41,8 @@ trait LazyNode extends ValueNode {
   def resolve(): ValueNode
 }
 sealed trait ComplexNode extends ValueNode {
-  def entries: Seq[(String, LazyNode)]
   val objectId: ObjectId
+  def extraEntries: Map[String, LazyNode] = Map.empty
 }
 case object EmptyNode extends ValueNode
 case class SimpleValue(value: Any) extends ValueNode
@@ -58,23 +58,16 @@ case class SimpleValue(value: Any) extends ValueNode
   */
 // TODO: Naming - all ComplexNode classes are named XXNode, but not this.
 case class ErrorValue(data: ExceptionData, isBasedOnThrowable: Boolean, objectId: ObjectId) extends ComplexNode {
-  override def entries: Seq[(String, LazyNode)] = Seq(
-    "message" -> LazyNode.eager(SimpleValue(data.message)),
-    "name" -> LazyNode.eager(SimpleValue(data.name))
-  ) ++
-    data.stackIncludingMessage.map(st => "stack" -> LazyNode.eager(SimpleValue(st))) ++
-    data.javaStackIncludingMessage.map(st => "javaStack" -> LazyNode.eager(SimpleValue(st)))
-}
-case class ArrayNode(items: Seq[LazyNode], objectId: ObjectId) extends ComplexNode {
-  def entries = items.zipWithIndex.map(e => e._2.toString -> e._1)
-}
-case class ObjectNode(data: Map[String, LazyNode], objectId: ObjectId) extends ComplexNode {
-  def entries = data.toSeq
+  override def extraEntries: Map[String, LazyNode] = data.javaStackIncludingMessage.map(st => "javaStack" -> LazyNode.eager(SimpleValue(st))).toMap
 }
 
-case class DateNode(stringRepresentation: String, objectId: ObjectId) extends ComplexNode {
-  def entries = Seq.empty
+case class ArrayNode(items: Seq[LazyNode], objectId: ObjectId) extends ComplexNode
+
+case class ObjectNode(data: Map[String, LazyNode], objectId: ObjectId) extends ComplexNode {
+  override def extraEntries: Map[String, LazyNode] = data
 }
+
+case class DateNode(stringRepresentation: String, objectId: ObjectId) extends ComplexNode
 
 /**
   * Represents JavaScript RegExp.
@@ -83,10 +76,6 @@ case class DateNode(stringRepresentation: String, objectId: ObjectId) extends Co
   * @param lastIndex the value of the `lastIndex` property
   * @param objectId object ID, for property retrieval
   */
-case class RegExpNode(stringRepresentation: String, lastIndex: Int, objectId: ObjectId) extends ComplexNode {
-  def entries = Seq("lastIndex" -> LazyNode.eager(SimpleValue(lastIndex)))
-}
+case class RegExpNode(stringRepresentation: String, lastIndex: Int, objectId: ObjectId) extends ComplexNode
 
-case class FunctionNode(name: String, source: String, data: Map[String, LazyNode], objectId: ObjectId) extends ComplexNode {
-  def entries = data.toSeq :+ ("name" -> LazyNode.eager(SimpleValue(name)))
-}
+case class FunctionNode(name: String, source: String, data: Map[String, LazyNode], objectId: ObjectId) extends ComplexNode

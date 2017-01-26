@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{HitBreakpoint, ScriptEvent, ValueNode}
+import com.programmaticallyspeaking.ncd.host.{HitBreakpoint, ScriptEvent, ScriptHost, ValueNode}
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 
@@ -13,7 +13,7 @@ trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixtu
   override val resultTimeout: FiniteDuration = 5.seconds
 
 
-  protected def evaluateExpression(expr: String)(tester: (ValueNode) => Unit): Unit = {
+  protected def evaluateExpression(expr: String)(tester: (ScriptHost, ValueNode) => Unit): Unit = {
     val wrapped =
       s"""|(function (result) {
           |debugger;
@@ -25,7 +25,7 @@ trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixtu
         case bp: HitBreakpoint =>
           bp.stackFrames.headOption match {
             case Some(sf) =>
-              sf.locals.entries.find(_._1 == "result").map(_._2.resolve()) match {
+              sf.locals.extraEntries.find(_._1 == "result").map(_._2.resolve()) match {
                 case Some(node) => resultPromise.success(node)
                 case None => resultPromise.tryFailure(new Exception("No 'result' local"))
               }
@@ -41,7 +41,7 @@ trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixtu
     }
     runScriptWithObserverSync(wrapped, observer) { host =>
       resultPromise.future.map(node => {
-        try tester(node) finally {
+        try tester(host, node) finally {
           host.resume()
         }
       })

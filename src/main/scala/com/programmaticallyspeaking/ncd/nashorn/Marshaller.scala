@@ -46,6 +46,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   }
 
   private def isIterator(obj: ObjectReference) = inherits(obj, "java.util.Iterator")
+  private def isIterable(obj: ObjectReference) = inherits(obj, "java.lang.Iterable")
 
   private def marshalInPrivate(value: Value): ValueNode = value match {
     case primitive: PrimitiveValue => SimpleValue(marshalPrimitive(primitive))
@@ -58,6 +59,9 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case obj: ObjectReference if isIterator(obj) =>
       // Marshal as array - assume we're interested in all values at once
       arrayFromIterator(obj)
+    case obj: ObjectReference if isIterable(obj) =>
+      // Marshal as array - assume we're interested in all values at once
+      arrayFromIterable(obj)
     case obj: ObjectReference =>
       // Unknown, so return something inspectable
       ObjectNode(Map(
@@ -110,7 +114,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case _ => throw new UnsupportedOperationException("Unhandled primitive value: " + value)
   }
 
-  private def isScriptObject(value: Value): Boolean = value match {
+  def isScriptObject(value: Value): Boolean = value match {
     case objRef: ObjectReference =>
       val typeName = value.`type`().name()
       if (typeName.startsWith("jdk.nashorn.internal.scripts.JO")) return true
@@ -120,6 +124,11 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
         classOf[ScriptObject].isAssignableFrom(clazz)
       }.getOrElse(false)
     case _ => false
+  }
+
+  private def arrayFromIterable(obj: ObjectReference) = {
+    val invoker = new DynamicInvoker(thread, obj)
+    marshal(invoker.iterator())
   }
 
   private def arrayFromIterator(obj: ObjectReference) = {
@@ -137,16 +146,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   private def toArray(ref: ArrayReference) = ArrayNode(ref.getValues.asScala.map(marshalLater), objectId(ref))
 
   private def toArray(proxy: ScriptObjectProxy) = {
-    val entrySet = proxy.entrySet()
-    val items = entrySet.map {
-      case (key, lazyValue) =>
-        val idx = key match {
-          case SimpleValue(idx: String) => idx.toInt // TODO: Catch
-          case other => throw new IllegalArgumentException("Unknown index: " + other)
-        }
-        idx -> lazyValue
-    }.toSeq.sortWith((a, b) => a._1 < b._1).map(_._2)
-    ArrayNode(items, objectId(proxy.scriptObject))
+    marshal(proxy.mirror.values())
   }
 
   private def toDate(mirror: ScriptObjectMirror) = {
@@ -164,11 +164,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   }
 
   private def toObject(proxy: ScriptObjectProxy) = {
-    val entrySet = proxy.entrySet()
-    val data = entrySet.map {
-      case (key, lazyValue) => getString(key) -> lazyValue
-    }
-    ObjectNode(data, objectId(proxy.scriptObject))
+    ObjectNode(Map.empty, objectId(proxy.scriptObject))
   }
 
   private def toFunction(proxy: ScriptObjectProxy) = {
