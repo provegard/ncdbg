@@ -236,7 +236,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val debugger = newActorInstance[Debugger]
         debugger ! Messages.Request("1", Domain.enable)
 
-        inside(requestAndReceiveResponse(debugger, "", Debugger.evaluateOnCallFrame("a", "5+5", silent, returnByValue))) {
+        inside(requestAndReceiveResponse(debugger, "", Debugger.evaluateOnCallFrame("a", "5+5", silent, returnByValue, Some(false)))) {
           case r: Debugger.EvaluateOnCallFrameResult =>
             fun(r)
         }

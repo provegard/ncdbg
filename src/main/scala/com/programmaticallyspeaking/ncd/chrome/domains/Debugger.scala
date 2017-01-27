@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
+import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ObjectPreview, PropertyPreview, RemoteObject}
 import com.programmaticallyspeaking.ncd.host._
 import org.slf4s.Logging
 
@@ -13,7 +13,7 @@ object Debugger {
 
   case object resume
 
-  case class evaluateOnCallFrame(callFrameId: CallFrameId, expression: String, silent: Option[Boolean], returnByValue: Option[Boolean])
+  case class evaluateOnCallFrame(callFrameId: CallFrameId, expression: String, silent: Option[Boolean], returnByValue: Option[Boolean], generatePreview: Option[Boolean])
 
   case class EvaluateOnCallFrameResult(result: Runtime.RemoteObject, exceptionDetails: Option[Runtime.ExceptionDetails] = None)
 
@@ -72,6 +72,17 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport {
     remoteObjectConverter = new RemoteObjectConverter()
   }
 
+  private def generatePreviewIfRequested(result: RemoteObject, generatePreview: Boolean): RemoteObject = {
+    if (generatePreview && result.`type` == "object") {
+      result.copy(preview = Some(fakePreview(result)))
+    } else result
+  }
+
+  private def fakePreview(obj: RemoteObject): ObjectPreview = {
+    val fakeProperty = PropertyPreview("foobar", "string", "oompaloompa", None)
+    obj.emptyPreview.copy(properties = Seq(fakeProperty))
+  }
+
   override def handle = {
     case Domain.enable =>
       log.info("Enabling debugging, sending all parsed scripts to the client.")
@@ -112,16 +123,17 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport {
     case Debugger.stepOut =>
       scriptHost.step(StepOut)
 
-    case Debugger.evaluateOnCallFrame(callFrameId, expression, maybeSilent, maybeReturnByValue) =>
+    case Debugger.evaluateOnCallFrame(callFrameId, expression, maybeSilent, maybeReturnByValue, maybeGeneratePreview) =>
       // TODO: "In silent mode exceptions thrown during evaluation are not reported and do not pause execution. Overrides setPauseOnException state."
       // TODO: -- Obey setPauseOnException - and what about pausing??
 
       // The protocol says this is optional, but doesn't specify the default value. False is just a guess.
       val actualReturnByValue = maybeReturnByValue.getOrElse(false)
       val reportException = !maybeSilent.getOrElse(false)
+      val generatePreview = maybeGeneratePreview.getOrElse(false)
 
       val evalResult = evaluate(scriptHost, callFrameId, expression, Map.empty, reportException, actualReturnByValue)
-      EvaluateOnCallFrameResult(evalResult.result, evalResult.exceptionDetails)
+      EvaluateOnCallFrameResult(generatePreviewIfRequested(evalResult.result, generatePreview), evalResult.exceptionDetails)
 
     case Debugger.setBreakpointsActive(active) =>
       if (active) scriptHost.pauseOnBreakpoints()

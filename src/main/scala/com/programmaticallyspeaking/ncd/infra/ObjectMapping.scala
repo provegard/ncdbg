@@ -15,7 +15,7 @@ import scala.reflect.ClassTag
   */
 private class RemoteObjectSerializer extends StdSerializer[RemoteObject](classOf[RemoteObject]) {
   override def serialize(value: RemoteObject, gen: JsonGenerator, provider: SerializerProvider): Unit = {
-    assert(value.productArity == 7, "Expected RemoteObject to have 7 product elements, but it has " + value.productArity)
+    assert(value.productArity == 8, "Expected RemoteObject to have 8 product elements, but it has " + value.productArity)
     gen.writeStartObject()
     // (`type`: String, subtype: String, className: String, description: String, value: Any, unserializableValue: String, objectId: String)
     write(value, value.`type`, "type", gen)
@@ -25,6 +25,7 @@ private class RemoteObjectSerializer extends StdSerializer[RemoteObject](classOf
     write(value, value.value, "value", gen)
     write(value, value.unserializableValue, "unserializableValue", gen)
     write(value, value.objectId, "objectId", gen)
+    write(value, value.preview, "preview", gen)
     gen.writeEndObject()
   }
 

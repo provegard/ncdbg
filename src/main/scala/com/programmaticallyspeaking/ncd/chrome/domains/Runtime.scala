@@ -49,9 +49,25 @@ object Runtime {
     * @param value Remote object value in case of primitive values or JSON values (if it was requested).
     * @param unserializableValue Primitive value which can not be JSON-stringified does not have value, but gets this property.
     * @param objectId Unique object identifier (for non-primitive values).
+    * @param preview Preview containing abbreviated property values. Specified for object type values only.
     */
   case class RemoteObject(`type`: String, subtype: Option[String],
-                          className: Option[String], description: Option[String], value: Option[Any], unserializableValue: Option[String], objectId: Option[String])
+                          className: Option[String], description: Option[String], value: Option[Any], unserializableValue: Option[String], objectId: Option[String],
+                          preview: Option[ObjectPreview] = None) {
+
+    def emptyPreview = {
+      val desc = description.getOrElse(value match {
+        case Some(x) if x == null => "null"
+        case Some(x) => x.toString
+        case None => ""
+      })
+      ObjectPreview(`type`, desc, overflow = false, subtype, Seq.empty)
+    }
+  }
+
+  case class ObjectPreview(`type`: String, description: String, overflow: Boolean, subtype: Option[String], properties: Seq[PropertyPreview])
+
+  case class PropertyPreview(name: String, `type`: String, value: String, subtype: Option[String]) // subPreview
 
   case class GetPropertiesResult(result: Seq[PropertyDescriptor], exceptionDetails: Option[ExceptionDetails])
 

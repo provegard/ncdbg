@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
+import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ObjectPreview, PropertyPreview, RemoteObject}
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.Undefined
 import com.programmaticallyspeaking.ncd.infra.StringAnyMap
