@@ -38,6 +38,18 @@ object Runtime {
 
   case class runScript(scriptId: ScriptId, executionContextId: Option[ExecutionContextId])
 
+  /**
+    * Represents a value that from the perspective of Chrome Dev Tools is remote, i.e. resides in the host.
+    *
+    * @param `type` Object type. Allowed values: object, function, undefined, string, number, boolean, symbol.
+    * @param subtype Object subtype hint. Specified for object type values only. Allowed values: array, null, node, regexp,
+    *                date, map, set, iterator, generator, error, proxy, promise, typedarray.
+    * @param className Object class (constructor) name. Specified for object type values only.
+    * @param description String representation of the object.
+    * @param value Remote object value in case of primitive values or JSON values (if it was requested).
+    * @param unserializableValue Primitive value which can not be JSON-stringified does not have value, but gets this property.
+    * @param objectId Unique object identifier (for non-primitive values).
+    */
   case class RemoteObject(`type`: String, subtype: Option[String],
                           className: Option[String], description: Option[String], value: Option[Any], unserializableValue: Option[String], objectId: Option[String])
 
