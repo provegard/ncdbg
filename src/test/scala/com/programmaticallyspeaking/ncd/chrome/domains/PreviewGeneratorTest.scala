@@ -1,8 +1,8 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ObjectPreview, PropertyPreview, RemoteObject}
-import com.programmaticallyspeaking.ncd.host.{EmptyNode, ObjectId, SimpleValue, ValueNode}
-import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
+import com.programmaticallyspeaking.ncd.host._
+import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.scalatest.prop.TableDrivenPropertyChecks
 
@@ -21,6 +21,11 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
       case other => SimpleValue(other)
     }), None, None)
 
+  val aFunction = FunctionNode("fun", "function fun() {}", Map.empty, ObjectId("fun"))
+
+  val accessorDescriptor =
+    ObjectPropertyDescriptor(PropertyDescriptorType.Accessor, false, true, true, true, None, Some(aFunction), None)
+
   val propertyMaps: Map[String, Map[String, ObjectPropertyDescriptor]] = Map(
     objectIdString("null") -> Map("foo" -> valueDescriptor(null)),
     objectIdString("prim") -> Map("foo" -> valueDescriptor(42)),
@@ -29,7 +34,12 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     objectIdString("toomanyprops") -> Map("foo" -> valueDescriptor(42), "bar" -> valueDescriptor(43), "baz" -> valueDescriptor(44)),
     objectIdString("withprotoprop") -> Map("foo" -> valueDescriptor(42), "bar" -> valueDescriptor(43, isOwn = false)),
     objectIdString("array2") -> Map("0" -> valueDescriptor(42), "1" -> valueDescriptor(43), "length" -> valueDescriptor(2)),
-    objectIdString("withpropnamedunderscoreproto") -> Map("__proto__" -> valueDescriptor("dummy"))
+    objectIdString("withpropnamedunderscoreproto") -> Map("__proto__" -> valueDescriptor("dummy")),
+    objectIdString("arrayofobject") -> Map("0" -> valueDescriptor(ObjectNode(Map.empty, ObjectId("obj")))),
+    objectIdString("arrayoffunction") -> Map("0" -> valueDescriptor(aFunction)),
+    objectIdString("arrayofundefined") -> Map("0" -> valueDescriptor(SimpleValue(Undefined))),
+    objectIdString("objwithfunctionvalue") -> Map("foo" -> valueDescriptor(aFunction)),
+    objectIdString("withcomputedprop") -> Map("foo" -> accessorDescriptor)
   )
 
   def previewWithProperties(propertyPreview: PropertyPreview*) =
@@ -76,13 +86,34 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
       RemoteObject.forObject(objectIdString("withprotoprop")),
       Some(previewWithProperties(PropertyPreview("foo", "number", "42", None)))),
 
+    ("ignores computed properties",
+      RemoteObject.forObject(objectIdString("withcomputedprop")),
+      Some(previewWithProperties())),
+
     ("ignores property '__proto__'",
       RemoteObject.forObject(objectIdString("withpropnamedunderscoreproto")),
       Some(previewWithProperties())),
 
     ("ignores 'length' property of an array",
       RemoteObject.forArray(2, objectIdString("array2")),
-      Some(arrayPreviewWithProperties(PropertyPreview("0", "number", "42", None), PropertyPreview("1", "number", "43", None))))
+      Some(arrayPreviewWithProperties(PropertyPreview("0", "number", "42", None), PropertyPreview("1", "number", "43", None)))),
+
+    ("handles array of objects with empty value for an object",
+      RemoteObject.forArray(1, objectIdString("arrayofobject")),
+      Some(arrayPreviewWithProperties(PropertyPreview("0", "object", "", None)))),
+
+    ("handles array of functions with empty value for a function",
+      RemoteObject.forArray(1, objectIdString("arrayoffunction")),
+      Some(arrayPreviewWithProperties(PropertyPreview("0", "function", "", None)))),
+
+    ("handles array of undefined",
+      RemoteObject.forArray(1, objectIdString("arrayofundefined")),
+      Some(arrayPreviewWithProperties(PropertyPreview("0", "undefined", "undefined", None)))),
+
+    ("ignores an object property with a function value",
+      RemoteObject.forObject(objectIdString("objwithfunctionvalue")),
+      Some(previewWithProperties()))
+
   )
 
   "Preview generation" - {

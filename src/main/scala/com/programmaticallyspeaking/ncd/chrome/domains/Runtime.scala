@@ -59,6 +59,7 @@ object Runtime {
       val desc = description.getOrElse(value match {
         case Some(x) if x == null => "null"
         case Some(x) => x.toString
+        case None if `type` == "undefined" => "undefined"
         case None => ""
       })
       ObjectPreview(`type`, desc, overflow = false, subtype, Seq.empty)

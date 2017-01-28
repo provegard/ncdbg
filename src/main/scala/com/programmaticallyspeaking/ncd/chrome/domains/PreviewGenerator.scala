@@ -5,6 +5,8 @@ import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ObjectPreview, P
 import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
 import com.programmaticallyspeaking.ncd.host.{EmptyNode, FunctionNode, ObjectId, SimpleValue}
 
+import scala.util.{Failure, Success, Try}
+
 object PreviewGenerator {
   case class Threshold(indexes: Int, properties: Int) {
     def reached = indexes < 0 || properties < 0
@@ -15,6 +17,23 @@ object PreviewGenerator {
   case class Options(maxStringLength: Int, maxProperties: Int, maxIndices: Int)
 
   val DefaultOptions = Options(100, 5, 100)
+
+  private[PreviewGenerator] def abbreviateString(string: String, maxLength: Int, middle: Boolean): String = {
+    if (string.length <= maxLength)
+      return string
+    //    if (middle) {
+    //      var leftHalf = maxLength >> 1;
+    //      var rightHalf = maxLength - leftHalf - 1;
+    //      return string.substr(0, leftHalf) + "\u2026" + string.substr(string.length - rightHalf, rightHalf);
+    //    }
+    // Append ellipsis (...)
+    string.substring(0, maxLength) + "\u2026"
+  }
+
+  private[PreviewGenerator] def isUnsignedInt(s: String) = Try(s.toInt) match {
+    case Success(value) => value >= 0
+    case Failure(_) => false
+  }
 }
 
 /**
@@ -64,11 +83,18 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
         PropertyPreview(name, "object", "null", Some("null"))
       case Some(SimpleValue(s: String)) if s.length > options.maxStringLength =>
         // Abbreviate long strings
-        PropertyPreview(name, "string", abbreviateString(s, middle = false), None)
+        PropertyPreview(name, "string", abbreviateString(s, options.maxStringLength, middle = false), None)
       case Some(value) =>
         val valueAsRemote = converter.toRemoteObject(value, byValue = false)
         val tempPreview = valueAsRemote.emptyPreview
-        PropertyPreview(name, tempPreview.`type`, tempPreview.description, tempPreview.subtype)
+        // For non-simple (non-primitive) values, the description should be empty. Dev Tools will use the type/subtype
+        // to show something.
+        val description = value match {
+          case SimpleValue(_) => tempPreview.description
+          case _ => ""
+        }
+        PropertyPreview(name, tempPreview.`type`, description, tempPreview.subtype)
+      case None => ??? //TODO
     }
     // TODO: THRESHOLD
     preview.copy(properties = preview.properties :+ propertyPreview)
@@ -84,39 +110,22 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
 //    case "size" if obj.subtype.contains("map") || obj.subtype.contains("set") =>
 //      // Ignore size property of map, set.
 //      false
-//    // Never preview prototype properties.
-////    if (!descriptor.isOwn) return true
     case _ if !descriptor.isOwn =>
       // Never preview prototype properties.
       false
-    case _ => true
-//    case _ =>
-//      descriptor.value match {
-//        case Some(value: FunctionNode) =>
-//          // Never render functions in object preview.
-////          if (type === "function" && (this.subtype !== "array" || !isUInt32(name)))
-////            continue;
-//          // TODO: if name is an array index, apparently functions are ok!?
-//          false
-//
-//        case Some(value) =>
-//          true
-//
-//        case None =>
-//          // Ignore computed properties.
-//          false
-//      }
-  }
+    case _ =>
+      descriptor.value match {
+        case Some(value: FunctionNode) =>
+          // Never render functions in object preview.
+          // But, array of functions is ok!
+          obj.subtype.contains("array") && isUnsignedInt(name)
 
-  private def abbreviateString(string: String, middle: Boolean): String = {
-    if (string.length <= options.maxStringLength)
-      return string
-//    if (middle) {
-//      var leftHalf = maxLength >> 1;
-//      var rightHalf = maxLength - leftHalf - 1;
-//      return string.substr(0, leftHalf) + "\u2026" + string.substr(string.length - rightHalf, rightHalf);
-//    }
-    // Append ellipsis (...)
-    string.substring(0, options.maxStringLength) + "\u2026"
+        case Some(value) =>
+          true
+
+        case None =>
+          // Ignore computed properties.
+          false
+      }
   }
 }
