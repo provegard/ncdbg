@@ -122,7 +122,11 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
 
     ("abbreviates a RegExp string representation _in the middle_",
       RemoteObject.forObject(objectIdString("objwithregexp")),
-      Some(previewWithProperties(PropertyPreview("foo", "object", "/[a-z\u2026-z]$/", Some("regexp")))))
+      Some(previewWithProperties(PropertyPreview("foo", "object", "/[a-z\u2026-z]$/", Some("regexp"))))),
+
+    ("ignores a null object",
+      RemoteObject.nullValue,
+      None)
   )
 
   "Preview generation" - {

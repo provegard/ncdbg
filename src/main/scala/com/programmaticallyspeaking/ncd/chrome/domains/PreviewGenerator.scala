@@ -52,9 +52,9 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
 
   val converter = new RemoteObjectConverterImpl
 
-  def withPreviewForObject(remoteObject: RemoteObject): RemoteObject = {
-    if (remoteObject.`type` == "object") generatePreview(remoteObject)
-    else remoteObject
+  def withPreviewForObject(remoteObject: RemoteObject): RemoteObject = remoteObject.objectId match {
+    case Some(_) if remoteObject.`type` == "object" => generatePreview(remoteObject)
+    case None => remoteObject
   }
 
   private def generatePreview(obj: RemoteObject): RemoteObject = {
