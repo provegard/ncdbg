@@ -32,6 +32,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     objectIdString("string") -> Map("foo" -> valueDescriptor("abcdefghij")),
     objectIdString("longstring") -> Map("foo" -> valueDescriptor("abcdefghijk")),
     objectIdString("toomanyprops") -> Map("foo" -> valueDescriptor(42), "bar" -> valueDescriptor(43), "baz" -> valueDescriptor(44)),
+    objectIdString("toomanyindices") -> Map("0" -> valueDescriptor(42), "1" -> valueDescriptor(43), "2" -> valueDescriptor(44), "3" -> valueDescriptor(45)),
     objectIdString("withprotoprop") -> Map("foo" -> valueDescriptor(42), "bar" -> valueDescriptor(43, isOwn = false)),
     objectIdString("array2") -> Map("0" -> valueDescriptor(42), "1" -> valueDescriptor(43), "length" -> valueDescriptor(2)),
     objectIdString("withpropnamedunderscoreproto") -> Map("__proto__" -> valueDescriptor("dummy")),
@@ -134,6 +135,40 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
       desc in {
         val props = obj.objectId.flatMap(propertyMaps.get).getOrElse(Map.empty)
         getPreview(obj, props) should be (expected)
+      }
+    }
+
+    "with property count over the max count" - {
+      def preview = {
+        val objId = objectIdString("toomanyprops")
+        val obj = RemoteObject.forObject(objId)
+        val props = propertyMaps.getOrElse(objId, Map.empty)
+        getPreview(obj, props)
+      }
+
+      "ignores surplus properties" in {
+        preview.map(_.properties.map(_.name)) should be (Some(Seq("foo", "bar")))
+      }
+
+      "indicates overflow" in {
+        preview.map(_.overflow) should be (Some(true))
+      }
+    }
+
+    "with index count over the max count" - {
+      def preview = {
+        val objId = objectIdString("toomanyindices")
+        val props = propertyMaps.getOrElse(objId, Map.empty)
+        val obj = RemoteObject.forArray(props.size, objId)
+        getPreview(obj, props)
+      }
+
+      "ignores surplus indices" in {
+        preview.map(_.properties.map(_.name)) should be (Some(Seq("0", "1", "2")))
+      }
+
+      "indicates overflow" in {
+        preview.map(_.overflow) should be (Some(true))
       }
     }
   }

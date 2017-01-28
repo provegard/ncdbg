@@ -8,10 +8,6 @@ import com.programmaticallyspeaking.ncd.host.{EmptyNode, FunctionNode, ObjectId,
 import scala.util.{Failure, Success, Try}
 
 object PreviewGenerator {
-  case class Threshold(indexes: Int, properties: Int) {
-    def reached = indexes < 0 || properties < 0
-  }
-
   type PropertyFetcher = (ObjectId) => Map[String, ObjectPropertyDescriptor]
 
   case class Options(maxStringLength: Int, maxProperties: Int, maxIndices: Int)
@@ -59,7 +55,6 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
 
   private def generatePreview(obj: RemoteObject): RemoteObject = {
     val preview = obj.emptyPreview
-    val threshold = Threshold(100, 5)
 
     val objectId = obj.objectId match {
       case Some(id) => ObjectId.fromString(id)
@@ -67,16 +62,26 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
     }
     val props = propertyFetcher(objectId)
     if (props == null) throw new IllegalStateException(s"No properties returned for object $objectId")
-    obj.copy(preview = Some(appendPropertyDescriptors(obj, preview, props, threshold)))
+    obj.copy(preview = Some(appendPropertyDescriptors(obj, preview, props)))
     // Internal and map/set/iterator entries not supported
   }
 
-  private def appendPropertyDescriptors(obj: RemoteObject, preview: ObjectPreview, props: Map[String, ObjectPropertyDescriptor], threshold: Threshold): ObjectPreview = {
-    props.foldLeft(preview)((old, nameAndDescriptor) => appendPropertyDescriptor(obj, old, nameAndDescriptor._1, nameAndDescriptor._2, threshold))
+  private def appendPropertyDescriptors(obj: RemoteObject, preview: ObjectPreview, props: Map[String, ObjectPropertyDescriptor]): ObjectPreview = {
+    props.foldLeft(preview)((old, nameAndDescriptor) => appendPropertyDescriptor(obj, old, nameAndDescriptor._1, nameAndDescriptor._2))
   }
 
-  private def appendPropertyDescriptor(obj: RemoteObject, preview: ObjectPreview, name: String, descriptor: ObjectPropertyDescriptor, threshold: Threshold): ObjectPreview = {
-    if (threshold.reached || !shouldUse(obj, name, descriptor)) return preview
+  private def reachedMax(preview: ObjectPreview, propertyName: String) = {
+    val max = if (isUnsignedInt(propertyName)) options.maxIndices else options.maxProperties
+    preview.properties.size == max
+  }
+
+  private def appendPropertyDescriptor(obj: RemoteObject, preview: ObjectPreview, name: String, descriptor: ObjectPropertyDescriptor): ObjectPreview = {
+    if (preview.overflow || !shouldUse(obj, name, descriptor)) return preview
+
+    // If adding this property would return in overflow, mark the preview and return it otherwise unchanged.
+    if (reachedMax(preview, name)) {
+      return preview.copy(overflow = true)
+    }
 
     // TODO: descriptor.wasThrown
     val propertyPreview = descriptor.value match {
