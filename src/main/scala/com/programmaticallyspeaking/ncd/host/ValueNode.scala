@@ -78,4 +78,4 @@ case class DateNode(stringRepresentation: String, objectId: ObjectId) extends Co
   */
 case class RegExpNode(stringRepresentation: String, lastIndex: Int, objectId: ObjectId) extends ComplexNode
 
-case class FunctionNode(name: String, source: String, data: Map[String, LazyNode], objectId: ObjectId) extends ComplexNode
+case class FunctionNode(name: String, source: String, objectId: ObjectId) extends ComplexNode

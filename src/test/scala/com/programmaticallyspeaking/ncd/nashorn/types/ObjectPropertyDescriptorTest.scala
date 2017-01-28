@@ -8,7 +8,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 
 class ObjectPropertyDescriptorTest extends UnitTest with TableDrivenPropertyChecks {
   private val anObject = ObjectNode(Map.empty, ObjectId("x"))
-  private val aFunction = FunctionNode("fun", "function(){}", Map.empty, ObjectId("x"))
+  private val aFunction = FunctionNode("fun", "function(){}", ObjectId("x"))
 
   val errorDescriptors =
     Table(

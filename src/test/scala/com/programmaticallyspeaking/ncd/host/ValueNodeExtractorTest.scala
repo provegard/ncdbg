@@ -46,7 +46,7 @@ class ValueNodeExtractorTest extends UnitTest {
     }
 
     "should convert FunctionNode to a string rep" in {
-      val f = FunctionNode("foo", "", Map.empty, ObjectId("f"))
+      val f = FunctionNode("foo", "", ObjectId("f"))
       newExtractor.extract(f) should be ("<function foo() {}>")
     }
 

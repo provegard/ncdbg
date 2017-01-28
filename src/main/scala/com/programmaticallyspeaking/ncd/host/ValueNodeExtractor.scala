@@ -15,7 +15,7 @@ class ValueNodeExtractor {
     case ObjectNode(data, oid) => data.map(e => e._1 -> extract(e._2, observedObjectIds + oid))
     case EmptyNode => null
     case DateNode(stringRep, _) => stringRep
-    case FunctionNode(name, _, _, _) => s"<function $name() {}>"
+    case FunctionNode(name, _, _) => s"<function $name() {}>"
     case ErrorValue(data, _, _) => s"<${data.name}: ${data.message}>"
     // Don't know why I don't get a pattern match warning even though ValueNode is sealed. Is it because
     // LazyNode isn't sealed?

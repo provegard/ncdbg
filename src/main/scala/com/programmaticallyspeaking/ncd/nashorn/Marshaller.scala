@@ -174,12 +174,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     val nameValue = invoker.getName()
     val sourceValue = invoker.toSource()
 
-    // Get the length via ScriptObjectMirror since we need a specific get method (it's overloaded)
-    val length = marshalledAs[Int](proxy.mirror.get("length"))
-
-    val data = objectData + ("length" -> LazyNode.eager(SimpleValue(length)))
-
-    FunctionNode(getString(marshal(nameValue)), getString(marshal(sourceValue)), data, objectId(proxy.scriptObject))
+    FunctionNode(getString(marshal(nameValue)), getString(marshal(sourceValue)), objectId(proxy.scriptObject))
   }
 
   private def toError(proxy: ScriptObjectProxy) = {

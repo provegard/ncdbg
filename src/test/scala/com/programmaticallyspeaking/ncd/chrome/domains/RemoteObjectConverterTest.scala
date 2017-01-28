@@ -61,7 +61,7 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
     }
 
     "convert FunctionNode to an function-based RemoteObject with a JSON object Id" in {
-      val fun = FunctionNode("fun1", "return 'test';", Map.empty, ObjectId("obj-1"))
+      val fun = FunctionNode("fun1", "return 'test';", ObjectId("obj-1"))
 
       converter.toRemoteObject(fun, byValue = false) should be (RemoteObject.forFunction("fun1", "return 'test';", """{"id":"obj-1"}"""))
     }

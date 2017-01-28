@@ -21,7 +21,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
       case other => SimpleValue(other)
     }), None, None)
 
-  val aFunction = FunctionNode("fun", "function fun() {}", Map.empty, ObjectId("fun"))
+  val aFunction = FunctionNode("fun", "function fun() {}", ObjectId("fun"))
 
   val accessorDescriptor =
     ObjectPropertyDescriptor(PropertyDescriptorType.Accessor, false, true, true, true, None, Some(aFunction), None)
