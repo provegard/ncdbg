@@ -21,11 +21,12 @@ object PreviewGenerator {
   private[PreviewGenerator] def abbreviateString(string: String, maxLength: Int, middle: Boolean): String = {
     if (string.length <= maxLength)
       return string
-    //    if (middle) {
-    //      var leftHalf = maxLength >> 1;
-    //      var rightHalf = maxLength - leftHalf - 1;
-    //      return string.substr(0, leftHalf) + "\u2026" + string.substr(string.length - rightHalf, rightHalf);
-    //    }
+    if (middle) {
+      val leftHalf = maxLength / 2
+      val rightHalf = string.length - leftHalf
+      // Insert ellipsis (...) in the middle
+      return string.substring(0, leftHalf) + "\u2026" + string.substring(rightHalf)
+    }
     // Append ellipsis (...)
     string.substring(0, maxLength) + "\u2026"
   }
@@ -90,8 +91,8 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
         // For non-simple (non-primitive) values, the description should be empty. Dev Tools will use the type/subtype
         // to show something.
         val description = value match {
-          case SimpleValue(_) => tempPreview.description
-          case _ => ""
+          case _: FunctionNode => ""
+          case _ => abbreviateString(tempPreview.description, options.maxStringLength, middle = valueAsRemote.subtype.contains("regexp"))
         }
         PropertyPreview(name, tempPreview.`type`, description, tempPreview.subtype)
       case None => ??? //TODO

@@ -39,7 +39,9 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     objectIdString("arrayoffunction") -> Map("0" -> valueDescriptor(aFunction)),
     objectIdString("arrayofundefined") -> Map("0" -> valueDescriptor(SimpleValue(Undefined))),
     objectIdString("objwithfunctionvalue") -> Map("foo" -> valueDescriptor(aFunction)),
-    objectIdString("withcomputedprop") -> Map("foo" -> accessorDescriptor)
+    objectIdString("withcomputedprop") -> Map("foo" -> accessorDescriptor),
+    objectIdString("objwithdate") -> Map("foo" -> valueDescriptor(DateNode("Sat Jan 28 2017 13:25:02 GMT+0100 (W. Europe Standard Time)", ObjectId("date")))),
+    objectIdString("objwithregexp") -> Map("foo" -> valueDescriptor(RegExpNode("/[a-z0-9A-Z_]{3,5}.*[a-z]$/", 0, ObjectId("regexp"))))
   )
 
   def previewWithProperties(propertyPreview: PropertyPreview*) =
@@ -98,9 +100,9 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
       RemoteObject.forArray(2, objectIdString("array2")),
       Some(arrayPreviewWithProperties(PropertyPreview("0", "number", "42", None), PropertyPreview("1", "number", "43", None)))),
 
-    ("handles array of objects with empty value for an object",
+    ("handles array of objects with description",
       RemoteObject.forArray(1, objectIdString("arrayofobject")),
-      Some(arrayPreviewWithProperties(PropertyPreview("0", "object", "", None)))),
+      Some(arrayPreviewWithProperties(PropertyPreview("0", "object", "Object", None)))),
 
     ("handles array of functions with empty value for a function",
       RemoteObject.forArray(1, objectIdString("arrayoffunction")),
@@ -112,8 +114,15 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
 
     ("ignores an object property with a function value",
       RemoteObject.forObject(objectIdString("objwithfunctionvalue")),
-      Some(previewWithProperties()))
+      Some(previewWithProperties())),
 
+    ("abbreviates a Date string representation",
+      RemoteObject.forObject(objectIdString("objwithdate")),
+      Some(previewWithProperties(PropertyPreview("foo", "object", "Sat Jan 28\u2026", Some("date"))))),
+
+    ("abbreviates a RegExp string representation _in the middle_",
+      RemoteObject.forObject(objectIdString("objwithregexp")),
+      Some(previewWithProperties(PropertyPreview("foo", "object", "/[a-z\u2026-z]$/", Some("regexp")))))
   )
 
   "Preview generation" - {
