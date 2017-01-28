@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ObjectPreview, PropertyPreview, RemoteObject}
+import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 import com.programmaticallyspeaking.ncd.host._
 import org.slf4s.Logging
 
@@ -73,14 +73,10 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport {
   }
 
   private def generatePreviewIfRequested(result: RemoteObject, generatePreview: Boolean): RemoteObject = {
-    if (generatePreview && result.`type` == "object") {
-      result.copy(preview = Some(fakePreview(result)))
+    if (generatePreview) {
+      val generator = new PreviewGenerator(id => scriptHost.getObjectProperties(id, onlyOwn = true, onlyAccessors = false), PreviewGenerator.DefaultOptions)
+      generator.withPreviewForObject(result)
     } else result
-  }
-
-  private def fakePreview(obj: RemoteObject): ObjectPreview = {
-    val fakeProperty = PropertyPreview("foobar", "string", "oompaloompa", None)
-    obj.emptyPreview.copy(properties = Seq(fakeProperty))
   }
 
   override def handle = {
