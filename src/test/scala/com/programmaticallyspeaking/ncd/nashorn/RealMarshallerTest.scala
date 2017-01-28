@@ -155,12 +155,6 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
           re.stringRepresentation should be ("/.*/gim")
         }
       }
-
-      "with lastIndex" in {
-        evalRegexp { re =>
-          re.lastIndex should be (0)
-        }
-      }
     }
   }
 

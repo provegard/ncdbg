@@ -94,7 +94,7 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
 
     "convert RegExpNode to a RemoteObject with a string representation of the regular expression" in {
       val stringRep = "/.*/"
-      val regexp = RegExpNode(stringRep, 0, ObjectId("obj-1"))
+      val regexp = RegExpNode(stringRep, ObjectId("obj-1"))
       converter.toRemoteObject(regexp, byValue = false).description should be (Some(stringRep))
     }
   }

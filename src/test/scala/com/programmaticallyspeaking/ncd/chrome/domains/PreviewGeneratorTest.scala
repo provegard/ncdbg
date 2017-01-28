@@ -41,7 +41,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     objectIdString("objwithfunctionvalue") -> Map("foo" -> valueDescriptor(aFunction)),
     objectIdString("withcomputedprop") -> Map("foo" -> accessorDescriptor),
     objectIdString("objwithdate") -> Map("foo" -> valueDescriptor(DateNode("Sat Jan 28 2017 13:25:02 GMT+0100 (W. Europe Standard Time)", ObjectId("date")))),
-    objectIdString("objwithregexp") -> Map("foo" -> valueDescriptor(RegExpNode("/[a-z0-9A-Z_]{3,5}.*[a-z]$/", 0, ObjectId("regexp"))))
+    objectIdString("objwithregexp") -> Map("foo" -> valueDescriptor(RegExpNode("/[a-z0-9A-Z_]{3,5}.*[a-z]$/", ObjectId("regexp"))))
   )
 
   def previewWithProperties(propertyPreview: PropertyPreview*) =

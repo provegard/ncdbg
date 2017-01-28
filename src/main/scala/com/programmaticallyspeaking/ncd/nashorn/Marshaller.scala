@@ -159,8 +159,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
 
   private def toRegExp(mirror: ScriptObjectMirror) = {
     val stringRep = marshalledAs[String](mirror.actualToString)
-    val lastIndex = marshalledAs[Integer](mirror.get("lastIndex"))
-    RegExpNode(stringRep, lastIndex, objectId(mirror.scriptObject))
+    RegExpNode(stringRep, objectId(mirror.scriptObject))
   }
 
   private def toObject(proxy: ScriptObjectProxy) = {

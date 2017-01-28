@@ -73,9 +73,8 @@ case class DateNode(stringRepresentation: String, objectId: ObjectId) extends Co
   * Represents JavaScript RegExp.
   *
   * @param stringRepresentation the string representation of the RegExp
-  * @param lastIndex the value of the `lastIndex` property
   * @param objectId object ID, for property retrieval
   */
-case class RegExpNode(stringRepresentation: String, lastIndex: Int, objectId: ObjectId) extends ComplexNode
+case class RegExpNode(stringRepresentation: String, objectId: ObjectId) extends ComplexNode
 
 case class FunctionNode(name: String, source: String, objectId: ObjectId) extends ComplexNode
