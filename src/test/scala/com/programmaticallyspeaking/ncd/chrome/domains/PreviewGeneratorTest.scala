@@ -127,6 +127,10 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
 
     ("ignores a null object",
       RemoteObject.nullValue,
+      None),
+
+    ("ignores a non-object such as a function",
+      RemoteObject.forFunction("fun", "function fun() {}", objectIdString("fun")),
       None)
   )
 

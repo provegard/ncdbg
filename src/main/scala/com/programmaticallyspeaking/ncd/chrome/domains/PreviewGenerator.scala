@@ -50,7 +50,7 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
 
   def withPreviewForObject(remoteObject: RemoteObject): RemoteObject = remoteObject.objectId match {
     case Some(_) if remoteObject.`type` == "object" => generatePreview(remoteObject)
-    case None => remoteObject
+    case _ => remoteObject
   }
 
   private def generatePreview(obj: RemoteObject): RemoteObject = {
