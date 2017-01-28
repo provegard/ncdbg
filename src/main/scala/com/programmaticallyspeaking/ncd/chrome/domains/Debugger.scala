@@ -57,27 +57,13 @@ object Debugger {
   case class PausedEventParams(callFrames: Seq[CallFrame], reason: String, hitBreakpoints: Seq[String])
 }
 
-class Debugger extends DomainActor with Logging with ScriptEvaluateSupport {
+class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
   import Debugger._
-
-  private var remoteObjectConverter: RemoteObjectConverter = _
-
 
   override def postStop(): Unit = try {
     // Tell the ScriptHost to reset, so that we don't leave it paused
     Option(scriptHost).foreach(_.reset())
   } finally super.postStop()
-
-  override protected def scriptHostReceived(): Unit = {
-    remoteObjectConverter = new RemoteObjectConverter()
-  }
-
-  private def generatePreviewIfRequested(result: RemoteObject, generatePreview: Boolean): RemoteObject = {
-    if (generatePreview) {
-      val generator = new PreviewGenerator(id => scriptHost.getObjectProperties(id, onlyOwn = true, onlyAccessors = false), PreviewGenerator.DefaultOptions)
-      generator.withPreviewForObject(result)
-    } else result
-  }
 
   override def handle = {
     case Domain.enable =>
@@ -128,8 +114,10 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport {
       val reportException = !maybeSilent.getOrElse(false)
       val generatePreview = maybeGeneratePreview.getOrElse(false)
 
+      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview)
+
       val evalResult = evaluate(scriptHost, callFrameId, expression, Map.empty, reportException, actualReturnByValue)
-      EvaluateOnCallFrameResult(generatePreviewIfRequested(evalResult.result, generatePreview), evalResult.exceptionDetails)
+      EvaluateOnCallFrameResult(evalResult.result, evalResult.exceptionDetails)
 
     case Debugger.setBreakpointsActive(active) =>
       if (active) scriptHost.pauseOnBreakpoints()
@@ -143,14 +131,13 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport {
       emitEvent("Debugger.resumed", null)
   }
 
-  protected def toRemoteObject(node: ValueNode, byValue: Boolean): RemoteObject =
-    remoteObjectConverter.toRemoteObject(node, byValue = byValue)
-
   private def pauseBasedOnBreakpoint(hitBreakpoint: HitBreakpoint): Unit = {
+    val converter = new RemoteObjectConverterImpl
+    def toRemoteObject(value: ValueNode) = converter.toRemoteObject(value, byValue = false)
     def callFrames = hitBreakpoint.stackFrames.map { sf =>
-      val localScope = Scope("local", toRemoteObject(sf.locals, byValue = false))
-      val scopes = Seq(localScope) ++ sf.scopeObj.map(s => Scope("closure", toRemoteObject(s, byValue = false))).toSeq
-      val thisObj = toRemoteObject(sf.thisObj, byValue = false)
+      val localScope = Scope("local", toRemoteObject(sf.locals))
+      val scopes = Seq(localScope) ++ sf.scopeObj.map(s => Scope("closure", toRemoteObject(s))).toSeq
+      val thisObj = toRemoteObject(sf.thisObj)
       // Reuse stack frame ID as call frame ID so that mapping is easier when we talk to the debugger
       CallFrame(sf.id, Location(sf.breakpoint.scriptId, sf.breakpoint.lineNumberBase1 - 1, 0), scopes, thisObj, sf.functionDetails.name)
     }

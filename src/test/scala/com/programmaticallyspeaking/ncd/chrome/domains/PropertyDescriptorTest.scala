@@ -12,6 +12,8 @@ class PropertyDescriptorTest extends UnitTest with PropertyChecks {
   private val aFunction = FunctionNode("fun", "function(){}", ObjectId("x"))
   private val anotherFunction = FunctionNode("fun2", "function(){}", ObjectId("y"))
 
+  implicit val remoteObjectConverter = new RemoteObjectConverterImpl
+
   "PropertyDescriptor from ObjectPropertyDescriptor" - {
     "should handle a generic descriptor" in {
       forAll { (configurable: Boolean, writable: Boolean, enumerable: Boolean, own: Boolean) =>

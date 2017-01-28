@@ -5,7 +5,11 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.Undefined
 import com.programmaticallyspeaking.ncd.infra.StringAnyMap
 
-class RemoteObjectConverter {
+trait RemoteObjectConverter {
+  def toRemoteObject(value: ValueNode, byValue: Boolean): RemoteObject
+}
+
+class RemoteObjectConverterImpl extends RemoteObjectConverter {
 
   private def objectId(value: ComplexNode) = value.objectId.toString
 

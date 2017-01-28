@@ -4,8 +4,7 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.infra.{IdGenerator, ObjectMapping}
 import org.slf4s.Logging
 
-import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
 object Runtime {
   type ExecutionContextId = Int
@@ -26,9 +25,9 @@ object Runtime {
     * Used when the user interacts with an object in the DevTools console, to list possible completions.
     */
   case class callFunctionOn(objectId: RemoteObjectId, functionDeclaration: String, arguments: Seq[CallArgument], silent: Option[Boolean],
-                            returnByValue: Option[Boolean])
+                            returnByValue: Option[Boolean], generatePreview: Option[Boolean])
 
-  case class getProperties(objectId: String, ownProperties: Option[Boolean], accessorPropertiesOnly: Option[Boolean])
+  case class getProperties(objectId: String, ownProperties: Option[Boolean], accessorPropertiesOnly: Option[Boolean], generatePreview: Option[Boolean])
 
   case class releaseObjectGroup(objectGroup: String)
 
@@ -100,23 +99,18 @@ object Runtime {
   object PropertyDescriptor extends PropertyDescriptorBuilder
 }
 
-class Runtime extends DomainActor with Logging with ScriptEvaluateSupport {
+class Runtime extends DomainActor with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
   import Runtime._
 
-  private var remoteObjectConverter: RemoteObjectConverter = _
   private val compiledScriptIdGenerator = new IdGenerator("compscr")
 
-  override protected def scriptHostReceived(): Unit = {
-    remoteObjectConverter = new RemoteObjectConverter()
-  }
-
-  protected def toRemoteObject(node: ValueNode, byValue: Boolean): RemoteObject =
-    remoteObjectConverter.toRemoteObject(node, byValue = byValue)
-
   override protected def handle: PartialFunction[AnyRef, Any] = {
-    case Runtime.getProperties(strObjectId, ownProperties, accessorPropertiesOnly) =>
+    case Runtime.getProperties(strObjectId, ownProperties, accessorPropertiesOnly, maybeGeneratePreview) =>
 
       log.info(s"Runtime.getProperties: ownProperties = $ownProperties, accessorPropertiesOnly = $accessorPropertiesOnly")
+
+      val generatePreview = maybeGeneratePreview.getOrElse(false)
+      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview)
 
       // Deserialize JSON object ID (serialized in RemoteObjectConverter)
       val objectId = ObjectId.fromString(strObjectId)
@@ -150,10 +144,13 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport {
       log.debug(s"Request to run script with ID $scriptId")
       RunScriptResult(RemoteObject.forString("TODO: Implement Runtime.runScript"))
 
-    case Runtime.callFunctionOn(strObjectId, functionDeclaration, arguments, maybeSilent, maybeReturnByValue) =>
+    case Runtime.callFunctionOn(strObjectId, functionDeclaration, arguments, maybeSilent, maybeReturnByValue, maybeGeneratePreview) =>
       // TODO: See Debugger.evaluateOnCallFrame - need to have a common impl
       val actualReturnByValue = maybeReturnByValue.getOrElse(false)
       val reportException = !maybeSilent.getOrElse(false)
+      val generatePreview = maybeGeneratePreview.getOrElse(false)
+
+      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview)
 
       val objectIdNameGenerator = new IdGenerator("__obj_")
 

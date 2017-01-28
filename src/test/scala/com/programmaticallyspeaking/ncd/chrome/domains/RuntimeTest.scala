@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{CallArgument, ExceptionDetails, GetPropertiesResult}
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
+import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
@@ -52,7 +52,8 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       val arbitraryObjectId = ObjectId("x")
       val arbitraryObjectIdStr = arbitraryObjectId.toString
 
-      def testGet(ret: Either[Exception, Map[String, ObjectPropertyDescriptor]], requestedId: String, own: Option[Boolean], accessor: Option[Boolean])(fun: (Any) => Unit) = {
+      def testGet(ret: Either[Exception, Map[String, ObjectPropertyDescriptor]], requestedId: String, own: Option[Boolean], accessor: Option[Boolean],
+                  generatePreview: Option[Boolean] = None)(fun: (Any) => Unit) = {
 
         when(currentScriptHost.getObjectProperties(any[ObjectId], any[Boolean], any[Boolean])).thenAnswer((invocation: InvocationOnMock) => ret match {
           case Right(value) => value
@@ -61,7 +62,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
 
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
-        val response = requestAndReceiveResponse(runtime, "2", Runtime.getProperties(requestedId, own, accessor))
+        val response = requestAndReceiveResponse(runtime, "2", Runtime.getProperties(requestedId, own, accessor, generatePreview))
         fun(response)
       }
 
@@ -96,17 +97,29 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
             Some(ExceptionDetails(1, s"""Error: 'oops' for object '$arbitraryObjectIdStr'""", 0, 1, None, None, Runtime.StaticExecutionContextId))))
         }
       }
+
+      "should generate preview for a remote object if requested" in {
+        val node = ObjectNode(Map.empty, ObjectId("x"))
+        val aMap = Map("foo" -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, true, true, true, true, Some(node), None, None))
+        testGet(Right(aMap), arbitraryObjectIdStr, None, None, generatePreview = Some(true)) {
+          case GetPropertiesResult(result, _) if result.nonEmpty =>
+            result.head.value.flatMap(_.preview) should be ('defined)
+          case other => fail("Unexpected: " + other)
+        }
+      }
     }
 
     "callFunctionOn" - {
-      def testCall(obj: ComplexNode, targetId: String, args: Seq[CallArgument], retVal: Option[Try[ValueNode]] = None, silent: Option[Boolean] = None, returnByValue: Option[Boolean] = None)(fun: (Any) => Unit) = {
+      def testCall(obj: ComplexNode, targetId: String, args: Seq[CallArgument], retVal: Option[Try[ValueNode]] = None, silent: Option[Boolean] = None,
+                   returnByValue: Option[Boolean] = None, generatePreview: Option[Boolean] = None)(fun: (Any) => Unit) = {
 
         val actualRetVal = retVal.getOrElse(Success(SimpleValue("ok")))
         when(currentScriptHost.evaluateOnStackFrame(any[String], any[String], any[Map[String, ObjectId]])).thenReturn(actualRetVal)
 
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
-        val response = requestAndReceiveResponse(runtime, "2", Runtime.callFunctionOn(targetId, "function(){}", args, silent, returnByValue))
+        val response = requestAndReceiveResponse(runtime, "2", Runtime.callFunctionOn(targetId, "function(){}", args, silent,
+          returnByValue, generatePreview))
         fun(response)
       }
 
@@ -130,6 +143,16 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         testCall(obj, """{"id":"x"}""", Seq.empty) { resp =>
           val expr = "(function(){}).apply(__obj_1,[])"
           evaluateOnStackFrameArgs should be (EvaluateOnStackFrameArgs("$top", expr, Map("__obj_1" -> ObjectId("x"))))
+        }
+      }
+
+      "should generate a preview if requested" in {
+        val obj = ObjectNode(Map.empty, ObjectId("x"))
+        val retVal = ObjectNode(Map.empty, ObjectId("y"))
+        testCall(obj, """{"id":"x"}""", Seq.empty, retVal = Some(Success(retVal)), generatePreview = Some(true)) {
+          case Runtime.CallFunctionOnResult(result, _) =>
+            result.preview should be('defined)
+          case other => fail("Unexpected response: " + other)
         }
       }
 
@@ -194,6 +217,14 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         response should be (Accepted)
       }
     }
+  }
+
+  override def createScriptHost(): ScriptHost = {
+    val host = super.createScriptHost()
+
+    when(host.getObjectProperties(any[ObjectId], any[Boolean], any[Boolean])).thenReturn(Map.empty[String, ObjectPropertyDescriptor])
+
+    host
   }
 
   // Helper class for matching against arguments of a mocked call to ScriptHost.evaluateOnStackFrame

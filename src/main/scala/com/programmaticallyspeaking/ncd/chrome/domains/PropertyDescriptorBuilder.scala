@@ -4,9 +4,7 @@ import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.PropertyDescripto
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
 
 trait PropertyDescriptorBuilder {
-  val remoteObjectConverter = new RemoteObjectConverter()
-
-  def from(name: String, desc: ObjectPropertyDescriptor) = {
+  def from(name: String, desc: ObjectPropertyDescriptor)(implicit remoteObjectConverter: RemoteObjectConverter) = {
     require(name != null && name != "", "Name must be present")
     desc.descriptorType match {
       case PropertyDescriptorType.Generic =>

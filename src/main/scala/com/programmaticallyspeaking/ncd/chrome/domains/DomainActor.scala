@@ -27,7 +27,7 @@ abstract class DomainActor extends Actor with Logging with Stash {
   import DomainActor._
   implicit val ec = ExecutionContext.global
 
-  protected var scriptHost: ScriptHost = _
+  protected implicit var scriptHost: ScriptHost = _
   private var scriptEventSubscription: Subscription = _
 
   private var isProcessingRequest = false

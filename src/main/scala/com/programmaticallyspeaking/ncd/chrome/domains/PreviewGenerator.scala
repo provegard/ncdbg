@@ -50,7 +50,7 @@ object PreviewGenerator {
 class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
   import PreviewGenerator._
 
-  val converter = new RemoteObjectConverter
+  val converter = new RemoteObjectConverterImpl
 
   def withPreviewForObject(remoteObject: RemoteObject): RemoteObject = {
     if (remoteObject.`type` == "object") generatePreview(remoteObject)
@@ -65,7 +65,8 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
       case Some(id) => ObjectId.fromString(id)
       case None => throw new IllegalArgumentException("Missing object ID for " + obj)
     }
-    val props = propertyFetcher(objectId) //, onlyOwn = true, onlyAccessors = false)
+    val props = propertyFetcher(objectId)
+    if (props == null) throw new IllegalStateException(s"No properties returned for object $objectId")
     obj.copy(preview = Some(appendPropertyDescriptors(obj, preview, props, threshold)))
     // Internal and map/set/iterator entries not supported
   }

@@ -5,7 +5,7 @@ import akka.testkit.TestProbe
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.PausedEventParams
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.host.types.ExceptionData
+import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor}
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -226,7 +226,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
     "evaluateOnCallFrame" - {
 
-      def testEvalHandling(theAnswer: => ValueNode, silent: Option[Boolean] = None, returnByValue: Option[Boolean] = None)(fun: (Debugger.EvaluateOnCallFrameResult) => Unit): Unit = {
+      def testEvalHandling(theAnswer: => ValueNode, silent: Option[Boolean] = None, returnByValue: Option[Boolean] = None, generatePreview: Option[Boolean] = None)(fun: (Debugger.EvaluateOnCallFrameResult) => Unit): Unit = {
         when(currentScriptHost.evaluateOnStackFrame(any[String], any[String], any[Map[String, ObjectId]])).thenAnswer(new Answer[Try[ValueNode]] {
           override def answer(invocation: InvocationOnMock): Try[ValueNode] = {
             Try(theAnswer)
@@ -236,7 +236,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val debugger = newActorInstance[Debugger]
         debugger ! Messages.Request("1", Domain.enable)
 
-        inside(requestAndReceiveResponse(debugger, "", Debugger.evaluateOnCallFrame("a", "5+5", silent, returnByValue, Some(false)))) {
+        inside(requestAndReceiveResponse(debugger, "", Debugger.evaluateOnCallFrame("a", "5+5", silent, returnByValue, generatePreview))) {
           case r: Debugger.EvaluateOnCallFrameResult =>
             fun(r)
         }
@@ -312,6 +312,20 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
           resp.result should be (RemoteObject.forArray(Seq("abc")))
         }
       }
+
+      "should generate a preview if requested" in {
+        val obj = ObjectNode(Map.empty, ObjectId("x"))
+        testEvalHandling(obj, generatePreview = Some(true)) { resp =>
+          resp.result.preview should be ('defined)
+        }
+      }
+
+      "should request own object properties and not only accessors when generating a preview" in {
+        val obj = ObjectNode(Map.empty, ObjectId("x"))
+        testEvalHandling(obj, generatePreview = Some(true)) { resp =>
+          verify(currentScriptHost).getObjectProperties(ObjectId("x"), true, false)
+        }
+      }
     }
 
     "should tell ScriptHost to reset when stopping" in {
@@ -346,7 +360,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         activeBreakpoints -= id
         Done
     })
-
+    when(host.getObjectProperties(any[ObjectId], any[Boolean], any[Boolean])).thenReturn(Map.empty[String, ObjectPropertyDescriptor])
 
     host
   }

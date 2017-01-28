@@ -8,7 +8,7 @@ import org.scalatest.Inside
 
 class RemoteObjectConverterTest extends UnitTest with Inside {
 
-  def converter = new RemoteObjectConverter()
+  def converter = new RemoteObjectConverterImpl()
 
   def lazyNode(v: ValueNode) = new LazyNode {
     override def resolve(): ValueNode = v
