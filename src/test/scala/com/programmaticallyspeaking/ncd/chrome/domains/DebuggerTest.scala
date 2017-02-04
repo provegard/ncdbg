@@ -160,7 +160,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
           val thisObj = ObjectNode(Map.empty, ObjectId("$$this"))
           val scopeObjectId = ObjectId("$$scope")
           val scopeObj = ObjectNode(Map.empty, scopeObjectId)
-          val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), Map.empty, Breakpoint("bp1", "a", 10), "fun")
+          val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), Breakpoint("bp1", "a", 10), "fun")
           val ev = simulateHitBreakpoint(Seq(stackFrame))
           val params = getEventParams(ev)
 
@@ -176,7 +176,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       "with a scope object" - {
         val thisObj = ObjectNode(Map.empty, ObjectId("$$this"))
         val scopeObj = ObjectNode(Map.empty, ObjectId("$$scope"))
-        val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), Map.empty, Breakpoint("bp1", "a", 10), "fun")
+        val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), Breakpoint("bp1", "a", 10), "fun")
 
         "should result in a Debugger.paused event" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
@@ -202,19 +202,6 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
           closureScope.map(_.`object`.value) should be (Some(None))
         }
 
-        "should have a local scope in the event params" in {
-          val ev = simulateHitBreakpoint(Seq(stackFrame))
-          val params = getEventParams(ev)
-          params.callFrames.head.scopeChain.map(_.`type`) should contain ("local")
-        }
-
-        "should return the local scope by-reference" in {
-          val ev = simulateHitBreakpoint(Seq(stackFrame))
-          val params = getEventParams(ev)
-          val localScope = params.callFrames.head.scopeChain.find(_.`type` == "local")
-          localScope.map(_.`object`.value) should be (Some(None))
-        }
-
         "should have the correct function name in the call frame" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
           val params = getEventParams(ev)
@@ -222,20 +209,14 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         }
       }
 
-      "without a scope object" - {
+      "without scopes" - {
         val thisObj = ObjectNode(Map.empty, ObjectId("$$this"))
-        val stackFrame = createStackFrame("sf1", thisObj, None, Map.empty, Breakpoint("bp1", "a", 10), "fun")
+        val stackFrame = createStackFrame("sf1", thisObj, None, Breakpoint("bp1", "a", 10), "fun")
 
-        "should not have a closure scope in the event params" in {
+        "should not have a scopes in the event params" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
           val params = getEventParams(ev)
-          params.callFrames.head.scopeChain.map(_.`type`) shouldNot contain ("closure")
-        }
-
-        "should have a local scope in the event params" in {
-          val ev = simulateHitBreakpoint(Seq(stackFrame))
-          val params = getEventParams(ev)
-          params.callFrames.head.scopeChain.map(_.`type`) should contain ("local")
+          params.callFrames.head.scopeChain should be ('empty)
         }
       }
     }
@@ -392,13 +373,10 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     host
   }
 
-  def createStackFrame(Aid: String, AthisObj: ValueNode, scope: Option[Scope], Alocals: Map[String, ValueNode], Abreakpoint: Breakpoint, functionName: String) = new StackFrame {
-    val localNode = ObjectNode(Alocals.map(e => e._1 -> LazyNode.eager(e._2)), ObjectId("$$locals"))
-    val localScope = Scope(localNode, ScopeType.Local)
-
+  def createStackFrame(Aid: String, AthisObj: ValueNode, scope: Option[Scope], Abreakpoint: Breakpoint, functionName: String) = new StackFrame {
     override val breakpoint: Breakpoint = Abreakpoint
     override val thisObj: ValueNode = AthisObj
-    override val scopeChain = Seq(localScope) ++ scope
+    override val scopeChain = scope.toSeq
     override val id: String = Aid
     override val functionDetails: FunctionDetails = FunctionDetails(functionName)
   }
