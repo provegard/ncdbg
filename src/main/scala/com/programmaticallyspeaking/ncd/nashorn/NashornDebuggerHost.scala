@@ -14,7 +14,6 @@ import com.sun.jdi.request.EventRequest
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
-import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration._
@@ -121,6 +120,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private var isInitialized = false
 
   private val objectPairById = mutable.Map[ObjectId, (Option[Value], ComplexNode)]()
+
+  private val mappingRegistry: MappingRegistry = (value: Value, valueNode: ValueNode) => valueNode match {
+    case c: ComplexNode =>
+      objectPairById += c.objectId -> (Option(value), c)
+    case _ => // ignore
+  }
 
   private val foundWantedTypes = mutable.Map[String, ClassType]()
 
@@ -441,34 +446,116 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private def isDebuggerStatementLocation(loc: Location)=
     loc.declaringType().name() == NIR_ScriptRuntime && loc.method().name() == ScriptRuntime_DEBUGGER
 
-  private def buildStackFramesSequence(perStackFrame: Seq[(Map[String, Value], Location)], thread: ThreadReference, mappingRegistry: MappingRegistry): Seq[StackFrameHolder] = {
+  private def scopeTypeFromValueType(value: Value): ScopeType = {
+    val typeName = value.`type`().name()
+    // jdk.nashorn.internal.objects.Global
+    if (typeName.endsWith(".Global"))
+      return ScopeType.Global
+    // jdk.nashorn.internal.runtime.WithObject
+    if (typeName.endsWith(".WithObject"))
+      return ScopeType.With
+    ScopeType.Closure
+  }
+
+  private def prototypeOf(marshaller: Marshaller, value: Value): Option[Value] = value match {
+    case ref: ObjectReference =>
+      val invoker = new DynamicInvoker(marshaller.thread, ref)
+      val maybeProto = Option(invoker.getProto())
+      // Prototype of Global is jdk.nashorn.internal.objects.NativeObject$Prototype - ignore it
+      if (maybeProto.exists(_.`type`().name().endsWith("$Prototype"))) None
+      else maybeProto
+    case _ => None
+  }
+
+  private def prototypeChain(marshaller: Marshaller, value: Value): Seq[Value] = prototypeOf(marshaller, value) match {
+    case Some(proto) => Seq(proto) ++ prototypeChain(marshaller, proto)
+    case None => Seq.empty
+  }
+
+  private def createScopeChain(marshaller: Marshaller, originalScopeValue: Option[Value], thisValue: Value, marshalledThisNode: ValueNode, localNode: ObjectNode): Seq[Scope] = {
+    // Note: I tried to mimic how Chrome reports scopes, but it's a bit difficult. For example, if the current scope
+    // is a 'with' scope, there is no way (that I know of) to determine if we're in a function (IIFE) inside a with
+    // block or if we're inside a with block inside a function.
+    def toScope(v: Value) = Scope(marshaller.marshal(v), scopeTypeFromValueType(v))
+    def findGlobalScope(): Option[Scope] = {
+      if (scopeTypeFromValueType(thisValue) == ScopeType.Global) {
+        // this == global, so no need to call DebuggerSupport.getGlobal().
+        Some(Scope(marshalledThisNode, ScopeType.Global))
+      } else {
+        foundWantedTypes.get(NIR_DebuggerSupport) match {
+          case Some(debuggerSupport) =>
+            val invoker = new StaticInvoker(marshaller.thread, debuggerSupport)
+            val global = invoker.getGlobal()
+            Option(global).map(toScope)
+          case None =>
+            // No global found :-(
+            None
+        }
+      }
+    }
+
+    val scopeChain = ListBuffer[Scope]()
+
+    // If we have locals, add a local scope
+    if (localNode.extraEntries.nonEmpty) {
+      scopeChain += Scope(localNode, ScopeType.Local)
+    }
+
+    originalScopeValue.map(v => (v, toScope(v))) match {
+      case Some((_, s)) if s.scopeType == ScopeType.Global =>
+        // If the current scope is the global scope, add it but don't follow the prototype chain since it's unnecessary.
+        scopeChain += s
+      case Some((v, s)) =>
+        // Add the scope and all its parent scopes
+        scopeChain += s
+        scopeChain ++= prototypeChain(marshaller, v).map(toScope)
+      case None =>
+        // noop
+    }
+
+    // Make sure we have a global scope lsat!
+    if (!scopeChain.exists(_.scopeType == ScopeType.Global)) {
+      scopeChain ++= findGlobalScope()
+    }
+
+    scopeChain
+  }
+
+  private def buildStackFramesSequence(perStackFrame: Seq[(Map[String, Value], Location)], thread: ThreadReference): Seq[StackFrameHolder] = {
     val marshaller = new Marshaller(thread, mappingRegistry)
     perStackFrame.map {
       case (values, location) =>
-        val marshalled = values.map(e => e._1 -> marshaller.marshal(e._2))
         val functionMethod = location.method()
 
+        // Generate an ID for the stack frame so that we can find it later when asked to evaluate code for a
+        // particular stack frame.
+        val stackframeId = stackframeIdGenerator.next
+
         // ":this" should always be present, but a function that doesn't capture anything may lack a ":scope" variable
-        marshalled.get(":this") match {
-          case Some(thisObj) =>
-            val scopeObj = marshalled.get(":scope").orNull
+        values.get(":this") match {
+          case Some(originalThis) =>
+            val originalScope = values.get(":scope")
 
             // Variables that don't start with ":" are locals
             val localValues = values.filter(e => !e._1.startsWith(":")) // for use in evaluateCodeOnFrame
-            val locals = marshalled.filter(e => !e._1.startsWith(":"))
 
-            // Create an artificial object node to hold the locals
-            val localNode = ObjectNode(locals.map(e => e._1 -> LazyNode.eager(e._2)), ObjectId("$$locals"))
+            val thisObj = marshaller.marshal(originalThis)
+
+            // Create an artificial object node to hold the locals. Note that the object ID must be unique per stack
+            // since we store object nodes in a map.
+            val locals = localValues.map(e => e._1 -> marshaller.marshal(e._2))
+            val localNode = ObjectNode(locals.map(e => e._1 -> LazyNode.eager(e._2)), ObjectId("$$locals-" + stackframeId))
             mappingRegistry.register(null, localNode)
+
+            val scopeChain = createScopeChain(marshaller, originalScope, originalThis, thisObj, localNode)
 
             def evaluateCodeOnFrame: CodeEvaluator = {
               case (code, namedValues) =>
-                val originalThis = values(":this")
                 // If we don't have :scope, use :this - it's used as a parent object for the created 'with' object.
-                val originalScope = scopeWithFreeVariables(thread, values.getOrElse(":scope", originalThis), namedValues ++ localValues)
+                val scopeToUse = scopeWithFreeVariables(thread, originalScope.getOrElse(originalThis), namedValues ++ localValues)
 
                 try {
-                  val ret = DebuggerSupport_eval(thread, originalThis, originalScope, code)
+                  val ret = DebuggerSupport_eval(thread, originalThis, scopeToUse, code)
                   marshaller.marshal(ret)
                 } catch {
                   case ex: Exception =>
@@ -478,7 +565,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             }
 
             try {
-              findBreakableLocation(location).map(w => new StackFrameImpl(thisObj, Option(scopeObj), localNode, w, evaluateCodeOnFrame, functionDetails(functionMethod))) match {
+              findBreakableLocation(location).map(w => new StackFrameImpl(stackframeId, thisObj, scopeChain, w, evaluateCodeOnFrame, functionDetails(functionMethod))) match {
                 case Some(sf) => StackFrameHolder(Some(sf))
                 case None =>
                   log.warn(s"Won't create a stack frame for location ($location) since we don't recognize it.")
@@ -496,12 +583,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         }
 
     }
-  }
-
-  private def createMappingRegistry(): MappingRegistry = (value: Value, valueNode: ValueNode) => valueNode match {
-    case c: ComplexNode =>
-      objectPairById += c.objectId -> (Option(value), c)
-    case _ => // ignore
   }
 
   private def handleBreakpoint(ev: LocatableEvent): Boolean = {
@@ -525,7 +606,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
 
     // Second pass, marshal
-    val stackFrames = buildStackFramesSequence(perStackFrame, thread, createMappingRegistry())
+    val stackFrames = buildStackFramesSequence(perStackFrame, thread)
 
     stackFrames.headOption match {
       case Some(holder) if holder.stackFrame.isEmpty && !holder.isAtDebuggerStatement =>
@@ -836,7 +917,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = pausedData match {
     case Some(pd) =>
-      val marshaller = new Marshaller(pd.thread, createMappingRegistry())
+      val marshaller = new Marshaller(pd.thread, mappingRegistry)
       objectPairById.get(objectId) match {
         case Some((maybeValue, node)) =>
           // If we have a script object, get properties from it
@@ -866,14 +947,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame])
 
-  class StackFrameImpl(val thisObj: ValueNode, val scopeObj: Option[ValueNode], val locals: ObjectNode,
+//  class StackFrameImpl(val thisObj: ValueNode, val scopeObj: Option[ValueNode], val locals: ObjectNode,
+  class StackFrameImpl(val id: String, val thisObj: ValueNode, val scopeChain: Seq[Scope],
                        val breakableLocation: BreakableLocation,
                        val eval: CodeEvaluator,
                        val functionDetails: FunctionDetails) extends StackFrame {
-    // Generate an ID for the stack frame so that we can find it later when asked to evaluate code for a
-    // particular stack frame.
-    val id = stackframeIdGenerator.next
-
     val breakpoint = breakableLocation.toBreakpoint
   }
 

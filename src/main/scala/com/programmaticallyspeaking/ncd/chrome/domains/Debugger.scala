@@ -1,7 +1,7 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
-import com.programmaticallyspeaking.ncd.host._
+import com.programmaticallyspeaking.ncd.host.{Scope => HostScope, _}
 import org.slf4s.Logging
 
 object Debugger {
@@ -131,12 +131,18 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
       emitEvent("Debugger.resumed", null)
   }
 
+  private def scopeType(s: HostScope): String = s.scopeType match {
+    case ScopeType.Local => "local"
+    case ScopeType.Global => "global"
+    case ScopeType.Closure => "closure"
+    case ScopeType.With => "with"
+  }
+
   private def pauseBasedOnBreakpoint(hitBreakpoint: HitBreakpoint): Unit = {
     val converter = new RemoteObjectConverterImpl
     def toRemoteObject(value: ValueNode) = converter.toRemoteObject(value, byValue = false)
     def callFrames = hitBreakpoint.stackFrames.map { sf =>
-      val localScope = Scope("local", toRemoteObject(sf.locals))
-      val scopes = Seq(localScope) ++ sf.scopeObj.map(s => Scope("closure", toRemoteObject(s))).toSeq
+      val scopes = sf.scopeChain.map(s => Scope(scopeType(s), toRemoteObject(s.value)))
       val thisObj = toRemoteObject(sf.thisObj)
       // Reuse stack frame ID as call frame ID so that mapping is easier when we talk to the debugger
       CallFrame(sf.id, Location(sf.breakpoint.scriptId, sf.breakpoint.lineNumberBase1 - 1, 0), scopes, thisObj, sf.functionDetails.name)

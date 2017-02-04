@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{HitBreakpoint, ScriptEvent, ScriptHost, ValueNode}
+import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 
@@ -25,7 +25,15 @@ trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixtu
         case bp: HitBreakpoint =>
           bp.stackFrames.headOption match {
             case Some(sf) =>
-              sf.locals.extraEntries.find(_._1 == "result").map(_._2.resolve()) match {
+              val maybeResultLocal = sf.scopeChain.find(_.scopeType == ScopeType.Local).flatMap(s => {
+                s.value match {
+                  case obj: ObjectNode =>
+                    obj.extraEntries.find(_._1 == "result").map(_._2.resolve())
+
+                  case _ => None
+                }
+              })
+              maybeResultLocal match {
                 case Some(node) => resultPromise.success(node)
                 case None => resultPromise.tryFailure(new Exception("No 'result' local"))
               }

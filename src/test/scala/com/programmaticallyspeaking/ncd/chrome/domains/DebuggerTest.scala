@@ -11,11 +11,12 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.Inside
 import org.scalatest.concurrent.Eventually
+import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.collection.mutable
 import scala.util.Try
 
-class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eventually {
+class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eventually with TableDrivenPropertyChecks {
   import org.mockito.Mockito._
   import org.mockito.ArgumentMatchers._
   import com.programmaticallyspeaking.ncd.testing.MockingUtils._
@@ -146,10 +147,36 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         case other => throw new IllegalArgumentException("Unknown params: " + other)
       }
 
+      val scopeTests = Table(
+        ("scope type", "expected type"),
+        (ScopeType.Closure, "closure"),
+        (ScopeType.Global, "global"),
+        (ScopeType.With, "with"),
+        (ScopeType.Local, "local")
+      )
+
+      forAll(scopeTests) { (scopeType, expected) =>
+        s"translates scope of type ${scopeType.getClass.getSimpleName} correctly" in {
+          val thisObj = ObjectNode(Map.empty, ObjectId("$$this"))
+          val scopeObjectId = ObjectId("$$scope")
+          val scopeObj = ObjectNode(Map.empty, scopeObjectId)
+          val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), Map.empty, Breakpoint("bp1", "a", 10), "fun")
+          val ev = simulateHitBreakpoint(Seq(stackFrame))
+          val params = getEventParams(ev)
+
+          params.callFrames.head.scopeChain.find(_.`object`.objectId.contains(scopeObjectId.toString)) match {
+            case Some(result) =>
+              result.`type` should be (expected)
+            case None => fail("Didn't find the scope")
+          }
+
+        }
+      }
+
       "with a scope object" - {
         val thisObj = ObjectNode(Map.empty, ObjectId("$$this"))
         val scopeObj = ObjectNode(Map.empty, ObjectId("$$scope"))
-        val stackFrame = createStackFrame("sf1", thisObj, Some(scopeObj), Map.empty, Breakpoint("bp1", "a", 10), "fun")
+        val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), Map.empty, Breakpoint("bp1", "a", 10), "fun")
 
         "should result in a Debugger.paused event" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
@@ -365,11 +392,13 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     host
   }
 
-  def createStackFrame(Aid: String, AthisObj: ValueNode, AscopeObj: Option[ValueNode], Alocals: Map[String, ValueNode], Abreakpoint: Breakpoint, functionName: String) = new StackFrame {
-    override val locals: ObjectNode = ObjectNode(Alocals.map(e => e._1 -> LazyNode.eager(e._2)), ObjectId("$$locals"))
+  def createStackFrame(Aid: String, AthisObj: ValueNode, scope: Option[Scope], Alocals: Map[String, ValueNode], Abreakpoint: Breakpoint, functionName: String) = new StackFrame {
+    val localNode = ObjectNode(Alocals.map(e => e._1 -> LazyNode.eager(e._2)), ObjectId("$$locals"))
+    val localScope = Scope(localNode, ScopeType.Local)
+
     override val breakpoint: Breakpoint = Abreakpoint
     override val thisObj: ValueNode = AthisObj
-    override val scopeObj: Option[ValueNode] = AscopeObj
+    override val scopeChain = Seq(localScope) ++ scope
     override val id: String = Aid
     override val functionDetails: FunctionDetails = FunctionDetails(functionName)
   }

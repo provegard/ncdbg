@@ -7,16 +7,20 @@ import scala.util.Try
 
 case class Breakpoint(breakpointId: String, scriptId: String, lineNumberBase1: Int)
 
+sealed trait ScopeType
+object ScopeType {
+  object Local extends ScopeType
+  object Global extends ScopeType
+  object Closure extends ScopeType
+  object With extends ScopeType
+}
+
+case class Scope(value: ValueNode, scopeType: ScopeType)
+
 trait StackFrame {
   val id: String
   val thisObj: ValueNode
-  val scopeObj: Option[ValueNode]
-
-  /**
-    * Artificially constructed object node to hold local variables.
-    */
-  val locals: ObjectNode
-
+  val scopeChain: Seq[Scope]
   val breakpoint: Breakpoint
   val functionDetails: FunctionDetails
 }
