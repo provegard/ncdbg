@@ -26,7 +26,7 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
     ("desc", "expression", "expected"),
     ("array", "[42]", Map("0" -> 42, "length" -> 1)),
     ("object", "{'a':'b'}", Map("a" -> "b")),
-    ("RegExp", "/.*/", Map("multiline" -> false, "source" -> ".*", "global" -> false, "lastIndex" -> 0, "ignoreCase" -> false))
+    ("RegExp", "/.*/", Map("multiline" -> false, "source" -> ".*", "global" -> false, "lastIndex" -> 0, "ignoreCase" -> false)),
 //    ("Java Array",
 //      """(function() {
 //        |var StringArray = Java.type("java.lang.String[]");
@@ -43,17 +43,17 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
 //        |return list.iterator();
 //        |})()
 //      """.stripMargin, Map("0" -> "testing"))
-//    ("property with get/set",
-//      """(function() {
-//        |var obj = {};
-//        |var foo = 0;
-//        |Object.defineProperty(obj, "foo", {
-//        |  get: function () { return foo; },
-//        |  set: function (value) { foo = value; }
-//        |});
-//        |return obj;
-//        |})()
-//      """.stripMargin, Map("get" -> "x"))
+    ("property with get/set",
+      """(function() {
+        |var obj = {};
+        |var foo = 0;
+        |Object.defineProperty(obj, "foo", {
+        |  get: function () { return foo; },
+        |  set: function (value) { foo = value; }
+        |});
+        |return obj;
+        |})()
+      """.stripMargin, Map("foo" -> Map("get" -> "<function>", "set" -> "<function>")))
   )
 
   "Marshalling of simple values works for" - {
