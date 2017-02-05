@@ -167,7 +167,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   }
 
   private def toFunction(proxy: ScriptObjectProxy) = {
-    val objectData = toObject(proxy).data
     val invoker = new DynamicInvoker(thread, proxy.scriptObject)
     // getName and toSource are defined in the ScriptFunction class
     val nameValue = invoker.getName()
