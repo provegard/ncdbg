@@ -857,7 +857,31 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     Done
   }
 
-  private def propertiesFromScriptObject(scriptObject: ObjectReference, marshaller: Marshaller, thread: ThreadReference, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+  private def propertiesFromJSObject(jsObject: ObjectReference, marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
+    val thread = marshaller.thread
+    val mirror = new ScriptObjectMirror(thread, jsObject)
+    val invoker = new DynamicInvoker(thread, jsObject)
+
+    // For an array, keySet should return indices + "length", and then we get use getMember. An alternative would be to
+    // use getSlot, but that'd require us to figure out the length (or just increase until hasSlot returns false).
+    val properties = mirror.keySet()
+
+    marshaller.marshal(properties) match {
+      case a: ArrayNode =>
+        val props: Seq[String] = a.items.map(_.resolve()).collect { case SimpleValue(s: String) => s }
+        props.map { prop =>
+          val theValue = marshaller.marshal(invoker.getMember(prop))
+          prop -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, true, false,
+            Some(theValue), None, None)
+        }.toMap
+
+      case other => throw new IllegalStateException(s"Got ($other) instead of ArrayNode when marshalling object keys")
+    }
+  }
+
+
+  private def propertiesFromScriptObject(scriptObject: ObjectReference, marshaller: Marshaller, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+    val thread = marshaller.thread
     val mirror = new ScriptObjectMirror(thread, scriptObject)
 
     val propertiesAsArrayOrIterator = if (onlyOwn) {
@@ -911,7 +935,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           })
         }.filter(e => !onlyAccessors || e._2.descriptorType == PropertyDescriptorType.Accessor).toMap
 
-      case other => throw new IllegalStateException(s"Got ($other) instead of Seq when marshalling object keys")
+      case other => throw new IllegalStateException(s"Got ($other) instead of ArrayNode when marshalling object keys")
     }
   }
 
@@ -923,7 +947,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           // If we have a script object, get properties from it
           val scriptObjectProps = maybeValue match {
             case Some(ref: ObjectReference) if marshaller.isScriptObject(ref) =>
-              propertiesFromScriptObject(ref, marshaller, pd.thread, onlyOwn, onlyAccessors)
+              propertiesFromScriptObject(ref, marshaller, onlyOwn, onlyAccessors)
+            case Some(ref: ObjectReference) if marshaller.isJSObject(ref) =>
+              propertiesFromJSObject(ref, marshaller)
             case _ => Map.empty
           }
 

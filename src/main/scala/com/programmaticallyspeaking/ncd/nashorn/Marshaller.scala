@@ -53,6 +53,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case s: StringReference => SimpleValue(s.value())
     case arr: ArrayReference => toArray(arr)
     case so if isScriptObject(so) => marshalScriptObject(so)
+    case so if isJSObject(so) => marshalJSObject(so)
     case BoxedValue(vn) => vn
     case UndefinedValue(vn) => vn
     case ExceptionValue(vn) => vn
@@ -102,6 +103,15 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     }
   }
 
+  // Less capable than marshalScriptObject because JSObject doesn't expose as many methods
+  private def marshalJSObject(value: Value): ValueNode = {
+    val scriptObject = value.asInstanceOf[ObjectReference]
+    val mirror = new ScriptObjectMirror(thread, scriptObject)
+    val proxy = new ScriptObjectProxy(mirror, thread, this)
+    if (proxy.isArray) toArray(proxy)
+    else toObject(proxy)
+  }
+
   private def marshalPrimitive(value: Value): Any = value match {
     case b: ByteValue => b.byteValue()
     case b: BooleanValue => b.booleanValue()
@@ -112,6 +122,11 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case d: DoubleValue => d.doubleValue()
     case c: CharValue => c.charValue()
     case _ => throw new UnsupportedOperationException("Unhandled primitive value: " + value)
+  }
+
+  def isJSObject(value: Value): Boolean = value match {
+    case objRef: ObjectReference if inherits(objRef, "jdk.nashorn.api.scripting.JSObject") => true
+    case _ => false
   }
 
   def isScriptObject(value: Value): Boolean = value match {

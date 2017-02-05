@@ -1,19 +1,21 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import java.io._
+import java.util
 
 import com.programmaticallyspeaking.ncd.host.ScriptEvent
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
-import com.programmaticallyspeaking.ncd.testing.{ActorTesting, FreeActorTesting, StringUtils, UnitTest}
+import com.programmaticallyspeaking.ncd.testing.{FreeActorTesting, StringUtils, UnitTest}
 import com.sun.jdi.connect.LaunchingConnector
 import com.sun.jdi.event.VMStartEvent
 import com.sun.jdi.{Bootstrap, VirtualMachine}
-import jdk.nashorn.api.scripting.NashornScriptEngineFactory
+import jdk.nashorn.api.scripting.{AbstractJSObject, NashornScriptEngineFactory}
 import org.slf4s.Logging
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
+import scala.util.Try
 import scala.util.control.NonFatal
 
 trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorTesting {
@@ -156,12 +158,22 @@ object ScriptExecutor extends App {
     System.exit(1)
   }
 
+  val bindings = scriptEngine.createBindings()
+  bindings.put("createArray", new FunctionLikeJSObject((args) => new ArrayLikeJSObject(args)))
+  bindings.put("createObject", new FunctionLikeJSObject((args) => {
+    // assume key,value,key,value...
+    assert(args.size % 2 == 0, "must have even no. of args")
+    val theMap = args.grouped(2).map(tup => tup(0).toString -> tup(1)).toMap
+    new ObjectLikeJSObject(theMap)
+  }))
+  bindings.put("createFunctionThatReturns", new FunctionLikeJSObject((args) => new FunctionLikeJSObject(_ => args(0))))
+
   while (true) {
     println("Awaiting script on stdin...")
     val script = StringUtils.fromBase64(readStdin())
     println("Got script: " + script)
     try {
-      scriptEngine.eval(script)
+      scriptEngine.eval(script, bindings)
       println("Script evaluation completed without errors")
     } catch {
       case NonFatal(t) =>
@@ -188,4 +200,45 @@ class StreamReadingThread(in: InputStream, appender: (String) => Unit) extends T
         ex.printStackTrace(System.err)
     }
   }
+}
+
+class ArrayLikeJSObject(items: Seq[AnyRef]) extends AbstractJSObject {
+  import scala.collection.JavaConverters._
+  override def hasSlot(slot: Int): Boolean = slot >= 0 && slot < items.size
+
+  override def getSlot(index: Int): AnyRef = items(index)
+
+  override def hasMember(name: String): Boolean = Try(name.toInt).map(hasSlot).getOrElse(name == "length")
+
+  override def getMember(name: String): AnyRef = Try(name.toInt).map(getSlot).getOrElse(if (name == "length") items.size.asInstanceOf[AnyRef] else null)
+
+  override def getClassName: String = "Array"
+
+  override def isArray: Boolean = true
+
+  override def keySet(): util.Set[String] = (items.indices.map(_.toString) :+ "length").toSet.asJava
+
+  override def values(): util.Collection[AnyRef] = items.asJava
+}
+
+class ObjectLikeJSObject(data: Map[String, AnyRef]) extends AbstractJSObject {
+  import scala.collection.JavaConverters._
+
+  override def values(): util.Collection[AnyRef] = data.values.toList.asJava
+
+  override def hasMember(name: String): Boolean = data.contains(name)
+
+  override def getMember(name: String): AnyRef = data(name)
+
+  override def getClassName: String = "Object"
+
+  override def keySet(): util.Set[String] = data.keySet.asJava
+}
+
+class FunctionLikeJSObject(fun: (Seq[AnyRef]) => AnyRef) extends AbstractJSObject {
+  override def getClassName: String = "Function"
+
+  override def call(thiz: scala.Any, args: AnyRef*): AnyRef = fun(args.toSeq)
+
+  override def isFunction: Boolean = true
 }

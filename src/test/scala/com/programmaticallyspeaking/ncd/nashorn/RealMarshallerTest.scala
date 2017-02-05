@@ -53,7 +53,10 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
         |});
         |return obj;
         |})()
-      """.stripMargin, Map("foo" -> Map("get" -> "<function>", "set" -> "<function>")))
+      """.stripMargin, Map("foo" -> Map("get" -> "<function>", "set" -> "<function>"))),
+    ("JSObject array", "createArray('a','b')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
+    ("JSObject object", "createObject('a',42,'b',43)", Map("a" -> 42, "b" -> 43)),
+    ("JSObject function", "createFunctionThatReturns('test')", Map.empty)
   )
 
   "Marshalling of simple values works for" - {

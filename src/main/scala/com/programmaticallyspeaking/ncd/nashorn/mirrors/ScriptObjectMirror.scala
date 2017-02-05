@@ -24,6 +24,9 @@ class ScriptObjectMirror(thread: ThreadReference, val scriptObject: ObjectRefere
 
   def getOwnKeys(all: Boolean) = invoker.getOwnKeys(all)
 
+  // JSObject
+  def keySet() = invoker.keySet()
+
   def getOwnPropertyDescriptor(property: String) = invoker.getOwnPropertyDescriptor(property).asInstanceOf[ObjectReference]
   def getPropertyDescriptor(property: String) = invoker.getPropertyDescriptor(property).asInstanceOf[ObjectReference]
 
