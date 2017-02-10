@@ -11,12 +11,12 @@ trait PropertyDescriptorBuilder {
         PropertyDescriptor(name, desc.isWritable, desc.isConfigurable, desc.isEnumerable, desc.isOwn, None, None, None)
 
       case PropertyDescriptorType.Data =>
-        val remoteValue = desc.value.map(remoteObjectConverter.toRemoteObject(_, byValue = false))
+        val remoteValue = desc.value.map(remoteObjectConverter.toRemoteObject)
         PropertyDescriptor(name, desc.isWritable, desc.isConfigurable, desc.isEnumerable, desc.isOwn, remoteValue, None, None)
 
       case PropertyDescriptorType.Accessor =>
-        val remoteGetter = desc.getter.map(remoteObjectConverter.toRemoteObject(_, byValue = false))
-        val remoteSetter = desc.setter.map(remoteObjectConverter.toRemoteObject(_, byValue = false))
+        val remoteGetter = desc.getter.map(remoteObjectConverter.toRemoteObject)
+        val remoteSetter = desc.setter.map(remoteObjectConverter.toRemoteObject)
         PropertyDescriptor(name, desc.isWritable, desc.isConfigurable, desc.isEnumerable, desc.isOwn, None,
           remoteGetter, remoteSetter)
     }

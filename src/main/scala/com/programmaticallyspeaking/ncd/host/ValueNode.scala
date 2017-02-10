@@ -42,7 +42,6 @@ trait LazyNode extends ValueNode {
 }
 sealed trait ComplexNode extends ValueNode {
   val objectId: ObjectId
-  def extraEntries: Map[String, LazyNode] = Map.empty
 }
 case object EmptyNode extends ValueNode
 case class SimpleValue(value: Any) extends ValueNode
@@ -57,15 +56,11 @@ case class SimpleValue(value: Any) extends ValueNode
   * @param objectId object ID
   */
 // TODO: Naming - all ComplexNode classes are named XXNode, but not this.
-case class ErrorValue(data: ExceptionData, isBasedOnThrowable: Boolean, objectId: ObjectId) extends ComplexNode {
-  override def extraEntries: Map[String, LazyNode] = data.javaStackIncludingMessage.map(st => "javaStack" -> LazyNode.eager(SimpleValue(st))).toMap
-}
+case class ErrorValue(data: ExceptionData, isBasedOnThrowable: Boolean, objectId: ObjectId) extends ComplexNode
 
 case class ArrayNode(items: Seq[LazyNode], objectId: ObjectId) extends ComplexNode
 
-case class ObjectNode(data: Map[String, LazyNode], objectId: ObjectId) extends ComplexNode {
-  override def extraEntries: Map[String, LazyNode] = data
-}
+case class ObjectNode(objectId: ObjectId) extends ComplexNode
 
 case class DateNode(stringRepresentation: String, objectId: ObjectId) extends ComplexNode
 

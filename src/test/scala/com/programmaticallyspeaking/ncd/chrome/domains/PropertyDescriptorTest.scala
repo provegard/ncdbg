@@ -8,11 +8,11 @@ import org.scalatest.prop.PropertyChecks
 
 class PropertyDescriptorTest extends UnitTest with PropertyChecks {
 
-  private val anObject = ObjectNode(Map.empty, ObjectId("x"))
+  private val anObject = ObjectNode(ObjectId("x"))
   private val aFunction = FunctionNode("fun", "function(){}", ObjectId("x"))
   private val anotherFunction = FunctionNode("fun2", "function(){}", ObjectId("y"))
 
-  implicit val remoteObjectConverter = new RemoteObjectConverterImpl
+  implicit val remoteObjectConverter = RemoteObjectConverter.byReference
 
   "PropertyDescriptor from ObjectPropertyDescriptor" - {
     "should handle a generic descriptor" in {

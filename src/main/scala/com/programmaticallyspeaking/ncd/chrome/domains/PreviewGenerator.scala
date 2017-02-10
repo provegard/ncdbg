@@ -46,7 +46,7 @@ object PreviewGenerator {
 class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
   import PreviewGenerator._
 
-  val converter = new RemoteObjectConverterImpl
+  private val converter = RemoteObjectConverter.byReference
 
   def withPreviewForObject(remoteObject: RemoteObject): RemoteObject = remoteObject.objectId match {
     case Some(_) if remoteObject.`type` == "object" => generatePreview(remoteObject)
@@ -92,7 +92,7 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
         // Abbreviate long strings
         PropertyPreview(name, "string", abbreviateString(s, options.maxStringLength, middle = false), None)
       case Some(value) =>
-        val valueAsRemote = converter.toRemoteObject(value, byValue = false)
+        val valueAsRemote = converter.toRemoteObject(value)
         val tempPreview = valueAsRemote.emptyPreview
         // For non-simple (non-primitive) values, the description should be empty. Dev Tools will use the type/subtype
         // to show something.

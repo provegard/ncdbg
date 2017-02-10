@@ -99,7 +99,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       }
 
       "should generate preview for a remote object if requested" in {
-        val node = ObjectNode(Map.empty, ObjectId("x"))
+        val node = ObjectNode(ObjectId("x"))
         val aMap = Map("foo" -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, true, true, true, true, Some(node), None, None))
         testGet(Right(aMap), arbitraryObjectIdStr, None, None, generatePreview = Some(true)) {
           case GetPropertiesResult(result, _) if result.nonEmpty =>
@@ -132,14 +132,14 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       }
 
       def testCallArgs(args: Seq[CallArgument])(fun: (EvaluateOnStackFrameArgs) => Unit) = {
-        val obj = ObjectNode(Map.empty, ObjectId("x"))
+        val obj = ObjectNode(ObjectId("x"))
         testCall(obj, """{"id":"x"}""", args) { _ =>
           fun(evaluateOnStackFrameArgs)
         }
       }
 
       "should perform ScriptHost evaluation with a wrapped function on the top stack frame and the target as a named object" in {
-        val obj = ObjectNode(Map.empty, ObjectId("x"))
+        val obj = ObjectNode(ObjectId("x"))
         testCall(obj, """{"id":"x"}""", Seq.empty) { resp =>
           val expr = "(function(){}).apply(__obj_1,[])"
           evaluateOnStackFrameArgs should be (EvaluateOnStackFrameArgs("$top", expr, Map("__obj_1" -> ObjectId("x"))))
@@ -147,8 +147,8 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       }
 
       "should generate a preview if requested" in {
-        val obj = ObjectNode(Map.empty, ObjectId("x"))
-        val retVal = ObjectNode(Map.empty, ObjectId("y"))
+        val obj = ObjectNode(ObjectId("x"))
+        val retVal = ObjectNode(ObjectId("y"))
         testCall(obj, """{"id":"x"}""", Seq.empty, retVal = Some(Success(retVal)), generatePreview = Some(true)) {
           case Runtime.CallFunctionOnResult(result, _) =>
             result.preview should be('defined)

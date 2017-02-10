@@ -114,9 +114,9 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
       val reportException = !maybeSilent.getOrElse(false)
       val generatePreview = maybeGeneratePreview.getOrElse(false)
 
-      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview)
+      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
 
-      val evalResult = evaluate(scriptHost, callFrameId, expression, Map.empty, reportException, actualReturnByValue)
+      val evalResult = evaluate(scriptHost, callFrameId, expression, Map.empty, reportException)
       EvaluateOnCallFrameResult(evalResult.result, evalResult.exceptionDetails)
 
     case Debugger.setBreakpointsActive(active) =>
@@ -139,8 +139,8 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
   }
 
   private def pauseBasedOnBreakpoint(hitBreakpoint: HitBreakpoint): Unit = {
-    val converter = new RemoteObjectConverterImpl
-    def toRemoteObject(value: ValueNode) = converter.toRemoteObject(value, byValue = false)
+    val converter = RemoteObjectConverter.byReference
+    def toRemoteObject(value: ValueNode) = converter.toRemoteObject(value)
     def callFrames = hitBreakpoint.stackFrames.map { sf =>
       val scopes = sf.scopeChain.map(s => Scope(scopeType(s), toRemoteObject(s.value)))
       val thisObj = toRemoteObject(sf.thisObj)

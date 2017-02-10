@@ -17,10 +17,8 @@ class MarshallerTest extends UnitTest with MockitoSugar {
 
   val registered = mutable.Map[ObjectId, (Value, ComplexNode)]()
   val mappingRegistry = new MappingRegistry {
-    override def register(value: Value, valueNode: ValueNode): Unit = valueNode match {
-      case c: ComplexNode =>
-        registered += c.objectId -> (value, c)
-      case _ =>
+    override def register(value: Value, valueNode: ComplexNode, extra: Map[String, ValueNode]): Unit = {
+      registered += valueNode.objectId -> (value, valueNode)
     }
   }
   def fakeThread = {

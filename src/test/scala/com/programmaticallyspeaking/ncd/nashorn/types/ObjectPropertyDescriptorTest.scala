@@ -7,7 +7,7 @@ import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 class ObjectPropertyDescriptorTest extends UnitTest with TableDrivenPropertyChecks {
-  private val anObject = ObjectNode(Map.empty, ObjectId("x"))
+  private val anObject = ObjectNode(ObjectId("x"))
   private val aFunction = FunctionNode("fun", "function(){}", ObjectId("x"))
 
   val errorDescriptors =

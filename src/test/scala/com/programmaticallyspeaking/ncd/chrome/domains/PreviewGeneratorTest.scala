@@ -36,7 +36,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     objectIdString("withprotoprop") -> Map("foo" -> valueDescriptor(42), "bar" -> valueDescriptor(43, isOwn = false)),
     objectIdString("array2") -> Map("0" -> valueDescriptor(42), "1" -> valueDescriptor(43), "length" -> valueDescriptor(2)),
     objectIdString("withpropnamedunderscoreproto") -> Map("__proto__" -> valueDescriptor("dummy")),
-    objectIdString("arrayofobject") -> Map("0" -> valueDescriptor(ObjectNode(Map.empty, ObjectId("obj")))),
+    objectIdString("arrayofobject") -> Map("0" -> valueDescriptor(ObjectNode(ObjectId("obj")))),
     objectIdString("arrayoffunction") -> Map("0" -> valueDescriptor(aFunction)),
     objectIdString("arrayofundefined") -> Map("0" -> valueDescriptor(SimpleValue(Undefined))),
     objectIdString("objwithfunctionvalue") -> Map("foo" -> valueDescriptor(aFunction)),

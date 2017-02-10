@@ -11,7 +11,7 @@ import scala.util.{Failure, Success}
 trait ScriptEvaluateSupport { self: Logging =>
 
   def evaluate(scriptHost: ScriptHost, callFrameId: String, expression: String, namedObjects: Map[String, ObjectId],
-               reportException: Boolean, returnByValue: Boolean)(implicit remoteObjectConverter: RemoteObjectConverter): EvaluationResult = {
+               reportException: Boolean)(implicit remoteObjectConverter: RemoteObjectConverter): EvaluationResult = {
     // TODO: What is the exception ID for?
     val exceptionId = 1
 
@@ -24,7 +24,7 @@ trait ScriptEvaluateSupport { self: Logging =>
         EvaluationResult(RemoteObject.undefinedValue, Some(details))
       case Success(err: ErrorValue) if err.isBasedOnThrowable =>
         EvaluationResult(RemoteObject.undefinedValue)
-      case Success(result) => EvaluationResult(remoteObjectConverter.toRemoteObject(result, returnByValue))
+      case Success(result) => EvaluationResult(remoteObjectConverter.toRemoteObject(result))
       case Failure(t) =>
 
         val exceptionDetails = t.getStackTrace.headOption.flatMap { stackTraceElement =>

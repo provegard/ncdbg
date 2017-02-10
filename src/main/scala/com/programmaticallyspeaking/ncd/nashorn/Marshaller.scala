@@ -9,16 +9,23 @@ import jdk.nashorn.api.scripting.NashornException
 import jdk.nashorn.internal.runtime.ScriptObject
 
 import scala.collection.mutable.ListBuffer
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.util.Try
 
 object Marshaller {
   val objectIdGenerator = new IdGenerator("objid-")
   case class ExceptionInfo(stack: String, lineNumber: Int, fileName: String)
+
+  private[Marshaller] case class ExceptionDataWithJavaStack(data: ExceptionData, javaStack: Option[String])
+
+  private[Marshaller] case class MarshallerResult(valueNode: ValueNode, extraProperties: Map[String, ValueNode])
+
+  implicit def valueNode2MarshallerResult(valueNode: ValueNode): MarshallerResult = MarshallerResult(valueNode, Map.empty)
 }
 
 trait MappingRegistry {
-  def register(value: Value, valueNode: ValueNode): Unit
+  def register(value: Value, valueNode: ComplexNode, extraProperties: Map[String, ValueNode]): Unit
 }
 
 class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) extends ThreadUser {
@@ -27,8 +34,17 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
 
   def marshal(value: Value): ValueNode = {
     val result = marshalInPrivate(value)
-    mappingRegistry.register(value, result)
-    result
+    result.valueNode match {
+      case c: ComplexNode =>
+        mappingRegistry.register(value, c, result.extraProperties)
+      case _ =>
+    }
+    result.valueNode
+  }
+
+  private def register(value: Value, c: ComplexNode, extraData: Map[String, ValueNode] = Map.empty): ComplexNode = {
+    mappingRegistry.register(value, c, extraData)
+    c
   }
 
   /**
@@ -48,7 +64,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   private def isIterator(obj: ObjectReference) = inherits(obj, "java.util.Iterator")
   private def isIterable(obj: ObjectReference) = inherits(obj, "java.lang.Iterable")
 
-  private def marshalInPrivate(value: Value): ValueNode = value match {
+  private def marshalInPrivate(value: Value): MarshallerResult = value match {
     case primitive: PrimitiveValue => SimpleValue(marshalPrimitive(primitive))
     case s: StringReference => SimpleValue(s.value())
     case arr: ArrayReference => toArray(arr)
@@ -56,7 +72,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case so if isJSObject(so) => marshalJSObject(so)
     case BoxedValue(vn) => vn
     case UndefinedValue(vn) => vn
-    case ExceptionValue(vn) => vn
+    case ExceptionValue((vn, maybeJavaStack)) => MarshallerResult(vn, maybeJavaStack.map(st => "javaStack" -> SimpleValue(st)).toMap)
     case obj: ObjectReference if isIterator(obj) =>
       // Marshal as array - assume we're interested in all values at once
       arrayFromIterator(obj)
@@ -65,10 +81,10 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       arrayFromIterable(obj)
     case obj: ObjectReference =>
       // Unknown, so return something inspectable
-      ObjectNode(Map(
-        "referenceType" -> LazyNode.eager(SimpleValue(obj.referenceType().name())),
-        "uniqueID" -> LazyNode.eager(SimpleValue(obj.uniqueID()))
-      ), objectId(obj))
+      MarshallerResult(ObjectNode(objectId(obj)), Map(
+        "referenceType" -> SimpleValue(obj.referenceType().name()),
+        "uniqueID" -> SimpleValue(obj.uniqueID())
+      ))
     case x if x == null => EmptyNode
     case other => throw new IllegalArgumentException("Don't know how to marshal: " + other)
   }
@@ -178,7 +194,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   }
 
   private def toObject(proxy: ScriptObjectProxy) = {
-    ObjectNode(Map.empty, objectId(proxy.scriptObject))
+    ObjectNode(objectId(proxy.scriptObject))
   }
 
   private def toFunction(proxy: ScriptObjectProxy) = {
@@ -210,8 +226,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
         marshalledAsOptionally[Integer](lineNumberValue).getOrElse(Integer.valueOf(0)).intValue(),
         marshalledAsOptionally[Integer](colNumberValue).getOrElse(Integer.valueOf(-1)).intValue(),
         marshalledAsOptionally[String](fileNameValue).getOrElse("<unknown>"), //TODO: To URL?
-        Option(stack),
-        None
+        Option(stack)
       )
     ErrorValue(exData, isBasedOnThrowable = false, objectId(so))
   }
@@ -242,7 +257,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   }
 
   object ExceptionValue {
-    def unapply(v: Value): Option[ErrorValue] = v match {
+    def unapply(v: Value): Option[(ErrorValue, Option[String])] = v match {
       case objRef: ObjectReference =>
 
         val types = allReachableTypesIncluding(objRef.referenceType())
@@ -250,7 +265,8 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
         val nashornException = types.find(_.name() == classOf[NashornException].getName)
 
         if (isThrowable) {
-          Some(ErrorValue(exceptionDataOf(objRef, nashornException), isBasedOnThrowable = true, objectId(v)))
+          val data = exceptionDataOf(objRef, nashornException)
+          Some((ErrorValue(data.data, isBasedOnThrowable = true, objectId(v)), data.javaStack))
         } else None
 
       case _ => None
@@ -273,7 +289,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       } else None
     }
 
-    private def exceptionDataOf(objRef: ObjectReference, nashornException: Option[ReferenceType]): ExceptionData = {
+    private def exceptionDataOf(objRef: ObjectReference, nashornException: Option[ReferenceType]): ExceptionDataWithJavaStack = {
       val invoker = new DynamicInvoker(thread, objRef)
 
       // Extract information about the Exception from a Java point of view. This is different than the Nashorn point
@@ -311,7 +327,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       // (we get None if there are no stack frames at all, which would be odd).
       val fullJavaStack = javaExceptionInfo.map(info => s"$name: $message\n${info.stack}")
 
-      ExceptionData(name, message, data._1.lineNumber, data._1.columnNumber, data._1.url, Option(fullStack),
+      ExceptionDataWithJavaStack(ExceptionData(name, message, data._1.lineNumber, data._1.columnNumber, data._1.url, Option(fullStack)),
         fullJavaStack)
     }
   }

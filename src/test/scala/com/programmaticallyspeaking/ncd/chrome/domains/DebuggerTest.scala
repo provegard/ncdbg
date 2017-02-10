@@ -157,9 +157,9 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       forAll(scopeTests) { (scopeType, expected) =>
         s"translates scope of type ${scopeType.getClass.getSimpleName} correctly" in {
-          val thisObj = ObjectNode(Map.empty, ObjectId("$$this"))
+          val thisObj = ObjectNode(ObjectId("$$this"))
           val scopeObjectId = ObjectId("$$scope")
-          val scopeObj = ObjectNode(Map.empty, scopeObjectId)
+          val scopeObj = ObjectNode(scopeObjectId)
           val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), Breakpoint("bp1", "a", 10), "fun")
           val ev = simulateHitBreakpoint(Seq(stackFrame))
           val params = getEventParams(ev)
@@ -174,8 +174,8 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "with a scope object" - {
-        val thisObj = ObjectNode(Map.empty, ObjectId("$$this"))
-        val scopeObj = ObjectNode(Map.empty, ObjectId("$$scope"))
+        val thisObj = ObjectNode(ObjectId("$$this"))
+        val scopeObj = ObjectNode(ObjectId("$$scope"))
         val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), Breakpoint("bp1", "a", 10), "fun")
 
         "should result in a Debugger.paused event" in {
@@ -210,7 +210,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "without scopes" - {
-        val thisObj = ObjectNode(Map.empty, ObjectId("$$this"))
+        val thisObj = ObjectNode(ObjectId("$$this"))
         val stackFrame = createStackFrame("sf1", thisObj, None, Breakpoint("bp1", "a", 10), "fun")
 
         "should not have a scopes in the event params" in {
@@ -257,21 +257,21 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "should return a response with value 'undefined' when ScriptHost evaluation returns a Throwable-based error value" in {
-        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None, None)
+        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
         testEvalHandling(ErrorValue(exData, isBasedOnThrowable = true, ObjectId("$$err"))) { resp =>
           resp.result should be (RemoteObject.undefinedValue)
         }
       }
 
       "should return a response with an error value when ScriptHost evaluation returns a non-Throwable-based error value" in {
-        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None, None)
+        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
         testEvalHandling(ErrorValue(exData, isBasedOnThrowable = false, ObjectId("$$err"))) { resp =>
           resp.result should be (RemoteObject.forError("Error", "oops", None, """{"id":"$$err"}"""))
         }
       }
 
       "should return a response with exception details when ScriptHost evaluation returns a Throwable-based error value" in {
-        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None, None)
+        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
         testEvalHandling(ErrorValue(exData, isBasedOnThrowable = true, ObjectId("$$err"))) { resp =>
           // Remember, Chrome line numbers are 0-based, so 10 => 9
           resp.exceptionDetails should be (Some(ExceptionDetails(1, "oops", 9, 1, Some("<eval>"), None, Runtime.StaticExecutionContextId)))
@@ -279,7 +279,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "should return a response with _only_ value 'undefined' when ScriptHost evaluation returns a Throwable-based error value but silent mode is requested" in {
-        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None, None)
+        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
         testEvalHandling(ErrorValue(exData, isBasedOnThrowable = true, ObjectId("$$err")), Some(true)) { resp =>
           resp should be (Debugger.EvaluateOnCallFrameResult(RemoteObject.undefinedValue, None))
         }
@@ -322,14 +322,14 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "should generate a preview if requested" in {
-        val obj = ObjectNode(Map.empty, ObjectId("x"))
+        val obj = ObjectNode(ObjectId("x"))
         testEvalHandling(obj, generatePreview = Some(true)) { resp =>
           resp.result.preview should be ('defined)
         }
       }
 
       "should request own object properties and not only accessors when generating a preview" in {
-        val obj = ObjectNode(Map.empty, ObjectId("x"))
+        val obj = ObjectNode(ObjectId("x"))
         testEvalHandling(obj, generatePreview = Some(true)) { resp =>
           verify(currentScriptHost).getObjectProperties(ObjectId("x"), true, false)
         }

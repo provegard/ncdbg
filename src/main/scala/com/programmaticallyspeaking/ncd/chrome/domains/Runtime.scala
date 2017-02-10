@@ -110,7 +110,7 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport with R
       log.info(s"Runtime.getProperties: ownProperties = $ownProperties, accessorPropertiesOnly = $accessorPropertiesOnly")
 
       val generatePreview = maybeGeneratePreview.getOrElse(false)
-      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview)
+      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, byValue = false)
 
       // Deserialize JSON object ID (serialized in RemoteObjectConverter)
       val objectId = ObjectId.fromString(strObjectId)
@@ -150,7 +150,7 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport with R
       val reportException = !maybeSilent.getOrElse(false)
       val generatePreview = maybeGeneratePreview.getOrElse(false)
 
-      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview)
+      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
 
       val objectIdNameGenerator = new IdGenerator("__obj_")
 
@@ -167,7 +167,7 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport with R
       val expression = s"($functionDeclaration).apply($targetName,$argsArrayString)"
 
       // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
-      val evalResult = evaluate(scriptHost, "$top", expression, namedObjects, reportException, actualReturnByValue)
+      val evalResult = evaluate(scriptHost, "$top", expression, namedObjects, reportException)
       CallFunctionOnResult(evalResult.result, evalResult.exceptionDetails)
 
     case Runtime.runIfWaitingForDebugger =>

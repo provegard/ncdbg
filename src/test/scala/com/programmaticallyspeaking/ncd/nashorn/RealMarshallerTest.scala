@@ -82,7 +82,7 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
         inside(actual) {
           case ErrorValue(data, isBasedOnThrowable, _) =>
             val stack = "TypeError: oops\n\tat <program> (<eval>:1)"
-            data should be (ExceptionData("TypeError", "oops", 1, -1, "<eval>", Some(stack), None))
+            data should be (ExceptionData("TypeError", "oops", 1, -1, "<eval>", Some(stack)))
             isBasedOnThrowable should be (false)
         }
       }
@@ -101,21 +101,21 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
 
       "with appropriate exception data" in {
         evalException { err =>
-          err.data.copy(javaStackIncludingMessage = None) should be (ExceptionData("java.lang.IllegalArgumentException", "oops", 3, -1, "<eval>",
-            Some("java.lang.IllegalArgumentException: oops"), None))
+          err.data should be (ExceptionData("java.lang.IllegalArgumentException", "oops", 3, -1, "<eval>",
+            Some("java.lang.IllegalArgumentException: oops")))
         }
       }
 
-      "with Java stack trace data" in {
-        evalException { err =>
-          err.data.javaStackIncludingMessage match {
-            case Some(stack) =>
-              stack should fullyMatch regex ("(?s)^java\\.lang\\.IllegalArgumentException: oops\n\tat.*<eval>.*".r)
-
-            case None => fail("No Java stack")
-          }
-        }
-      }
+//      "with Java stack trace data" in {
+//        evalException { err =>
+//          err.data.javaStackIncludingMessage match {
+//            case Some(stack) =>
+//              stack should fullyMatch regex ("(?s)^java\\.lang\\.IllegalArgumentException: oops\n\tat.*<eval>.*".r)
+//
+//            case None => fail("No Java stack")
+//          }
+//        }
+//      }
 
       "with a flag indicating it's Throwable based" in {
         evalException { err =>

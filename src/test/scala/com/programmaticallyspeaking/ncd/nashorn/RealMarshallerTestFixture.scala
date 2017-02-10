@@ -28,7 +28,9 @@ trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixtu
               val maybeResultLocal = sf.scopeChain.find(_.scopeType == ScopeType.Local).flatMap(s => {
                 s.value match {
                   case obj: ObjectNode =>
-                    obj.extraEntries.find(_._1 == "result").map(_._2.resolve())
+                    getHost.getObjectProperties(obj.objectId, true, false).find(_._1 == "result").flatMap(_._2.value)
+//                    None
+//                    obj.extraEntries.find(_._1 == "result").map(_._2.resolve())
 
                   case _ => None
                 }

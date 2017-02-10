@@ -119,12 +119,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   private var isInitialized = false
 
-  private val objectPairById = mutable.Map[ObjectId, (Option[Value], ComplexNode)]()
+  private val objectPairById = mutable.Map[ObjectId, (Option[Value], ComplexNode, Map[String, ValueNode])]()
 
-  private val mappingRegistry: MappingRegistry = (value: Value, valueNode: ValueNode) => valueNode match {
-    case c: ComplexNode =>
-      objectPairById += c.objectId -> (Option(value), c)
-    case _ => // ignore
+  private val mappingRegistry: MappingRegistry = (value: Value, valueNode: ComplexNode, extra: Map[String, ValueNode]) => {
+    objectPairById += valueNode.objectId -> (Option(value), valueNode, extra)
   }
 
   private val foundWantedTypes = mutable.Map[String, ClassType]()
@@ -472,7 +470,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     case None => Seq.empty
   }
 
-  private def createScopeChain(marshaller: Marshaller, originalScopeValue: Option[Value], thisValue: Value, marshalledThisNode: ValueNode, localNode: ObjectNode): Seq[Scope] = {
+  private def createScopeChain(marshaller: Marshaller, originalScopeValue: Option[Value], thisValue: Value, marshalledThisNode: ValueNode, localNode: Option[ObjectNode]): Seq[Scope] = {
     // Note: I tried to mimic how Chrome reports scopes, but it's a bit difficult. For example, if the current scope
     // is a 'with' scope, there is no way (that I know of) to determine if we're in a function (IIFE) inside a with
     // block or if we're inside a with block inside a function.
@@ -497,9 +495,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     val scopeChain = ListBuffer[Scope]()
 
     // If we have locals, add a local scope
-    if (localNode.extraEntries.nonEmpty) {
-      scopeChain += Scope(localNode, ScopeType.Local)
-    }
+    localNode.foreach(scopeChain += Scope(_, ScopeType.Local))
 
     originalScopeValue.map(v => (v, toScope(v))) match {
       case Some((_, s)) if s.scopeType == ScopeType.Global =>
@@ -544,8 +540,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             // Create an artificial object node to hold the locals. Note that the object ID must be unique per stack
             // since we store object nodes in a map.
             val locals = localValues.map(e => e._1 -> marshaller.marshal(e._2))
-            val localNode = ObjectNode(locals.map(e => e._1 -> LazyNode.eager(e._2)), ObjectId("$$locals-" + stackframeId))
-            mappingRegistry.register(null, localNode)
+            val localNode = if (locals.nonEmpty) {
+              val node = ObjectNode(ObjectId("$$locals-" + stackframeId))
+              mappingRegistry.register(null, node, locals)
+              Some(node)
+            } else None
 
             val scopeChain = createScopeChain(marshaller, originalScope, originalThis, thisObj, localNode)
 
@@ -825,7 +824,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             val namedValues = namedObjects.map {
               case (name, objectId) =>
                 objectPairById.get(objectId) match {
-                  case Some((maybeValue, _)) if maybeValue.isDefined => name -> maybeValue.get
+                  // TODO: Should we handle extras here?
+                  case Some((maybeValue, _, _)) if maybeValue.isDefined => name -> maybeValue.get
                   case _ => throw new IllegalArgumentException(s"No object with ID '$objectId' was found.")
                 }
             }
@@ -943,7 +943,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     case Some(pd) =>
       val marshaller = new Marshaller(pd.thread, mappingRegistry)
       objectPairById.get(objectId) match {
-        case Some((maybeValue, node)) =>
+        case Some((maybeValue, node, extraEntries)) =>
           // If we have a script object, get properties from it
           val scriptObjectProps = maybeValue match {
             case Some(ref: ObjectReference) if marshaller.isScriptObject(ref) =>
@@ -955,9 +955,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
           // In addition, the node may contain extra entries that typically do not come from Nashorn. One example is
           // the Java stack we add if we detect a Java exception.
-          val extraProps = node.extraEntries.map(e => {
+          val extraProps = extraEntries.map(e => {
             e._1 -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true, isWritable = false,
-              isOwn = true, Some(e._2.resolve()), None, None)
+              isOwn = true, Some(e._2), None, None)
           })
 
           // Combine the two maps
