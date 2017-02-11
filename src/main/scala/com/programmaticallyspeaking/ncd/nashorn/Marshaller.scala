@@ -254,7 +254,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   object ExceptionValue {
     def unapply(v: Value): Option[(ErrorValue, Option[String])] = v match {
       case objRef: ObjectReference =>
-
         val types = allReachableTypesIncluding(objRef.referenceType())
         val isThrowable = types.exists(_.name() == classOf[Throwable].getName)
         val nashornException = types.find(_.name() == classOf[NashornException].getName)
@@ -277,7 +276,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
 
     private def exceptionDataOf(objRef: ObjectReference, nashornException: Option[ReferenceType]): ExceptionDataWithJavaStack = {
       val mirror = new ThrowableMirror(objRef)
-      val invoker = new DynamicInvoker(thread, objRef)
 
       // Extract information about the Exception from a Java point of view. This is different than the Nashorn point
       // of view, where only script frames are considered.
@@ -285,18 +283,16 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
 
       val data: (LocationData, String) = nashornException match {
         case Some(classType: ClassType) =>
-          val mirror = new NashornExceptionMirror(classType)
-          val stackWithoutMessage = mirror.getScriptStackString(objRef)
-          println(objRef.referenceType().name())
-          ???
-//          val staticInvoker = new StaticInvoker(thread, classType)
-//          val stackWithoutMessage = marshalledAs[String](staticInvoker.getScriptStackString(objRef))
-//
-//          (LocationData(
-//            marshalledAs[Integer](invoker.getLineNumber()),
-//            marshalledAs[Integer](invoker.getColumnNumber()),
-//            marshalledAs[String](invoker.getFileName()) //TODO: new File(_).toURI.toString??
-//            ), stackWithoutMessage)
+          // This is a NashornException instance.
+          // TODO: Get the actual error name. One possibility is to parse the message.
+          val classMirror = new NashornExceptionClassMirror(classType)
+          val stackWithoutMessage = classMirror.getScriptStackString(objRef)
+          val nashornMirror = new NashornExceptionMirror(objRef)
+          (LocationData(
+            nashornMirror.lineNumber,
+            nashornMirror.columnNumber,
+            nashornMirror.fileName //TODO: new File(_).toURI.toString??
+          ), stackWithoutMessage)
         case _ =>
           javaExceptionInfo match {
             case Some(info) =>

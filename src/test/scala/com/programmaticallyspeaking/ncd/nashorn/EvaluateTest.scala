@@ -1,6 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.SimpleValue
+import com.programmaticallyspeaking.ncd.host.types.ExceptionData
+import com.programmaticallyspeaking.ncd.host.{ErrorValue, SimpleValue, ValueNode}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.util.{Failure, Success, Try}
@@ -58,11 +59,44 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
   )
 
   "Evaluating on a stack frame" - {
+    def evaluate(script: String, expression: String)(handler: (ValueNode) => Unit): Unit = {
+      evaluateInScript(script) { (host, stackframes) =>
+        testSuccess(host.evaluateOnStackFrame(stackframes.head.id, expression, Map.empty))(handler)
+      }
+    }
+
     forAll(cases) { (desc, script, expression, result) =>
       s"works for $desc" in {
-        evaluateInScript(script) { (host, stackframes) =>
-          testSuccess(host.evaluateOnStackFrame(stackframes.head.id, expression, Map.empty)) { value =>
-            value should be(result)
+        evaluate(script, expression) { value =>
+          value should be(result)
+        }
+      }
+    }
+
+    "of a thrown JS error" - {
+      val script = "(function () { debugger; })();"
+      val expression = "throw new TypeError('ugh');"
+
+      def evaluateError(handler: (ExceptionData) => Unit) = {
+        evaluate(script, expression) {
+          case ErrorValue(data, true, _) => handler(data)
+          case other => fail("Unexpected: " + other)
+        }
+      }
+
+      "results in the correct exception data" in {
+        evaluateError { data =>
+          data.copy(stackIncludingMessage = None) should be (ExceptionData(
+            "jdk.nashorn.internal.runtime.ECMAException", "TypeError: ugh", 1, 0, "<eval>", None))
+        }
+      }
+
+      "results in the stack trace data including message" in {
+        evaluateError { data =>
+          data.stackIncludingMessage match {
+            case Some(stack) =>
+              stack should fullyMatch regex ("(?s).*TypeError: ugh.*at <program> \\(<eval>:1\\).*")
+            case None => fail("no stack")
           }
         }
       }

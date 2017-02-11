@@ -12,11 +12,8 @@ package object types {
     * @param columnNumber column number (base ??) where the error occurred
     * @param url URL of the script in which the error occurred
     * @param stackIncludingMessage stack trace (JS format), with message (for consistency with Error.prototype.stack)
-//    * @param javaStackIncludingMessage stack trace in Java format, with message
     */
   case class ExceptionData(name: String, message: String, lineNumberBase1: Int, columnNumber: Int, url: String, stackIncludingMessage: Option[String])
-//                           javaStackIncludingMessage: Option[String])
-
 
   sealed trait PropertyDescriptorType
   object PropertyDescriptorType {
