@@ -3,6 +3,8 @@ package com.programmaticallyspeaking.ncd.host
 import com.programmaticallyspeaking.ncd.host.types.ExceptionData
 import com.programmaticallyspeaking.ncd.infra.ObjectMapping
 
+import scala.reflect.ClassTag
+
 /**
   * Identity of an object (or array, or anything else that carries child entries):
 
@@ -25,7 +27,25 @@ object ObjectId {
   }
 }
 
-sealed trait ValueNode
+sealed trait ValueNode {
+
+  def asBool(dflt: => Boolean): Boolean =
+    as[java.lang.Boolean].map(_.booleanValue()).getOrElse(dflt)
+
+  // TODO: Try Double also?
+  def asInt(dflt: => Int): Int =
+  as[java.lang.Integer].map(_.intValue()).getOrElse(dflt)
+
+  def asString: String = as[String].orNull
+
+  def as[R <: AnyRef : ClassTag]: Option[R] = {
+    this match {
+      case SimpleValue(value: R) => Some(value)
+      case other => None
+    }
+  }
+
+}
 
 object LazyNode {
   /**

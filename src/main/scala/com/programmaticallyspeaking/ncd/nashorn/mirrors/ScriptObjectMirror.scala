@@ -1,44 +1,66 @@
 package com.programmaticallyspeaking.ncd.nashorn.mirrors
 
-import com.programmaticallyspeaking.ncd.nashorn.DynamicInvoker
+import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, Marshaller}
 import com.sun.jdi._
 
+import scala.language.implicitConversions
+
 /**
-  * Mirror for `jdk.nashorn.internal.runtime.ScriptObject`. This class doesn't do marshalling - the return value of
-  * methods is typically a JDI [[com.sun.jdi.Value]].
+  * Mirror for `jdk.nashorn.internal.runtime.ScriptObject`.
   *
-  * @param thread thread on which method calls will take place
   * @param scriptObject the `ScriptObject` instance to interact with
   */
-class ScriptObjectMirror(thread: ThreadReference, val scriptObject: ObjectReference) {
+class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller: Marshaller) {
+  import Mirrors._
   import ScriptObjectMirror._
 
-  lazy val invoker = new DynamicInvoker(thread, scriptObject)
+  import scala.collection.JavaConverters._
 
-  def getClassName = invoker.getClassName()
+  protected lazy val invoker = new DynamicInvoker(marshaller.thread, scriptObject)
 
-  def isArray = invoker.isArray()
+  lazy val className: String = invoker.getClassName().asString
 
-  def propertyIterator() = invoker.propertyIterator()
-  def values() = invoker.values()
+  lazy val isArray: Boolean = invoker.isArray().asBool(false)
 
-  def getOwnKeys(all: Boolean) = invoker.getOwnKeys(all)
+  def propertyIterator(): Iterator[String] = new IteratorMirror[String](invoker.propertyIterator().asInstanceOf[ObjectReference]) // Iterator<String>
 
-  // JSObject
-  def keySet() = invoker.keySet()
+  // TODO: Get rid of / refactor
+  def values(): Value = invoker.values() // Collection<Object>
 
-  def getOwnPropertyDescriptor(property: String) = invoker.getOwnPropertyDescriptor(property).asInstanceOf[ObjectReference]
-  def getPropertyDescriptor(property: String) = invoker.getPropertyDescriptor(property).asInstanceOf[ObjectReference]
+  def getOwnKeys(all: Boolean): Array[String] = invoker.getOwnKeys(all) match {
+    case arr: ArrayReference => arr.getValues.asScala.map(_.asString).toArray
+    case other => throw new IllegalStateException("Expected ScriptObject.getOwnKeys to return an array")
+  }
 
-  def put(key: AnyRef, value: AnyRef, isStrict: Boolean) =
+  def getOwnPropertyDescriptor(property: String): Option[PropertyDescriptorMirror] =
+    asObjectReference(invoker.getOwnPropertyDescriptor(property)).map(o => new PropertyDescriptorMirror(o))
+
+  def getPropertyDescriptor(property: String) =
+    asObjectReference(invoker.getPropertyDescriptor(property)).map(o => new PropertyDescriptorMirror(o))
+
+  def put(key: AnyRef, value: AnyRef, isStrict: Boolean): Unit =
     invoker.applyDynamic(putObjectObjectBoolSignature)(key, value, isStrict)
 
-  def get(key: AnyRef) =
-    invoker.applyDynamic(getObjectSignature)(key)
+  def getString(key: AnyRef): String = invoker.applyDynamic(getObjectSignature)(key).asString
+  def getInt(key: AnyRef, defaultValue: Int): Int = invoker.applyDynamic(getObjectSignature)(key).asInt(defaultValue)
+  def getRequiredInt(key: AnyRef): Int =
+    invoker.applyDynamic(getObjectSignature)(key).asInt(throw new IllegalStateException(s"Property $key doesn't have an integer value"))
 
-  def actualToString = invoker.applyDynamic("toString")()
+  def actualToString: String = invoker.applyDynamic("toString")().asString
 
   override def toString = "ScriptObjectMirror (maybe you meant actualToString?)"
+
+  def asFunction = {
+    assert(className == "Function", "asFunction can only be called for a function")
+    new ScriptFunctionMirror(scriptObject)
+  }
+}
+
+class ScriptFunctionMirror(scriptObject: ObjectReference)(implicit marshaller: Marshaller) extends ScriptObjectMirror(scriptObject) {
+  import Mirrors._
+
+  lazy val name: String = invoker.getName().asString
+  lazy val source: String = invoker.toSource().asString
 }
 
 object ScriptObjectMirror {

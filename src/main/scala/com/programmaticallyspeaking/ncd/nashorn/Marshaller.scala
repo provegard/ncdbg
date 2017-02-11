@@ -3,14 +3,13 @@ package com.programmaticallyspeaking.ncd.nashorn
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, Undefined}
 import com.programmaticallyspeaking.ncd.infra.IdGenerator
-import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
+import com.programmaticallyspeaking.ncd.nashorn.mirrors._
 import com.sun.jdi._
 import jdk.nashorn.api.scripting.NashornException
 import jdk.nashorn.internal.runtime.ScriptObject
 
 import scala.collection.mutable.ListBuffer
 import scala.language.implicitConversions
-import scala.reflect.ClassTag
 import scala.util.Try
 
 object Marshaller {
@@ -22,6 +21,17 @@ object Marshaller {
   private[Marshaller] case class MarshallerResult(valueNode: ValueNode, extraProperties: Map[String, ValueNode])
 
   implicit def valueNode2MarshallerResult(valueNode: ValueNode): MarshallerResult = MarshallerResult(valueNode, Map.empty)
+
+  def isUndefined(value: Value): Boolean = value != null && "jdk.nashorn.internal.runtime.Undefined".equals(value.`type`().name())
+}
+
+object MappingRegistry {
+  /**
+    * A [[MappingRegistry]] that does not actually do any registration.
+    */
+  val noop = new MappingRegistry {
+    override def register(value: Value, valueNode: ComplexNode, extraProperties: Map[String, ValueNode]): Unit = {}
+  }
 }
 
 trait MappingRegistry {
@@ -30,7 +40,10 @@ trait MappingRegistry {
 
 class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) extends ThreadUser {
   import Marshaller._
+
   import scala.collection.JavaConverters._
+
+  private implicit val marshaller: Marshaller = this
 
   def marshal(value: Value): ValueNode = {
     val result = marshalInPrivate(value)
@@ -89,8 +102,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case other => throw new IllegalArgumentException("Don't know how to marshal: " + other)
   }
 
-  private def isUndefined(value: Value): Boolean = value != null && "jdk.nashorn.internal.runtime.Undefined".equals(value.`type`().name())
-
   private def attemptUnboxing(value: ObjectReference): Option[ValueNode] = {
     val invoker = new DynamicInvoker(thread, value)
     val v = value.referenceType().name() match {
@@ -105,27 +116,24 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
 
   private def marshalScriptObject(value: Value): ValueNode = {
     val scriptObject = value.asInstanceOf[ObjectReference]
-    val mirror = new ScriptObjectMirror(thread, scriptObject)
-    val proxy = new ScriptObjectProxy(mirror, thread, this)
-    if (proxy.isArray) toArray(proxy)
-    else if (proxy.isFunction) toFunction(proxy)
-    else if (proxy.isError) toError(proxy)
-    else if (proxy.isDate) toDate(mirror)
-    else if (proxy.isRegExp) toRegExp(mirror)
-    else {
-      //TODO: Date + regexp - but how to marshal to Chrome later?
-      // Assume object
-      toObject(proxy)
+    val mirror = new ScriptObjectMirror(scriptObject)
+    if (mirror.isArray) toArray(mirror)
+    else mirror.className match {
+      case "Function" => toFunction(mirror.asFunction)
+      case "Error" => toError(mirror)
+      case "Date" => toDate(mirror)
+      case "RegExp" => toRegExp(mirror)
+      case _ => toObject(mirror)
     }
   }
 
   // Less capable than marshalScriptObject because JSObject doesn't expose as many methods
   private def marshalJSObject(value: Value): ValueNode = {
-    val scriptObject = value.asInstanceOf[ObjectReference]
-    val mirror = new ScriptObjectMirror(thread, scriptObject)
-    val proxy = new ScriptObjectProxy(mirror, thread, this)
-    if (proxy.isArray) toArray(proxy)
-    else toObject(proxy)
+
+    val jsObject = value.asInstanceOf[ObjectReference]
+    val mirror = new JSObjectMirror(jsObject)
+    if (mirror.isArray) toArray(mirror)
+    else toObject(mirror)
   }
 
   private def marshalPrimitive(value: Value): Any = value match {
@@ -165,7 +173,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   private def arrayFromIterator(obj: ObjectReference) = {
     val invoker = new DynamicInvoker(thread, obj)
     val lazyValues = ListBuffer[LazyNode]()
-    while (marshalledAs[Boolean](invoker.hasNext())) {
+    while (marshal(invoker.hasNext()).asBool(false)) {
       val nextValue = invoker.next()
       lazyValues += new LazyNode {
         override def resolve(): ValueNode = marshal(nextValue)
@@ -176,67 +184,54 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
 
   private def toArray(ref: ArrayReference) = ArrayNode(ref.getValues.asScala.map(marshalLater), objectId(ref))
 
-  private def toArray(proxy: ScriptObjectProxy) = {
-    marshal(proxy.mirror.values())
+  private def toArray(mirror: ScriptObjectMirror) = {
+    marshal(mirror.values())
+  }
+
+  private def toArray(mirror: JSObjectMirror) = {
+//    marshal(mirror.values())
+    ArrayNode(Seq.empty, objectId(mirror.jsObject)) // TODO: Items, but we will refactor...
   }
 
   private def toDate(mirror: ScriptObjectMirror) = {
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toString
     // "The toString() method always returns a string representation of the date in American English."
     // The Chrome debugging protocol (in particular, RemoteObject) doesn't seem to care about Date details.
-    val stringRep = marshalledAs[String](mirror.actualToString)
-    DateNode(stringRep, objectId(mirror.scriptObject))
+    DateNode(mirror.actualToString, objectId(mirror.scriptObject))
   }
 
   private def toRegExp(mirror: ScriptObjectMirror) = {
-    val stringRep = marshalledAs[String](mirror.actualToString)
-    RegExpNode(stringRep, objectId(mirror.scriptObject))
+    RegExpNode(mirror.actualToString, objectId(mirror.scriptObject))
   }
 
-  private def toObject(proxy: ScriptObjectProxy) = {
-    ObjectNode(objectId(proxy.scriptObject))
+  private def toObject(mirror: ScriptObjectMirror) = ObjectNode(objectId(mirror.scriptObject))
+  private def toObject(mirror: JSObjectMirror) = ObjectNode(objectId(mirror.jsObject))
+
+  private def toFunction(mirror: ScriptFunctionMirror) = {
+    val name = mirror.name
+    val source = mirror.source
+
+    FunctionNode(name, source, objectId(mirror.scriptObject))
   }
 
-  private def toFunction(proxy: ScriptObjectProxy) = {
-    val invoker = new DynamicInvoker(thread, proxy.scriptObject)
-    // getName and toSource are defined in the ScriptFunction class
-    val nameValue = invoker.getName()
-    val sourceValue = invoker.toSource()
-
-    FunctionNode(getString(marshal(nameValue)), getString(marshal(sourceValue)), objectId(proxy.scriptObject))
-  }
-
-  private def toError(proxy: ScriptObjectProxy) = {
-    val so = proxy.scriptObject
-    def getValue(key: String) = proxy.mirror.get(key)
-
-    val msgValue = getValue("message")
-    val nameValue = getValue("name")
+  private def toError(mirror: ScriptObjectMirror) = {
+    val msgValue = mirror.getString("message")
+    val nameValue = mirror.getString("name")
 
     // Nashorn extensions, see https://wiki.openjdk.java.net/display/Nashorn/Nashorn+extensions
-    val stackValue = getValue("stack")
-    val lineNumberValue = getValue("lineNumber")
-    val colNumberValue = getValue("columnNumber")
-    val fileNameValue = getValue("fileName")
+    val stackValue = mirror.getString("stack")
+    val lineNumberValue = mirror.getInt("lineNumber", 0)
+    val colNumberValue = mirror.getInt("columnNumber", -1)
+    val fileNameValue = mirror.getString("fileName")
 
-    val stack = marshalledAsOptionally[String](stackValue).orNull
-
-    val exData = ExceptionData(marshalledAs[String](nameValue),
-        marshalledAs[String](msgValue),
-        marshalledAsOptionally[Integer](lineNumberValue).getOrElse(Integer.valueOf(0)).intValue(),
-        marshalledAsOptionally[Integer](colNumberValue).getOrElse(Integer.valueOf(-1)).intValue(),
-        marshalledAsOptionally[String](fileNameValue).getOrElse("<unknown>"), //TODO: To URL?
-        Option(stack)
-      )
-    ErrorValue(exData, isBasedOnThrowable = false, objectId(so))
+    val exData = ExceptionData(nameValue, msgValue, lineNumberValue, colNumberValue,
+      Option(fileNameValue).getOrElse("<unknown>"), //TODO: To URL?
+      Option(stackValue)
+    )
+    ErrorValue(exData, isBasedOnThrowable = false, objectId(mirror.scriptObject))
   }
 
   private def marshalLater(v: Value) = new LazyMarshalledValue(v)
-
-  private def getString(node: ValueNode) = node match {
-    case SimpleValue(k: String) => k
-    case other => throw new IllegalArgumentException("Not a string node: " + other)
-  }
 
   class LazyMarshalledValue(v: Value) extends LazyNode {
     override def resolve(): ValueNode = marshal(v)
@@ -272,40 +267,36 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       case _ => None
     }
 
-    private def extractJavaExceptionInfo(exception: ObjectReference): Option[ExceptionInfo] = {
-      val invoker = new DynamicInvoker(thread, exception)
-      val stackTraceElements = invoker.getStackTrace().asInstanceOf[ArrayReference]
+    private def extractJavaExceptionInfo(mirror: ThrowableMirror): Option[ExceptionInfo] = {
+//      val mirror = new ThrowableMirror(exception)
+      val stackTraceElements = mirror.stackTrace
 
-      if (stackTraceElements.length() > 0) {
-        val elemInvoker = new DynamicInvoker(thread, stackTraceElements.getValue(0).asInstanceOf[ObjectReference])
-        val lineNumber = marshalledAs[Integer](elemInvoker.getLineNumber())
-        val fileName = marshalledAs[String](elemInvoker.getFileName())
-
-        val stack = stackTraceElements.getValues.asScala.map(stackTraceElement => {
-          val stInvoker = new DynamicInvoker(thread, stackTraceElement.asInstanceOf[ObjectReference])
-          "\tat " + marshalledAs[String](stInvoker.applyDynamic("toString")())
-        }).mkString("\n")
-        Some(ExceptionInfo(stack, lineNumber, fileName))
-      } else None
+      val stack = stackTraceElements.map("\tat " + _.actualToString).mkString("\n")
+      stackTraceElements.headOption.map(ste => ExceptionInfo(stack, ste.lineNumber, ste.fileName))
     }
 
     private def exceptionDataOf(objRef: ObjectReference, nashornException: Option[ReferenceType]): ExceptionDataWithJavaStack = {
+      val mirror = new ThrowableMirror(objRef)
       val invoker = new DynamicInvoker(thread, objRef)
 
       // Extract information about the Exception from a Java point of view. This is different than the Nashorn point
       // of view, where only script frames are considered.
-      val javaExceptionInfo = extractJavaExceptionInfo(objRef)
+      val javaExceptionInfo = extractJavaExceptionInfo(mirror)
 
       val data: (LocationData, String) = nashornException match {
         case Some(classType: ClassType) =>
-          val staticInvoker = new StaticInvoker(thread, classType)
-          val stackWithoutMessage = marshalledAs[String](staticInvoker.getScriptStackString(objRef))
-
-          (LocationData(
-            marshalledAs[Integer](invoker.getLineNumber()),
-            marshalledAs[Integer](invoker.getColumnNumber()),
-            marshalledAs[String](invoker.getFileName()) //TODO: new File(_).toURI.toString??
-            ), stackWithoutMessage)
+          val mirror = new NashornExceptionMirror(classType)
+          val stackWithoutMessage = mirror.getScriptStackString(objRef)
+          println(objRef.referenceType().name())
+          ???
+//          val staticInvoker = new StaticInvoker(thread, classType)
+//          val stackWithoutMessage = marshalledAs[String](staticInvoker.getScriptStackString(objRef))
+//
+//          (LocationData(
+//            marshalledAs[Integer](invoker.getLineNumber()),
+//            marshalledAs[Integer](invoker.getColumnNumber()),
+//            marshalledAs[String](invoker.getFileName()) //TODO: new File(_).toURI.toString??
+//            ), stackWithoutMessage)
         case _ =>
           javaExceptionInfo match {
             case Some(info) =>
@@ -319,7 +310,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
 
       // Use full Exception type name, e.g. java.lang.IllegalArgumentException
       val name = objRef.referenceType().name()
-      val message = marshalledAs[String](invoker.getMessage())
+      val message = mirror.message
       val fullStack = s"$name: $message" + Option(data._2).map(st => "\n" + st).getOrElse("")
 
       // Note the slight implementation inconsistency wrt `fullStack`: we don't prefix with name and message outside
@@ -329,36 +320,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
 
       ExceptionDataWithJavaStack(ExceptionData(name, message, data._1.lineNumber, data._1.columnNumber, data._1.url, Option(fullStack)),
         fullJavaStack)
-    }
-  }
-
-  /**
-    * Convenience function that marshals a value and unpacks the [[SimpleValue]] result to a native type.
-    *
-    * @param v the value to marshal
-    * @tparam R the type of the value to expect and return
-    * @return the marshalled and unpacked value
-    */
-  def marshalledAs[R <: Any : ClassTag](v: Value): R = marshalledAsOptionally(v) match {
-    case Some(value) => value
-    case None =>
-      val runtimeClass = implicitly[ClassTag[R]].runtimeClass
-      val vType = if (v == null) "null" else v.getClass.getName
-      throw new ClassCastException(s"Cannot extract value of type ${runtimeClass.getName} from $v (of type $vType)")
-  }
-
-  /**
-    * Convenience function that marshals a value and unpacks the [[SimpleValue]] result to a native type, if possible.
-    *
-    * @param v the value to marshal
-    * @tparam R the type of the value to expect and return
-    * @return the marshalled and unpacked value if possible, otherwise `None`
-    */
-  def marshalledAsOptionally[R <: Any : ClassTag](v: Value): Option[R] = {
-    marshal(v) match {
-      case SimpleValue(value: R) => Some(value)
-      case EmptyNode => Some(null.asInstanceOf[R])
-      case other => None
     }
   }
 
