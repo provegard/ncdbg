@@ -34,7 +34,7 @@ sealed trait ValueNode {
 
   // TODO: Try Double also?
   def asInt(dflt: => Int): Int =
-  as[java.lang.Integer].map(_.intValue()).getOrElse(dflt)
+    as[java.lang.Integer].map(_.intValue()).getOrElse(dflt)
 
   def asString: String = as[String].orNull
 

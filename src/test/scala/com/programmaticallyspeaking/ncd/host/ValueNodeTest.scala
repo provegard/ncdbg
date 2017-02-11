@@ -1,27 +1,44 @@
 package com.programmaticallyspeaking.ncd.host
 
-import com.programmaticallyspeaking.ncd.host.types.ExceptionData
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 
 class ValueNodeTest extends UnitTest {
 
-//  "ErrorValue" - {
-//    val exData = ExceptionData("TypeError", "oops", 10, 0, "<eval>", None, None)
-//    def errValue(data: ExceptionData) =
-//      ErrorValue(data, isBasedOnThrowable = false, ObjectId("$err"))
-//
-//    def valueFor(ev: ErrorValue, key: String): Option[ValueNode] = None
-////      ev.extraEntries.find(_._1 == key).map(_._2.resolve())
-//
-//    "should not expose a 'javaStack' entry if there is no stack" in {
-//      val result = valueFor(errValue(exData), "__javastack__")
-//      result should be (None)
-//    }
-//
-//    "should expose a 'javaStack' entry if there is a Java stack" in {
-//      val exData = ExceptionData("TypeError", "oops", 10, 0, "<eval>", None, Some("Java stack"))
-//      val result = valueFor(errValue(exData), "javaStack")
-//      result should be (Some(SimpleValue("Java stack")))
-//    }
-//  }
+  "ValueNode" - {
+    "asString" - {
+      "should return a string for a string value" in {
+        val vn = SimpleValue("testing")
+        vn.asString should be("testing")
+      }
+
+      "should return null for a non-string value" in {
+        val vn = SimpleValue(42)
+        vn.asString should be(null)
+      }
+    }
+
+    "asBool" - {
+      "should return a bool for a boolean value" in {
+        val vn = SimpleValue(true)
+        vn.asBool(false) should be(true)
+      }
+
+      "should return the default for a non-boolean value" in {
+        val vn = SimpleValue(42)
+        vn.asBool(false) should be(false)
+      }
+    }
+
+    "asInt" - {
+      "should return an int for a integer value" in {
+        val vn = SimpleValue(42)
+        vn.asInt(0) should be(42)
+      }
+
+      "should return the default for a non-integer value" in {
+        val vn = SimpleValue("testing")
+        vn.asInt(0) should be(0)
+      }
+    }
+  }
 }
