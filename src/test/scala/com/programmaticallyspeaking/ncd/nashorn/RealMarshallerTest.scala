@@ -4,7 +4,6 @@ import java.util
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, PropertyDescriptorType, Undefined}
-import com.programmaticallyspeaking.ncd.infra.StringAnyMap
 import jdk.nashorn.api.scripting.AbstractJSObject
 import org.scalactic.Equality
 import org.scalatest.Inside
@@ -28,45 +27,7 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
     ("NaN", "NaN", SimpleValue(Double.NaN))
   )
 
-  val complexValues = Table(
-    ("desc", "expression", "expected"),
-    ("array", "[42]", Map("0" -> 42, "length" -> 1)),
-    ("object", "{'a':'b'}", Map("a" -> "b")),
-    ("RegExp", "/.*/", Map("multiline" -> false, "source" -> ".*", "global" -> false, "lastIndex" -> 0, "ignoreCase" -> false)),
-//    ("Java Array",
-//      """(function() {
-//        |var StringArray = Java.type("java.lang.String[]");
-//        |var arr = new StringArray(1);
-//        |arr[0] = "testing";
-//        |return arr;
-//        |})()
-//      """.stripMargin, Map("0" -> "testing")),
-//    ("Java Iterator",
-//      """(function() {
-//        |var ArrayList = Java.type("java.util.ArrayList");
-//        |var list = new ArrayList(1);
-//        |list.add("testing");
-//        |return list.iterator();
-//        |})()
-//      """.stripMargin, Map("0" -> "testing"))
-    ("property with get/set",
-      """(function() {
-        |var obj = {};
-        |var foo = 0;
-        |Object.defineProperty(obj, "foo", {
-        |  get: function () { return foo; },
-        |  set: function (value) { foo = value; }
-        |});
-        |return obj;
-        |})()
-      """.stripMargin, Map("foo" -> Map("get" -> "<function>", "set" -> "<function>"))),
-    ("JSObject array (classname)", s"createInstance('${classOf[ClassNameBasedArrayJSObject].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
-    ("JSObject array (isArray)", s"createInstance('${classOf[IsArrayBasedArrayJSObject].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
-    ("JSObject array (slot only)", s"createInstance('${classOf[OnlySlotBasedArrayJSObject].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
-    ("JSObject object", s"createInstance('${classOf[ObjectLikeJSObject].getName}')", Map("a" -> 42, "b" -> 43))
-  )
-
-  "Marshalling of simple values works for" - {
+  "Marshalling to ValueNode works for" - {
     forAll(simpleValues) { (desc, expr, expected) =>
       desc in {
         evaluateExpression(expr) { (_, actual) =>
@@ -116,22 +77,6 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
       "with a flag indicating it's Throwable based" in {
         evalException { err =>
           err.isBasedOnThrowable should be (true)
-        }
-      }
-
-      "with a property 'javaStack' (which cannot be evaluated yet...)" in {
-        evaluateExpression(expr) { (host, actual) =>
-          expand(host, actual) match {
-            case StringAnyMap(aMap) =>
-              aMap.get("javaStack") match {
-                case Some(st: String) =>
-                  st should startWith ("java.lang.IllegalArgumentException: oops")
-                case Some(st) => fail("Unexpected javaStack: " + st)
-                case None => fail("Missing javaStack")
-              }
-
-            case other => fail("Unexpected: " + other)
-          }
         }
       }
     }
@@ -210,17 +155,6 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
       }
     }
   }
-
-  "Marshalling of complex values works for" - {
-    forAll(complexValues) { (desc, expr, expected) =>
-      desc in {
-        evaluateExpression(expr) { (host, actual) =>
-          expand(host, actual) should equal (expected)
-        }
-      }
-    }
-  }
-
 }
 
 object RealMarshallerTest {
