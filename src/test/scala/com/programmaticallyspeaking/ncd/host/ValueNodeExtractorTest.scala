@@ -3,9 +3,18 @@ package com.programmaticallyspeaking.ncd.host
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, Undefined}
 import com.programmaticallyspeaking.ncd.testing.{MapBasedObjectInteraction, UnitTest}
 
+import scala.collection.mutable
+
 class ValueNodeExtractorTest extends UnitTest {
 
   def newExtractor(data: Map[ObjectId, Map[String, ValueNode]] = Map.empty) = new ValueNodeExtractor(new MapBasedObjectInteraction(data))
+  // TODO: Duplicated from RemoteObjectConverterTest
+  def arrayToMap[A <: ValueNode](data: Seq[A]): Map[String, ValueNode] = {
+    val map = mutable.Map[String, ValueNode]()
+    data.zipWithIndex.foreach(e => map += (e._2.toString -> e._1))
+    map += ("length" -> SimpleValue(data.size))
+    map.toMap
+  }
 
   "ValueNodeExtractor" - {
     "should extract the value from a SimpleValue" in {
@@ -35,8 +44,8 @@ class ValueNodeExtractorTest extends UnitTest {
     "should convert ArrayNode to an array" in {
       val v1 = SimpleValue("test1")
       val v2 = SimpleValue("test2")
-      val a = ArrayNode(Seq(v1, v2).map(LazyNode.eager), ObjectId("a"))
-      newExtractor().extract(a) should be (Array("test1", "test2"))
+      val a = ArrayNode(2, ObjectId("a"))
+      newExtractor(Map(a.objectId -> arrayToMap(Seq(v1, v2)))).extract(a) should be (Array("test1", "test2"))
     }
 
     "should convert ObjectNode to a Map" in {
@@ -67,10 +76,11 @@ class ValueNodeExtractorTest extends UnitTest {
 
     "should detect a cycle via an array but emit an error string instead of throwing" in {
       var a: ArrayNode = null
-      a = ArrayNode(Seq(new LazyNode {
+      val item = new LazyNode {
         override def resolve(): ValueNode = a
-      }), ObjectId("x"))
-      newExtractor().extract(a) should be (Array("<Error: cycle detected for array 'x'>"))
+      }
+      a = ArrayNode(1, ObjectId("x"))
+      newExtractor(Map(a.objectId -> arrayToMap(Seq(item)))).extract(a) should be (Array("<Error: cycle detected for array 'x'>"))
     }
   }
 }

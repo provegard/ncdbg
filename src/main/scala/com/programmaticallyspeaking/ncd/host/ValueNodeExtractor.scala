@@ -2,6 +2,7 @@ package com.programmaticallyspeaking.ncd.host
 
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, Undefined}
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 
 trait ObjectInteraction {
@@ -23,35 +24,47 @@ class ScriptHostBasedObjectInteraction(scriptHost: ScriptHost) extends ObjectInt
 }
 
 class ValueNodeExtractor(objectInteraction: ObjectInteraction) {
+  import com.programmaticallyspeaking.ncd.infra.StringUtils._
+
   def extract(v: ValueNode): Any = extract(v, Set.empty)
+
+  private def propertyMap(oid: ObjectId, observedObjectIds: Set[ObjectId]): Map[String, Any] = {
+    val props = objectInteraction.getOwnProperties(oid)
+    props.map { e =>
+      val propName = e._1
+      e._2.value match {
+        case Some(vn) =>
+          propName -> extract(vn, observedObjectIds + oid)
+        case None =>
+          propName -> (e._2.getter match {
+            case Some(g: FunctionNode) =>
+              objectInteraction.invokePropertyGetter(oid, g) match {
+                case Success(vn) => extract(vn, observedObjectIds + oid)
+                case Failure(t) => s"<Error calling getter for property '$propName' of object '${oid.id}': ${t.getMessage}>" // TODO!! Handle better!?
+              }
+            case _ =>
+              s"<Error: Unrecognized property '$propName' of object '${oid.id}'>" //TODO: What here?
+          })
+      }
+    }
+  }
 
   private def extract(v: ValueNode, observedObjectIds: Set[ObjectId]): Any = v match {
     case SimpleValue(value) if value == Undefined => null
     case SimpleValue(value) => value
     case lzy: LazyNode => extract(lzy.resolve(), observedObjectIds)
     case ArrayNode(_, oid) if observedObjectIds.contains(oid) => s"<Error: cycle detected for array '${oid.id}'>"
-    case ArrayNode(items, oid) => Array(items.map(item => extract(item, observedObjectIds + oid)): _*)
-    case ObjectNode(oid) if observedObjectIds.contains(oid) => s"<Error: cycle detected for object '${oid.id}'>"
-    case ObjectNode(oid) =>
-      val props = objectInteraction.getOwnProperties(oid)
-      props.map { e =>
-        val propName = e._1
-        e._2.value match {
-          case Some(vn) =>
-            propName -> extract(vn, observedObjectIds + oid)
-          case None =>
-            propName -> (e._2.getter match {
-              case Some(g: FunctionNode) =>
-                objectInteraction.invokePropertyGetter(oid, g) match {
-                  case Success(vn) => extract(vn, observedObjectIds + oid)
-                  case Failure(t) => s"<Error calling getter for property '$propName' of object '${oid.id}': ${t.getMessage}>" // TODO!! Handle better!?
-                }
-              case _ =>
-                s"<Error: Unrecognized property '$propName' of object '${oid.id}'>" //TODO: What here?
-            })
-        }
+    case ArrayNode(items, oid) =>
+      val propMap = propertyMap(oid, observedObjectIds)
+      val length = propMap.get("length").map(_.toString.toInt).getOrElse(0)
+      val array = new Array[Any](length)
+      propMap.foreach {
+        case (UnsignedIntString(idx), value) if idx < length => array(idx) = value
+        case _ =>
       }
-//      data.map(e => e._1 -> extract(e._2, observedObjectIds + oid))
+      array
+    case ObjectNode(oid) if observedObjectIds.contains(oid) => s"<Error: cycle detected for object '${oid.id}'>"
+    case ObjectNode(oid) => propertyMap(oid, observedObjectIds)
     case EmptyNode => null
     case DateNode(stringRep, _) => stringRep
     case FunctionNode(name, _, _) => s"<function $name() {}>"

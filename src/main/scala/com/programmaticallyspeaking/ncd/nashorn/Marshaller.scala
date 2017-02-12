@@ -155,14 +155,16 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case _ => false
   }
 
-  private def toArray(ref: ArrayReference) = ArrayNode(ref.getValues.asScala.map(marshalLater), objectId(ref))
+  private def toArray(ref: ArrayReference) = ArrayNode(ref.length(), objectId(ref))
 
   private def toArray(mirror: ScriptObjectMirror) = {
-    ArrayNode(Seq.empty, objectId(mirror.scriptObject))
+    val size = mirror.getInt("length", 0)
+    ArrayNode(size, objectId(mirror.scriptObject))
   }
 
   private def toArray(mirror: JSObjectMirror) = {
-    ArrayNode(Seq.empty, objectId(mirror.jsObject)) // TODO: Items, but we will refactor...
+    val size = mirror.getInt("length", 0)
+    ArrayNode(size, objectId(mirror.jsObject)) // TODO: Items, but we will refactor...
   }
 
   private def toDate(mirror: ScriptObjectMirror) = {

@@ -56,22 +56,11 @@ class MarshallerTest extends UnitTest with MockitoSugar {
         newMarshaller.marshal(ar) shouldBe an[ArrayNode]
       }
 
-      "by mapping the values to lazy nodes" in {
-        val ar = arrayOfStrings(Seq("a"))
+      "by just extracting the size (maybe this kind of marshalling should go away?)" in {
+        val ar = arrayOfStrings(Seq("a", "b"))
 
         val result = newMarshaller.marshal(ar).asInstanceOf[ArrayNode]
-        result.items.map(_.isInstanceOf[LazyNode]).headOption should be (Some(true))
-      }
-
-      "by correctly marshalling a lazy array item" in {
-        val ar = arrayOfStrings(Seq("a"))
-
-        val result = newMarshaller.marshal(ar).asInstanceOf[ArrayNode]
-        result.items.headOption match {
-          case Some(lv: LazyNode) =>
-            lv.resolve() should be (SimpleValue("a"))
-          case x => fail("unexpected: " + x)
-        }
+        result.size should be (2)
       }
 
       "and register the mapping in the registry" in {
@@ -82,40 +71,12 @@ class MarshallerTest extends UnitTest with MockitoSugar {
       }
     }
   }
-//
-//  "Marshaller.marshalledAs" - {
-//    "should extract a string" in {
-//      val value = stringRef("test")
-//      newMarshaller.marshalledAs[String](value) should be ("test")
-//    }
-//
-//    "should extract a Scala Boolean" in {
-//      val value = booleanValue(true)
-//      newMarshaller.marshalledAs[Boolean](value) should be (true)
-//    }
-//
-//    "should throw if trying to extract a value of the wrong type" in {
-//      val value = booleanValue(true)
-//      assertThrows[ClassCastException](newMarshaller.marshalledAs[String](value))
-//    }
-//  }
-//
-//  "Marshaller.marshalledAsOptionally" - {
-//    "should extract a string" in {
-//      val value = stringRef("test")
-//      newMarshaller.marshalledAsOptionally[String](value) should be (Some("test"))
-//    }
-//
-//    "should return None if trying to extract a value of the wrong type" in {
-//      val value = booleanValue(true)
-//      newMarshaller.marshalledAsOptionally[String](value) should be (None)
-//    }
-//  }
 
   private def arrayOfStrings(strings: Seq[String]): ArrayReference = {
     val ar = mock[ArrayReference]
     val list: java.util.List[Value] = strings.map(s => stringRef(s).asInstanceOf[Value]).asJava
     when(ar.getValues).thenReturn(list)
+    when(ar.length()).thenReturn(strings.size)
     ar
   }
 

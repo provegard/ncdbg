@@ -6,6 +6,8 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.testing.{MapBasedObjectInteraction, UnitTest}
 import org.scalatest.Inside
 
+import scala.collection.mutable
+
 class RemoteObjectConverterTest extends UnitTest with Inside {
 
   def lazyNode(v: ValueNode) = new LazyNode {
@@ -49,7 +51,7 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
 
     "convert ArrayNode to an array-based RemoteObject with a JSON object Id" in {
       val lzy = lazyNode(SimpleValue("s"))
-      val arr = ArrayNode(Seq(lzy), ObjectId("obj-1"))
+      val arr = ArrayNode(1, ObjectId("obj-1"))
 
       converter.toRemoteObject(arr) should be (RemoteObject.forArray(1, """{"id":"obj-1"}"""))
     }
@@ -85,8 +87,16 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
     }
   }
 
+  def valueConverter[A <: ValueNode](objectId: ObjectId, data: Map[String, A]) = RemoteObjectConverter.byValue(new MapBasedObjectInteraction(Map(objectId -> data)))
+  def arrayToMap[A <: ValueNode](data: Seq[A]): Map[String, ValueNode] = {
+    val map = mutable.Map[String, ValueNode]()
+    data.zipWithIndex.foreach(e => map += (e._2.toString -> e._1))
+    map += ("length" -> SimpleValue(data.size))
+    map.toMap
+  }
+  def valueConverter[A <: ValueNode](objectId: ObjectId, data: Seq[A]) = RemoteObjectConverter.byValue(new MapBasedObjectInteraction(Map(objectId -> arrayToMap(data))))
+
   "Value-based RemoteObjectConverter should" - {
-    def valueConverter[A <: ValueNode](objectId: ObjectId, data: Map[String, A]) = RemoteObjectConverter.byValue(new MapBasedObjectInteraction(Map(objectId -> data)))
 
     "convert ObjectNode by-value to an object value without object ID" in {
       val data = Map("foo" -> SimpleValue("bar"))
@@ -97,11 +107,11 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
     }
 
     "convert ArrayNode by-value to an array value without object ID" in {
-      val data = Seq(LazyNode.eager(SimpleValue("bar")))
+      val data = Seq(SimpleValue("bar"))
       val objectId = ObjectId("obj-1")
-      val arr = ArrayNode(data, objectId)
+      val arr = ArrayNode(1, objectId)
 
-      valueConverter(objectId, Map.empty).toRemoteObject(arr) should be (RemoteObject.forArray(Array("bar")))
+      valueConverter(objectId, data).toRemoteObject(arr) should be (RemoteObject.forArray(Array("bar")))
     }
   }
 }

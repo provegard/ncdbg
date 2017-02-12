@@ -5,7 +5,7 @@ import akka.testkit.TestProbe
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.PausedEventParams
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor}
+import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -29,6 +29,10 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     override val contents: String = "abc"
     override val id: String = theId
   }
+
+  private val objectProperties = mutable.Map[ObjectId, Map[String, Any]]()
+
+  def setProperties(c: ComplexNode, props: Map[String, Any]): Unit = objectProperties += (c.objectId -> props)
 
   "Debugger" - {
     "enable" - {
@@ -314,15 +318,16 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "should support by-value return" in {
-        val items = Seq(LazyNode.eager(SimpleValue("abc")))
-        val arr = ArrayNode(items, ObjectId("x"))
-        testEvalHandling(arr, returnByValue = Some(true)) { resp =>
-          resp.result should be (RemoteObject.forArray(Seq("abc")))
+        val obj = ObjectNode(ObjectId("x"))
+        setProperties(obj, Map("foo" -> "bar"))
+        testEvalHandling(obj, returnByValue = Some(true)) { resp =>
+          resp.result should be (RemoteObject.forObject(Map("foo" -> "bar")))
         }
       }
 
       "should generate a preview if requested" in {
         val obj = ObjectNode(ObjectId("x"))
+        setProperties(obj, Map.empty)
         testEvalHandling(obj, generatePreview = Some(true)) { resp =>
           resp.result.preview should be ('defined)
         }
@@ -330,6 +335,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       "should request own object properties and not only accessors when generating a preview" in {
         val obj = ObjectNode(ObjectId("x"))
+        setProperties(obj, Map.empty)
         testEvalHandling(obj, generatePreview = Some(true)) { resp =>
           verify(currentScriptHost).getObjectProperties(ObjectId("x"), true, false)
         }
@@ -368,7 +374,17 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         activeBreakpoints -= id
         Done
     })
-    when(host.getObjectProperties(any[ObjectId], any[Boolean], any[Boolean])).thenReturn(Map.empty[String, ObjectPropertyDescriptor])
+    when(host.getObjectProperties(any[ObjectId], any[Boolean], any[Boolean])).thenAnswer((invocation: InvocationOnMock) => {
+      val objectId = invocation.getArgument[ObjectId](0)
+      objectProperties.get(objectId) match {
+        case Some(props) =>
+          props.map { e =>
+            e._1 -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, true, true, Some(SimpleValue(e._2)), None, None)
+          }
+
+        case None => throw new IllegalArgumentException("Unknown object ID: " + objectId)
+      }
+    })
 
     host
   }

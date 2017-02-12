@@ -26,11 +26,6 @@ object PreviewGenerator {
     // Append ellipsis (...)
     string.substring(0, maxLength) + "\u2026"
   }
-
-  private[PreviewGenerator] def isUnsignedInt(s: String) = Try(s.toInt) match {
-    case Success(value) => value >= 0
-    case Failure(_) => false
-  }
 }
 
 /**
@@ -45,6 +40,7 @@ object PreviewGenerator {
   */
 class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
   import PreviewGenerator._
+  import com.programmaticallyspeaking.ncd.infra.StringUtils._
 
   private val converter = RemoteObjectConverter.byReference
 

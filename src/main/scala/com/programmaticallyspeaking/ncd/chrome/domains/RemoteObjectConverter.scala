@@ -19,7 +19,7 @@ class ByReferenceRemoteObjectConverter extends RemoteObjectConverter {
   private def objectId(value: ComplexNode) = value.objectId.toString
 
   def toRemoteObject(value: ValueNode): RemoteObject = value match {
-    case array: ArrayNode => RemoteObject.forArray(array.items.size, objectId(array))
+    case array: ArrayNode => RemoteObject.forArray(array.size, objectId(array))
     case obj: ObjectNode => RemoteObject.forObject(objectId(obj))
     case date: DateNode => RemoteObject.forDate(date.stringRepresentation, objectId(date))
     case regexp: RegExpNode => RemoteObject.forRegExp(regexp.stringRepresentation, objectId(regexp))
