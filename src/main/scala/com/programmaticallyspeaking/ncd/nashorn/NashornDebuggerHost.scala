@@ -26,8 +26,8 @@ object NashornDebuggerHost {
 
   val InitialScriptResolveAttempts = 5
 
-  val NIR_DebuggerSupport = "jdk.nashorn.internal.runtime.DebuggerSupport"
   val NIR_ScriptRuntime = "jdk.nashorn.internal.runtime.ScriptRuntime"
+  val NIR_Context = "jdk.nashorn.internal.runtime.Context"
   val JL_Boolean = "java.lang.Boolean"
   val JL_Integer = "java.lang.Integer"
   val JL_Long = "java.lang.Long"
@@ -37,8 +37,8 @@ object NashornDebuggerHost {
   val ScriptRuntime_DEBUGGER = "DEBUGGER"
 
   val wantedTypes = Set(
-    NIR_DebuggerSupport,
     NIR_ScriptRuntime,
+    NIR_Context,
     JL_Boolean,
     JL_Integer,
     JL_Long,
@@ -408,7 +408,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       case Some(scriptRuntime) =>
         // Just using "{}" returns undefined - don't know why - but "Object.create" works well.
         // Use the passed scope object as prototype object so that scope variables will be seen as well.
-        val anObject = DebuggerSupport_eval(marshaller.thread, scopeObject, null, "Object.create(this)").asInstanceOf[ObjectReference]
+        val anObject = DebuggerSupport_eval_custom(marshaller.thread, scopeObject, null, "Object.create(this)").asInstanceOf[ObjectReference]
         val mirror = new ScriptObjectMirror(anObject)
         freeVariables.foreach {
           case (name, value) =>
@@ -427,16 +427,50 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  private def DebuggerSupport_eval(thread: ThreadReference, thisObject: Value, scopeObject: Value, code: String): Value  = {
-    foundWantedTypes.get(NIR_DebuggerSupport) match {
+  /** Custom version of jdk.nashorn.internal.runtime.DebuggerSupport.eval that makes a difference between a returned
+    * exception value and a thrown exception value. If we use the real DebuggerSupport.eval, there's no way to know
+    * if an actual Java exception was returned or thrown as a result of an evaluation error.
+    *
+    * @param thread the thread to use when invoking methods
+    * @param thisObject the object to use as `this`. If `null`, the global object will be used.
+    * @param scopeObject the object to use as scope. If `null`, the global object will be used.
+    * @param code the code to evaluate
+    * @return the result of the evaluation. A thrown exception is wrapped in a [[ThrownExceptionReference]] instance.
+    */
+  private def DebuggerSupport_eval_custom(thread: ThreadReference, thisObject: Value, scopeObject: Value, code: String): Value = {
+    // Based on the following code:
+//    static Object eval(ScriptObject scope, Object self, String string, boolean returnException) {
+//      Global global = Context.getGlobal();
+//      Object initialScope = scope != null?scope:global;
+//      Object callThis = self != null?self:global;
+//      Context context = global.getContext();
+//
+//      try {
+//        return context.eval((ScriptObject)initialScope, string, callThis, ScriptRuntime.UNDEFINED);
+//      } catch (Throwable var9) {
+//        return returnException?var9:null;
+//      }
+//    }
+    foundWantedTypes.get(NIR_Context) match {
       case Some(ct: ClassType) =>
         val invoker = new StaticInvoker(thread, ct)
 
-        // eval(ScriptObject scope, Object self, String string, boolean returnException
-        invoker.eval(scopeObject, thisObject, code, true)
+        val global = invoker.getGlobal()
+        val globalInvoker = new DynamicInvoker(thread, global.asInstanceOf[ObjectReference])
+        val initialScope = if (scopeObject != null) scopeObject else global
+        val callThis = if (thisObject != null) thisObject else global
+        val context = globalInvoker.getContext()
+        val contextInvoker = new DynamicInvoker(thread, context.asInstanceOf[ObjectReference])
+
+        try {
+          contextInvoker.eval(initialScope, code, callThis, null)
+        } catch {
+          case ex: InvocationException =>
+            new ThrownExceptionReference(virtualMachine, ex.exception())
+        }
 
       case _ =>
-        throw new IllegalStateException("The DebuggerSupport type wasn't found, cannot evaluate code.")
+        throw new IllegalStateException("The Context type wasn't found, cannot evaluate code.")
     }
   }
 
@@ -477,12 +511,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     def toScope(v: Value) = Scope(marshaller.marshal(v), scopeTypeFromValueType(v))
     def findGlobalScope(): Option[Scope] = {
       if (scopeTypeFromValueType(thisValue) == ScopeType.Global) {
-        // this == global, so no need to call DebuggerSupport.getGlobal().
+        // this == global, so no need to call Context.getGlobal().
         Some(Scope(marshalledThisNode, ScopeType.Global))
       } else {
-        foundWantedTypes.get(NIR_DebuggerSupport) match {
-          case Some(debuggerSupport) =>
-            val invoker = new StaticInvoker(marshaller.thread, debuggerSupport)
+        foundWantedTypes.get(NIR_Context) match {
+          case Some(context) =>
+            val invoker = new StaticInvoker(marshaller.thread, context)
             val global = invoker.getGlobal()
             Option(global).map(toScope)
           case None =>
@@ -554,7 +588,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
                 val scopeToUse = scopeWithFreeVariables(originalScope.getOrElse(originalThis), namedValues ++ localValues)
 
                 try {
-                  val ret = DebuggerSupport_eval(thread, originalThis, scopeToUse, code)
+                  val ret = DebuggerSupport_eval_custom(thread, originalThis, scopeToUse, code)
                   marshaller.marshal(ret)
                 } catch {
                   case ex: Exception =>

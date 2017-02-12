@@ -73,12 +73,6 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
             Some("java.lang.IllegalArgumentException: oops")))
         }
       }
-
-      "with a flag indicating it's Throwable based" in {
-        evalException { err =>
-          err.isBasedOnThrowable should be (true)
-        }
-      }
     }
 
     "RegExp" - {

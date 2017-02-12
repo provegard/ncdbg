@@ -214,7 +214,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       Option(fileNameValue).getOrElse("<unknown>"), //TODO: To URL?
       Option(stackValue)
     )
-    ErrorValue(exData, isBasedOnThrowable = false, objectId(mirror.scriptObject))
+    ErrorValue(exData, isThrown = false, objectId(mirror.scriptObject))
   }
 
   private def marshalLater(v: Value) = new LazyMarshalledValue(v)
@@ -238,22 +238,30 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   }
 
   object ExceptionValue {
+    /** Unpack an [[ErrorValue]] instance and an optional Java stack string from an exception value. The Java stack
+      * string is returned separately because it is added as an extra property for the exception object when it is
+      * registered in the mapping registry.
+      *
+      * @param v the value that may be an exception
+      */
     def unapply(v: Value): Option[(ErrorValue, Option[String])] = v match {
-      case objRef: ObjectReference =>
-        val types = allReachableTypesIncluding(objRef.referenceType())
-        val isThrowable = types.exists(_.name() == classOf[Throwable].getName)
-        val nashornException = types.find(_.name() == classOf[NashornException].getName)
-
-        if (isThrowable) {
-          val data = exceptionDataOf(objRef, nashornException)
-          Some((ErrorValue(data.data, isBasedOnThrowable = true, objectId(v)), data.javaStack))
-        } else None
-
+      case t: ThrownExceptionReference => unpack(t.exception, wasThrown = true)
+      case objRef: ObjectReference => unpack(objRef, wasThrown = false)
       case _ => None
     }
 
+    private def unpack(exception: ObjectReference, wasThrown: Boolean): Option[(ErrorValue, Option[String])] = {
+      val types = allReachableTypesIncluding(exception.referenceType())
+      val isThrowable = types.exists(_.name() == classOf[Throwable].getName)
+      val nashornException = types.find(_.name() == classOf[NashornException].getName)
+
+      if (isThrowable) {
+        val data = exceptionDataOf(exception, nashornException)
+        Some((ErrorValue(data.data, isThrown = wasThrown, objectId(exception)), data.javaStack))
+      } else None
+    }
+
     private def extractJavaExceptionInfo(mirror: ThrowableMirror): Option[ExceptionInfo] = {
-//      val mirror = new ThrowableMirror(exception)
       val stackTraceElements = mirror.stackTrace
 
       val stack = stackTraceElements.map("\tat " + _.actualToString).mkString("\n")

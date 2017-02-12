@@ -16,13 +16,13 @@ trait ScriptEvaluateSupport { self: Logging =>
     val exceptionId = 1
 
     scriptHost.evaluateOnStackFrame(callFrameId, expression, namedObjects) match {
-      case Success(err: ErrorValue) if reportException && err.isBasedOnThrowable =>
+      case Success(err: ErrorValue) if reportException && err.isThrown =>
         val data = err.data
         // Note that Chrome wants line numbers to be 0-based
         val details = Runtime.ExceptionDetails(exceptionId, data.message, data.lineNumberBase1 - 1, data.columnNumber, Some(data.url))
         // Apparently we need to pass an actual value with the exception details
         EvaluationResult(RemoteObject.undefinedValue, Some(details))
-      case Success(err: ErrorValue) if err.isBasedOnThrowable =>
+      case Success(err: ErrorValue) if err.isThrown =>
         EvaluationResult(RemoteObject.undefinedValue)
       case Success(result) => EvaluationResult(remoteObjectConverter.toRemoteObject(result))
       case Failure(t) =>

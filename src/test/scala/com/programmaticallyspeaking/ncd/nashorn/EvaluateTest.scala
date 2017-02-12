@@ -109,7 +109,7 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
           |throw new Type("oops");
         """.stripMargin
       evaluateError(script, expression) { err =>
-        err.isBasedOnThrowable should be (true)
+        err.isThrown should be (true)
       }
     }
 
@@ -123,7 +123,7 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
           |}
         """.stripMargin
       evaluateError(script, "e") { err =>
-        err.isBasedOnThrowable should be (false)
+        err.isThrown should be (false)
       }
     }
   }
