@@ -10,9 +10,10 @@ class JSObjectMirror(val jsObject: ObjectReference)(implicit marshaller: Marshal
 
   private lazy val invoker = new DynamicInvoker(marshaller.thread, jsObject)
 
-  lazy val getClassName: String = invoker.getClassName().asString
+  lazy val className: String = invoker.getClassName().asString
 
-  lazy val isArray: Boolean = invoker.isArray().asBool(false) || getClassName == "Array"
+  lazy val isArray: Boolean = invoker.isArray().asBool(false) || className == "Array"
+  lazy val isFunction: Boolean = invoker.isFunction().asBool(false) || className == "Function"
 
   def keySet(): Set[String] = {
     val theSet = invoker.keySet().asInstanceOf[ObjectReference]

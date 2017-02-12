@@ -123,6 +123,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     val jsObject = value.asInstanceOf[ObjectReference]
     val mirror = new JSObjectMirror(jsObject)
     if (mirror.isArray) toArray(mirror)
+    else if (mirror.isFunction) toFunction(mirror)
     else toObject(mirror)
   }
 
@@ -186,6 +187,14 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     val source = mirror.source
 
     FunctionNode(name, source, objectId(mirror.scriptObject))
+  }
+
+  private def toFunction(mirror: JSObjectMirror) = {
+    // No way to get the source here. We try to get the name as a member.
+    val name = Option(mirror.getString("name")).getOrElse("")
+    val source = s"function $name() {}"
+
+    FunctionNode(name, source, objectId(mirror.jsObject))
   }
 
   private def toError(mirror: ScriptObjectMirror) = {

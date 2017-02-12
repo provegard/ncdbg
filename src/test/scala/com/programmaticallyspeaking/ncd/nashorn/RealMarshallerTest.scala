@@ -1,11 +1,17 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import java.util
+
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, PropertyDescriptorType, Undefined}
 import com.programmaticallyspeaking.ncd.infra.StringAnyMap
+import jdk.nashorn.api.scripting.AbstractJSObject
 import org.scalactic.Equality
 import org.scalatest.Inside
 import org.scalatest.prop.TableDrivenPropertyChecks
+
+import scala.collection.mutable
+import scala.util.Try
 
 class RealMarshallerTest extends RealMarshallerTestFixture with Inside with TableDrivenPropertyChecks {
   import RealMarshallerTest._
@@ -54,9 +60,9 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
         |return obj;
         |})()
       """.stripMargin, Map("foo" -> Map("get" -> "<function>", "set" -> "<function>"))),
-    ("JSObject array", "createArray('a','b')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
-    ("JSObject object", "createObject('a',42,'b',43)", Map("a" -> 42, "b" -> 43)),
-    ("JSObject function", "createFunctionThatReturns('test')", Map.empty)
+    ("JSObject array (classname)", s"createInstance('${classOf[ClassNameBasedArrayJSObject].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
+    ("JSObject array (isArray)", s"createInstance('${classOf[IsArrayBasedArrayJSObject].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
+    ("JSObject object", s"createInstance('${classOf[ObjectLikeJSObject].getName}')", Map("a" -> 42, "b" -> 43))
   )
 
   "Marshalling of simple values works for" - {
@@ -106,17 +112,6 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
         }
       }
 
-//      "with Java stack trace data" in {
-//        evalException { err =>
-//          err.data.javaStackIncludingMessage match {
-//            case Some(stack) =>
-//              stack should fullyMatch regex ("(?s)^java\\.lang\\.IllegalArgumentException: oops\n\tat.*<eval>.*".r)
-//
-//            case None => fail("No Java stack")
-//          }
-//        }
-//      }
-
       "with a flag indicating it's Throwable based" in {
         evalException { err =>
           err.isBasedOnThrowable should be (true)
@@ -159,6 +154,60 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
         }
       }
     }
+
+    "JSObject-based array" - {
+      def evalArray(expr: String)(handler: (ArrayNode) => Unit): Unit = {
+        evaluateExpression(expr) { (host, actual) =>
+          inside(actual) {
+            case an: ArrayNode => handler(an)
+          }
+        }
+      }
+
+      val testCases = Table(
+        ("description", "class"),
+        ("with proper class name", classOf[ClassNameBasedArrayJSObject]),
+        ("with isArray==true", classOf[IsArrayBasedArrayJSObject])
+      )
+
+      forAll(testCases) { (description, clazz) =>
+        description in {
+          val expr = s"createInstance('${clazz.getName}')"
+          evalArray(expr) { an =>
+            an.size should be (2)
+          }
+        }
+      }
+    }
+
+    "JSObject-based function" - {
+      def evalFunction(expr: String)(handler: (FunctionNode) => Unit): Unit = {
+        evaluateExpression(expr) { (_, actual) =>
+          inside(actual) {
+            case fn: FunctionNode => handler(fn)
+          }
+        }
+      }
+
+      val testCases = Table(
+        ("description", "class", "tester"),
+        ("with proper class name", classOf[ClassNameBasedFunctionJSObject],
+          (fn: FunctionNode) => {fn.name should be ("")}),
+        ("with isFunction==true", classOf[IsFunctionBasedFunctionJSObject],
+          (fn: FunctionNode) => {fn.name should be ("")}),
+        ("with a name", classOf[WithNameFunctionJSObject],
+          (fn: FunctionNode) => {fn.copy(objectId = null) should be (FunctionNode("fun", "function fun() {}", null))})
+      )
+
+      forAll(testCases) { (description, clazz, tester) =>
+        description in {
+          val expr = s"createInstance('${clazz.getName}')"
+          evalFunction(expr) { fn =>
+            tester(fn)
+          }
+        }
+      }
+    }
   }
 
   "Marshalling of complex values works for" - {
@@ -175,8 +224,13 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
 
 object RealMarshallerTest {
   def expand(host: ScriptHost, node: ValueNode): Any = {
+    val seenObjectIds = mutable.Set[ObjectId]()
     def recurse(node: ValueNode): Any = node match {
+      case complex: ComplexNode if seenObjectIds.contains(complex.objectId) =>
+        // In Nashorn, apparently the constructor of the prototype of a function is the function itself...
+        throw new Exception("Cycle detected for object " + complex.objectId)
       case complex: ComplexNode =>
+        seenObjectIds += complex.objectId
         host.getObjectProperties(complex.objectId, true, false).map(e => e._2.descriptorType match {
           case PropertyDescriptorType.Generic =>
             e._1 -> "???"
@@ -213,4 +267,66 @@ object RealMarshallerTest {
 
       case other => false
     }
+}
+
+abstract class BaseArrayJSObject(items: Seq[AnyRef]) extends AbstractJSObject {
+  import scala.collection.JavaConverters._
+  override def hasSlot(slot: Int): Boolean = slot >= 0 && slot < items.size
+
+  override def getSlot(index: Int): AnyRef = items(index)
+
+  override def hasMember(name: String): Boolean = Try(name.toInt).map(hasSlot).getOrElse(name == "length")
+
+  override def getMember(name: String): AnyRef = Try(name.toInt).map(getSlot).getOrElse(if (name == "length") items.size.asInstanceOf[AnyRef] else null)
+
+  override def keySet(): util.Set[String] = (items.indices.map(_.toString) :+ "length").toSet.asJava
+
+  override def values(): util.Collection[AnyRef] = items.asJava
+}
+
+class ClassNameBasedArrayJSObject extends BaseArrayJSObject(Seq("a", "b")) {
+  override def getClassName: String = "Array"
+}
+
+class IsArrayBasedArrayJSObject extends BaseArrayJSObject(Seq("a", "b")) {
+  override def isArray: Boolean = true
+}
+
+
+class ObjectLikeJSObject extends AbstractJSObject {
+  import scala.collection.JavaConverters._
+  val data: Map[String, AnyRef] = Map("a" -> 42.asInstanceOf[AnyRef], "b" -> 43.asInstanceOf[AnyRef])
+
+  override def values(): util.Collection[AnyRef] = data.values.toList.asJava
+
+  override def hasMember(name: String): Boolean = data.contains(name)
+
+  override def getMember(name: String): AnyRef = data(name)
+
+  override def getClassName: String = "Object"
+
+  override def keySet(): util.Set[String] = data.keySet.asJava
+}
+
+abstract class BaseFunctionJSObject extends AbstractJSObject {
+  override def call(thiz: scala.Any, args: AnyRef*): AnyRef = "ok"
+}
+
+class ClassNameBasedFunctionJSObject extends BaseFunctionJSObject {
+  override def getClassName: String = "Function"
+
+  override def call(thiz: scala.Any, args: AnyRef*): AnyRef = "ok"
+}
+
+class IsFunctionBasedFunctionJSObject extends BaseFunctionJSObject {
+  override def call(thiz: scala.Any, args: AnyRef*): AnyRef = "ok"
+
+  override def isFunction: Boolean = true
+}
+
+class WithNameFunctionJSObject extends ClassNameBasedFunctionJSObject {
+  override def getMember(name: String): AnyRef = {
+    if (name == "name") "fun"
+    else super.getMember(name)
+  }
 }
