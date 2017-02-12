@@ -62,6 +62,7 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
       """.stripMargin, Map("foo" -> Map("get" -> "<function>", "set" -> "<function>"))),
     ("JSObject array (classname)", s"createInstance('${classOf[ClassNameBasedArrayJSObject].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
     ("JSObject array (isArray)", s"createInstance('${classOf[IsArrayBasedArrayJSObject].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
+    ("JSObject array (slot only)", s"createInstance('${classOf[OnlySlotBasedArrayJSObject].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
     ("JSObject object", s"createInstance('${classOf[ObjectLikeJSObject].getName}')", Map("a" -> 42, "b" -> 43))
   )
 
@@ -292,6 +293,9 @@ class IsArrayBasedArrayJSObject extends BaseArrayJSObject(Seq("a", "b")) {
   override def isArray: Boolean = true
 }
 
+class OnlySlotBasedArrayJSObject extends IsArrayBasedArrayJSObject {
+  override def getMember(name: String): AnyRef = if (name == "length") super.getMember("length") else null
+}
 
 class ObjectLikeJSObject extends AbstractJSObject {
   import scala.collection.JavaConverters._

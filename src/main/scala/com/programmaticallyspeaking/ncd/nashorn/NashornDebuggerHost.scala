@@ -857,7 +857,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     Done
   }
 
-  private def propertiesFromJSObject(jsObject: ObjectReference)(implicit marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
+  private def propertiesFromJSObject(jsObject: ObjectReference, isArray: Boolean)(implicit marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
+    import com.programmaticallyspeaking.ncd.infra.StringUtils._
     val mirror = new JSObjectMirror(jsObject)
 
     // For an array, keySet should return indices + "length", and then we get use getMember. An alternative would be to
@@ -865,7 +866,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     val properties = mirror.keySet()
 
     properties.map { prop =>
-      val theValue = mirror.getUnknown(prop)
+      val theValue = mirror.getUnknown(prop) match {
+        case EmptyNode|SimpleValue(Undefined) if isArray && isUnsignedInt(prop) =>
+          // For a slot-based array JSObject, getMember may return nothing (which admittedly is wrong).
+          mirror.getSlot(prop.toInt)
+        case other => other
+      }
+
       prop -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, true, false,
         Option(theValue), None, None)
     }.toMap
@@ -932,7 +939,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             case Some(ref: ObjectReference) if marshaller.isScriptObject(ref) =>
               propertiesFromScriptObject(ref, onlyOwn, onlyAccessors)
             case Some(ref: ObjectReference) if marshaller.isJSObject(ref) =>
-              propertiesFromJSObject(ref)
+              propertiesFromJSObject(ref, node.isInstanceOf[ArrayNode])
             case _ => Map.empty
           }
 

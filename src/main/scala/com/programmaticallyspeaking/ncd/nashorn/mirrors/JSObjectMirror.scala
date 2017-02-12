@@ -26,8 +26,11 @@ class JSObjectMirror(val jsObject: ObjectReference)(implicit marshaller: Marshal
   def getInt(key: String, defaultValue: Int): Int = invoker.applyDynamic(getMemberSignature)(key).asInt(defaultValue)
 
   def getUnknown(key: String): ValueNode = invoker.applyDynamic(getMemberSignature)(key)
+
+  def getSlot(index: Int): ValueNode = invoker.applyDynamic(getSlotSignature)(index)
 }
 
 object JSObjectMirror {
   val getMemberSignature = "getMember(Ljava/lang/String;)Ljava/lang/Object;"
+  val getSlotSignature = "getSlot(I)Ljava/lang/Object;"
 }
