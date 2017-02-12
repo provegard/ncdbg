@@ -65,6 +65,13 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
       }
     }
 
+    def evaluateError(script: String, expression: String)(handler: (ErrorValue) => Unit) = {
+      evaluate(script, expression) {
+        case e: ErrorValue => handler(e)
+        case other => fail("Unexpected: " + other)
+      }
+    }
+
     forAll(cases) { (desc, script, expression, result) =>
       s"works for $desc" in {
         evaluate(script, expression) { value =>
@@ -73,32 +80,50 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
       }
     }
 
-    "of a thrown JS error" - {
+    "and throwing a JS error" - {
       val script = "(function () { debugger; })();"
       val expression = "throw new TypeError('ugh');"
 
-      def evaluateError(handler: (ExceptionData) => Unit) = {
-        evaluate(script, expression) {
-          case ErrorValue(data, true, _) => handler(data)
-          case other => fail("Unexpected: " + other)
-        }
-      }
-
       "results in the correct exception data" in {
-        evaluateError { data =>
-          data.copy(stackIncludingMessage = None) should be (ExceptionData(
+        evaluateError(script, expression) { err =>
+          err.data.copy(stackIncludingMessage = None) should be (ExceptionData(
             "jdk.nashorn.internal.runtime.ECMAException", "TypeError: ugh", 1, 0, "<eval>", None))
         }
       }
 
       "results in the stack trace data including message" in {
-        evaluateError { data =>
-          data.stackIncludingMessage match {
+        evaluateError(script, expression) { err =>
+          err.data.stackIncludingMessage match {
             case Some(stack) =>
               stack should fullyMatch regex ("(?s).*TypeError: ugh.*at <program> \\(<eval>:1\\).*")
             case None => fail("no stack")
           }
         }
+      }
+    }
+
+    "marks a thrown Java exception as thrown" in {
+      val script = "(function () { debugger; })();"
+      val expression =
+        """var Type = Java.type("java.lang.RuntimeException");
+          |throw new Type("oops");
+        """.stripMargin
+      evaluateError(script, expression) { err =>
+        err.isBasedOnThrowable should be (true)
+      }
+    }
+
+    "marks an evaluated Java exception as not thrown" in {
+      val script =
+        """try {
+          |  var Type = Java.type("java.lang.RuntimeException");
+          |  throw new Type("oops");
+          |} catch (e) {
+          |  debugger;
+          |}
+        """.stripMargin
+      evaluateError(script, "e") { err =>
+        err.isBasedOnThrowable should be (false)
       }
     }
   }
