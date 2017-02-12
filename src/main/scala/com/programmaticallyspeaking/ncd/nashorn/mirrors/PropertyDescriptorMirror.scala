@@ -12,7 +12,7 @@ class PropertyDescriptorMirror(propertyDescriptor: ObjectReference)(implicit mar
   lazy val isEnumerable: Boolean = invoker.isEnumerable().asBool(false)
   lazy val isWritable: Boolean = invoker.isWritable().asBool(false)
 
-  lazy val getType: Int = invoker.`type`().asInt(-1)
+  lazy val getType: Int = invoker.`type`().asNumber(-1).intValue()
 
   // Not relevant to return these as real functions, though it causes the mirror interface to be a bit weird
   lazy val getValue: ValueNode = marshaller.marshal(invoker.getValue())

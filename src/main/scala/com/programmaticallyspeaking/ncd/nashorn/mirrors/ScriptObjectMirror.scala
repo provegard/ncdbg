@@ -39,9 +39,10 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
     invoker.applyDynamic(putObjectObjectBoolSignature)(key, value, isStrict)
 
   def getString(key: AnyRef): String = invoker.applyDynamic(getObjectSignature)(key).asString
-  def getInt(key: AnyRef, defaultValue: Int): Int = invoker.applyDynamic(getObjectSignature)(key).asInt(defaultValue)
+  def getInt(key: AnyRef, defaultValue: Int): Int = invoker.applyDynamic(getObjectSignature)(key).asNumber(defaultValue).intValue()
+
   def getRequiredInt(key: AnyRef): Int =
-    invoker.applyDynamic(getObjectSignature)(key).asInt(throw new IllegalStateException(s"Property $key doesn't have an integer value"))
+    invoker.applyDynamic(getObjectSignature)(key).asNumber(throw new IllegalStateException(s"Property $key doesn't have a number value")).intValue()
 
   def actualToString: String = invoker.applyDynamic("toString")().asString
 

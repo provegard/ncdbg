@@ -32,9 +32,8 @@ sealed trait ValueNode {
   def asBool(dflt: => Boolean): Boolean =
     as[java.lang.Boolean].map(_.booleanValue()).getOrElse(dflt)
 
-  // TODO: Try Double also?
-  def asInt(dflt: => Int): Int =
-    as[java.lang.Integer].map(_.intValue()).getOrElse(dflt)
+  def asNumber(dflt: => Number): Number =
+    as[java.lang.Number].getOrElse(dflt)
 
   def asString: String = as[String].orNull
 

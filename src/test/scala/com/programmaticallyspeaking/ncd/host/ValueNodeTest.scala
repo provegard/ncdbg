@@ -29,15 +29,20 @@ class ValueNodeTest extends UnitTest {
       }
     }
 
-    "asInt" - {
-      "should return an int for a integer value" in {
+    "asNumber" - {
+      "should return a number for a integer value" in {
         val vn = SimpleValue(42)
-        vn.asInt(0) should be(42)
+        vn.asNumber(0) should be(42)
+      }
+
+      "should return a number for a double value" in {
+        val vn = SimpleValue(42.0)
+        vn.asNumber(0) should be(42.0)
       }
 
       "should return the default for a non-integer value" in {
         val vn = SimpleValue("testing")
-        vn.asInt(0) should be(0)
+        vn.asNumber(0) should be(0)
       }
     }
   }

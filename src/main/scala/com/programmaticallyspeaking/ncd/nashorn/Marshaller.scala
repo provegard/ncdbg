@@ -159,11 +159,12 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   private def toArray(ref: ArrayReference) = ArrayNode(ref.length(), objectId(ref))
 
   private def toArray(mirror: ScriptObjectMirror) = {
-    val size = mirror.getInt("length", 0)
+    val size = mirror.getRequiredInt("length")
     ArrayNode(size, objectId(mirror.scriptObject))
   }
 
   private def toArray(mirror: JSObjectMirror) = {
+    // Not required here - JSObject can have a custom implementation that is broken.
     val size = mirror.getInt("length", 0)
     ArrayNode(size, objectId(mirror.jsObject)) // TODO: Items, but we will refactor...
   }

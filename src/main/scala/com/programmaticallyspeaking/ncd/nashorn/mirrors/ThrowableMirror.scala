@@ -22,7 +22,7 @@ class StackTraceElementMirror(stackTraceElement: ObjectReference)(implicit marsh
   import Mirrors._
   private lazy val invoker = new DynamicInvoker(marshaller.thread, stackTraceElement)
 
-  lazy val lineNumber: Int = invoker.getLineNumber().asInt(throw new IllegalStateException("No getLineNumber method on StackTraceElement??"))
+  lazy val lineNumber: Int = invoker.getLineNumber().asNumber(throw new IllegalStateException("No getLineNumber method on StackTraceElement??")).intValue()
   lazy val fileName: String = invoker.getFileName().asString
 
   lazy val actualToString: String = invoker.applyDynamic("toString")().asString
