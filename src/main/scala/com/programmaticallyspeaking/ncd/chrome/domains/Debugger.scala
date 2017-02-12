@@ -21,6 +21,17 @@ object Debugger {
 
   case class setBreakpointsActive(active: Boolean)
 
+  /** Returns possible locations for breakpoint. scriptId in start and end range locations should be the same.
+    *
+    * Note: Not part of stable API!?
+    *
+    * @param start Start of range to search possible breakpoint locations in.
+    * @param end End of range to search possible breakpoint locations in (excluding).
+    *            When not specifed, end of scripts is used as end of range.
+    * @see https://chromedevtools.github.io/debugger-protocol-viewer/tot/Debugger/#method-getPossibleBreakpoints
+    */
+  case class getPossibleBreakpoints(start: Location, end: Option[Location])
+
   object ScriptParsedEventParams {
     def apply(script: Script): ScriptParsedEventParams = new ScriptParsedEventParams(script.id,
       script.uri,
@@ -35,6 +46,8 @@ object Debugger {
   case class getScriptSource(scriptId: String)
 
   case class GetScriptSourceResult(scriptSource: String)
+
+  case class GetPossibleBreakpointsResult(locations: Seq[Location])
 
   case class setBreakpointByUrl(lineNumber: Int, url: String, columnNumber: Int, condition: String)
 
@@ -122,6 +135,12 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
     case Debugger.setBreakpointsActive(active) =>
       if (active) scriptHost.pauseOnBreakpoints()
       else scriptHost.ignoreBreakpoints()
+
+    case Debugger.getPossibleBreakpoints(start, maybeEnd) =>
+      // TODO: Unit test if works
+      val locations = scriptHost.getBreakpointLineNumbers(start.scriptId, start.lineNumber + 1, maybeEnd.map(_.lineNumber + 1))
+        .map(line1Based => Location(start.scriptId, line1Based - 1, 0))
+      GetPossibleBreakpointsResult(locations)
   }
 
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {

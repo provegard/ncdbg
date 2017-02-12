@@ -1,8 +1,8 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import akka.actor.PoisonPill
+import akka.actor.{ActorRef, PoisonPill}
 import akka.testkit.TestProbe
-import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.PausedEventParams
+import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{Location, PausedEventParams}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor, PropertyDescriptorType}
@@ -135,6 +135,39 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         requestAndReceiveResponse(debugger, "3", Debugger.removeBreakpoint(breakpointId))
 
         activeBreakpoints shouldNot contain (breakpointId)
+      }
+    }
+
+    "getPossibleBreakpoints" - {
+      def setup: ActorRef = {
+        when(currentScriptHost.getBreakpointLineNumbers(any[String], any[Int], any[Option[Int]])).thenReturn(Seq(1, 2, 3))
+
+        val debugger = newActorInstance[Debugger]
+        debugger ! Messages.Request("1", Domain.enable)
+        debugger
+      }
+
+      "should invoke ScriptHost, converting Chrome line numbers (0-based) to Nashorn line numbers (1-based)" in {
+        val debugger = setup
+        val start = Location("a", 1, 0)
+        val end = Location("a", 5, 0)
+
+        requestAndReceiveResponse(debugger, "2", Debugger.getPossibleBreakpoints(start, Some(end)))
+
+        verify(currentScriptHost).getBreakpointLineNumbers("a", 2, Some(6))
+      }
+
+      "should map resulting line numbers back to Chrome space" in {
+        val debugger = setup
+        val start = Location("a", 1, 0)
+        val end = Location("a", 5, 0)
+
+        val result = requestAndReceiveResponse(debugger, "2", Debugger.getPossibleBreakpoints(start, Some(end))) match {
+          case result: Debugger.GetPossibleBreakpointsResult => result
+          case other => fail("Unexpected: " + other)
+        }
+
+        result.locations should be (Seq(Location("a", 0, 0), Location("a", 1, 0), Location("a", 2, 0)))
       }
     }
 

@@ -961,6 +961,17 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       throw new IllegalStateException("Property extraction can only be done in a paused state.")
   }
 
+  override def getBreakpointLineNumbers(scriptId: String, fromLineNumberBase1: Int, toLineNumberBase1: Option[Int]): Seq[Int] = {
+    scriptById(scriptId).flatMap(script => breakableLocationsByScriptUri.get(script.uri)) match {
+      case Some(locations) =>
+        val end = toLineNumberBase1.getOrElse(Int.MaxValue)
+        locations.filter(loc => loc.lineNumber >= fromLineNumberBase1 && loc.lineNumber < end).map(_.lineNumber)
+
+      case None => throw new IllegalArgumentException("Unknown script ID: " + scriptId)
+    }
+  }
+
+
   class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame])
 
 //  class StackFrameImpl(val thisObj: ValueNode, val scopeObj: Option[ValueNode], val locals: ObjectNode,
@@ -972,6 +983,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   case class StackFrameHolder(stackFrame: Option[StackFrame], isAtDebuggerStatement: Boolean = false)
+
 }
 
 object InitialInitializationComplete extends ScriptEvent

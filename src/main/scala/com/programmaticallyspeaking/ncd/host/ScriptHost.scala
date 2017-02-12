@@ -86,6 +86,8 @@ trait ScriptHost {
     */
   def setBreakpoint(scriptUri: String, lineNumberBase1: Int): Breakpoint
 
+  def getBreakpointLineNumbers(scriptId: String, fromLineNumberBase1: Int, toLineNumberBase1: Option[Int]): Seq[Int]
+
   def step(stepType: StepType): Done
 
   /**
