@@ -85,11 +85,8 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       val extra = maybeJavaStack.map(st => "javaStack" -> SimpleValue(st)).toMap + ("message" -> SimpleValue(vn.data.message))
       MarshallerResult(vn, extra)
     case obj: ObjectReference =>
-      // Unknown, so return something inspectable
-      MarshallerResult(ObjectNode(objectId(obj)), Map(
-        "referenceType" -> SimpleValue(obj.referenceType().name()),
-        "uniqueID" -> SimpleValue(obj.uniqueID())
-      ))
+      // Scala/Java object perhaps?
+      ObjectNode(objectId(obj))
     case x if x == null => EmptyNode
     case other => throw new IllegalArgumentException("Don't know how to marshal: " + other)
   }

@@ -8,7 +8,7 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Subject}
-import com.programmaticallyspeaking.ncd.nashorn.mirrors.{JSObjectMirror, ScriptObjectMirror}
+import com.programmaticallyspeaking.ncd.nashorn.mirrors.{JSObjectMirror, ReflectionFieldMirror, ScriptObjectMirror}
 import com.sun.jdi.event._
 import com.sun.jdi.request.EventRequest
 import com.sun.jdi.{StackFrame => _, _}
@@ -927,6 +927,37 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     props.toMap
   }
 
+  private def propertiesFromArbitraryObject(obj: ObjectReference, onlyOwn: Boolean)(implicit marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
+    val invoker = new DynamicInvoker(marshaller.thread, obj)
+    val clazz = invoker.applyDynamic("getClass")().asInstanceOf[ObjectReference]
+    val classInvoker = new DynamicInvoker(marshaller.thread, clazz)
+
+    // TODO: Handle onlyOwn == false
+    classInvoker.getDeclaredFields() match {
+      case arr: ArrayReference =>
+        arr.getValues.asScala.map { f =>
+          val mirror = new ReflectionFieldMirror(f.asInstanceOf[ObjectReference])
+          val isAccessible = mirror.isAccessible
+          if (!isAccessible) {
+            mirror.setAccessible(true)
+          }
+          try {
+            val theValue = mirror.get(obj)
+
+            // TODO: isOwn depends on input (see TODO above)
+            mirror.name -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
+              isWritable = !mirror.isFinal, isOwn = true, Some(theValue), None, None)
+          } finally {
+            if (!isAccessible) {
+              mirror.setAccessible(false)
+            }
+          }
+
+        }.toMap
+      case _ => Map.empty
+    }
+  }
+
   private def propertiesFromScriptObject(scriptObject: ObjectReference, onlyOwn: Boolean, onlyAccessors: Boolean)(implicit marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
     val thread = marshaller.thread
     val mirror = new ScriptObjectMirror(scriptObject)
@@ -990,6 +1021,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               propertiesFromJSObject(ref, node.isInstanceOf[ArrayNode])
             case Some(ref: ArrayReference) =>
               propertiesFromArray(ref)
+            case Some(obj: ObjectReference) =>
+              propertiesFromArbitraryObject(obj, onlyOwn)
             case _ => Map.empty
           }
 

@@ -1,5 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import com.programmaticallyspeaking.ncd.host.ComplexNode
+import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
 import com.programmaticallyspeaking.ncd.infra.StringAnyMap
 import org.scalatest.Inside
 import org.scalatest.prop.TableDrivenPropertyChecks
@@ -43,8 +45,22 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     ("JSObject array (classname)", s"createInstance('${classOf[ClassNameBasedArrayJSObject].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
     ("JSObject array (isArray)", s"createInstance('${classOf[IsArrayBasedArrayJSObject].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
     ("JSObject array (slot only)", s"createInstance('${classOf[OnlySlotBasedArrayJSObject].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
-    ("JSObject object", s"createInstance('${classOf[ObjectLikeJSObject].getName}')", Map("a" -> 42, "b" -> 43))
+    ("JSObject object", s"createInstance('${classOf[ObjectLikeJSObject].getName}')", Map("a" -> 42, "b" -> 43)),
+    ("Scala object with val", s"createInstance('${classOf[ClassWithVal].getName}')", Map("foo" -> "bar")),
+    ("Scala object with var", s"createInstance('${classOf[ClassWithVar].getName}')", Map("foo" -> "var")),
+    ("Scala object with private val", s"createInstance('${classOf[ClassWithPrivateVal].getName}')", Map("foo" -> "priv-val"))
   )
+
+  def testProperties(clazz: Class[_])(handler: (Map[String, ObjectPropertyDescriptor] => Unit)) = {
+    val expr = s"createInstance('${clazz.getName}')"
+    evaluateExpression(expr) {
+      case (host, c: ComplexNode) =>
+        val props = host.getObjectProperties(c.objectId, false, false)
+        handler(props)
+
+      case (host, other) => fail("Unknown: " + other)
+    }
+  }
 
   "Object property expansion works for" - {
     forAll(complexValues) { (desc, expr, expected) =>
@@ -87,6 +103,32 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
         }
       }
     }
+
+    "Scala object" - {
+      "should mark a val as non-writable" in {
+        testProperties(classOf[ClassWithVal]) { props =>
+          props.find(_._1 == "foo").map(_._2.isWritable) should be (Some(false))
+        }
+      }
+
+      "should mark a var as writable" in {
+        testProperties(classOf[ClassWithVar]) { props =>
+          props.find(_._1 == "foo").map(_._2.isWritable) should be (Some(true))
+        }
+      }
+    }
   }
 
+}
+
+class ClassWithVal {
+  val foo = "bar"
+}
+
+class ClassWithVar {
+  var foo = "var"
+}
+
+class ClassWithPrivateVal {
+  private val foo = "priv-val"
 }
