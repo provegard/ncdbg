@@ -1,6 +1,5 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.infra.StringAnyMap
 import org.scalatest.Inside
 import org.scalatest.prop.TableDrivenPropertyChecks
@@ -58,19 +57,32 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     "Java Exception" - {
       val expr = "(function(){try{throw new java.lang.IllegalArgumentException('oops');}catch(e){return e;}})()"
 
-      "with a property 'javaStack' (which cannot be evaluated yet...)" in {
+      def getStringProperty(from: Map[String, Any], prop: String): String = from.get(prop) match {
+        case Some(st: String) => st
+        case Some(st) => fail(s"Unexpected $prop: " + st)
+        case None => fail(s"Missing $prop")
+      }
+
+      def evaluateException(handler: (Map[String, Any] => Unit)) = {
         evaluateExpression(expr) { (host, actual) =>
           expand(host, actual) match {
-            case StringAnyMap(aMap) =>
-              aMap.get("javaStack") match {
-                case Some(st: String) =>
-                  st should startWith ("java.lang.IllegalArgumentException: oops")
-                case Some(st) => fail("Unexpected javaStack: " + st)
-                case None => fail("Missing javaStack")
-              }
-
+            case StringAnyMap(aMap) => handler(aMap)
             case other => fail("Unexpected: " + other)
           }
+        }
+      }
+
+      "with a property 'javaStack' (which cannot be evaluated yet...)" in {
+        evaluateException { aMap =>
+          val st = getStringProperty(aMap, "javaStack")
+          st should startWith ("java.lang.IllegalArgumentException: oops")
+        }
+      }
+
+      "with a property 'message' (which cannot be evaluated yet...)" in {
+        evaluateException { aMap =>
+          val st = getStringProperty(aMap, "message")
+          st should startWith ("oops")
         }
       }
     }

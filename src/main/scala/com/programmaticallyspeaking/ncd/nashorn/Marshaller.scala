@@ -81,7 +81,9 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case so if isJSObject(so) => marshalJSObject(so)
     case BoxedValue(vn) => vn
     case UndefinedValue(vn) => vn
-    case ExceptionValue((vn, maybeJavaStack)) => MarshallerResult(vn, maybeJavaStack.map(st => "javaStack" -> SimpleValue(st)).toMap)
+    case ExceptionValue((vn, maybeJavaStack)) =>
+      val extra = maybeJavaStack.map(st => "javaStack" -> SimpleValue(st)).toMap + ("message" -> SimpleValue(vn.data.message))
+      MarshallerResult(vn, extra)
     case obj: ObjectReference =>
       // Unknown, so return something inspectable
       MarshallerResult(ObjectNode(objectId(obj)), Map(
