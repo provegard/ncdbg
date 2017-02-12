@@ -907,8 +907,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         case other => other
       }
 
-      prop -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, true, false,
-        Option(theValue), None, None)
+      // Note: A ValueNode shouldn't be null/undefined, so use Some(...) rather than Option(...) for the value
+      prop -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
+        isWritable = true, isOwn = true, Some(theValue), None, None)
     }.toMap
   }
 
