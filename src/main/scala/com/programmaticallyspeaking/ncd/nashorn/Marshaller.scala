@@ -8,7 +8,6 @@ import com.sun.jdi._
 import jdk.nashorn.api.scripting.NashornException
 import jdk.nashorn.internal.runtime.ScriptObject
 
-import scala.collection.mutable.ListBuffer
 import scala.language.implicitConversions
 import scala.util.Try
 
@@ -74,9 +73,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     ObjectId(id)
   }
 
-  private def isIterator(obj: ObjectReference) = inherits(obj, "java.util.Iterator")
-  private def isIterable(obj: ObjectReference) = inherits(obj, "java.lang.Iterable")
-
   private def marshalInPrivate(value: Value): MarshallerResult = value match {
     case primitive: PrimitiveValue => SimpleValue(marshalPrimitive(primitive))
     case s: StringReference => SimpleValue(s.value())
@@ -86,12 +82,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case BoxedValue(vn) => vn
     case UndefinedValue(vn) => vn
     case ExceptionValue((vn, maybeJavaStack)) => MarshallerResult(vn, maybeJavaStack.map(st => "javaStack" -> SimpleValue(st)).toMap)
-    case obj: ObjectReference if isIterator(obj) =>
-      // Marshal as array - assume we're interested in all values at once
-      arrayFromIterator(obj)
-    case obj: ObjectReference if isIterable(obj) =>
-      // Marshal as array - assume we're interested in all values at once
-      arrayFromIterable(obj)
     case obj: ObjectReference =>
       // Unknown, so return something inspectable
       MarshallerResult(ObjectNode(objectId(obj)), Map(
@@ -165,31 +155,13 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case _ => false
   }
 
-  private def arrayFromIterable(obj: ObjectReference) = {
-    val invoker = new DynamicInvoker(thread, obj)
-    marshal(invoker.iterator())
-  }
-
-  private def arrayFromIterator(obj: ObjectReference) = {
-    val invoker = new DynamicInvoker(thread, obj)
-    val lazyValues = ListBuffer[LazyNode]()
-    while (marshal(invoker.hasNext()).asBool(false)) {
-      val nextValue = invoker.next()
-      lazyValues += new LazyNode {
-        override def resolve(): ValueNode = marshal(nextValue)
-      }
-    }
-    ArrayNode(lazyValues, objectId(obj))
-  }
-
   private def toArray(ref: ArrayReference) = ArrayNode(ref.getValues.asScala.map(marshalLater), objectId(ref))
 
   private def toArray(mirror: ScriptObjectMirror) = {
-    marshal(mirror.values())
+    ArrayNode(Seq.empty, objectId(mirror.scriptObject))
   }
 
   private def toArray(mirror: JSObjectMirror) = {
-//    marshal(mirror.values())
     ArrayNode(Seq.empty, objectId(mirror.jsObject)) // TODO: Items, but we will refactor...
   }
 

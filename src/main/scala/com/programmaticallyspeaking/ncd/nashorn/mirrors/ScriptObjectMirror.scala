@@ -24,9 +24,6 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
 
   def propertyIterator(): Iterator[String] = new IteratorMirror[String](invoker.propertyIterator().asInstanceOf[ObjectReference]) // Iterator<String>
 
-  // TODO: Get rid of / refactor
-  def values(): Value = invoker.values() // Collection<Object>
-
   def getOwnKeys(all: Boolean): Array[String] = invoker.getOwnKeys(all) match {
     case arr: ArrayReference => arr.getValues.asScala.map(_.asString).toArray
     case other => throw new IllegalStateException("Expected ScriptObject.getOwnKeys to return an array")
