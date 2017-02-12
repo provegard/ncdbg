@@ -12,14 +12,15 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     ("array", "[42]", Map("0" -> 42, "length" -> 1)),
     ("object", "{'a':'b'}", Map("a" -> "b")),
     ("RegExp", "/.*/", Map("multiline" -> false, "source" -> ".*", "global" -> false, "lastIndex" -> 0, "ignoreCase" -> false)),
-    //    ("Java Array",
-    //      """(function() {
-    //        |var StringArray = Java.type("java.lang.String[]");
-    //        |var arr = new StringArray(1);
-    //        |arr[0] = "testing";
-    //        |return arr;
-    //        |})()
-    //      """.stripMargin, Map("0" -> "testing")),
+    ("Java Array",
+      """(function() {
+        |var StringArray = Java.type("java.lang.String[]");
+        |var arr = new StringArray(2);
+        |arr[0] = "testing";
+        |arr[1] = "foobar";
+        |return arr;
+        |})()
+      """.stripMargin, Map("0" -> "testing", "1" -> "foobar", "length" -> 2)),
     //    ("Java Iterator",
     //      """(function() {
     //        |var ArrayList = Java.type("java.util.ArrayList");

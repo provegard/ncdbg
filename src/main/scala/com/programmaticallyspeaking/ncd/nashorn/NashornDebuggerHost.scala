@@ -913,6 +913,19 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }.toMap
   }
 
+  private def propertiesFromArray(array: ArrayReference)(implicit marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
+    // Note: A ValueNode shouldn't be null/undefined, so use Some(...) rather than Option(...) for the value
+    def createProp(value: ValueNode) =
+      ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
+        isWritable = true, isOwn = true, Some(value), None, None)
+
+    // Just return index properties + length.
+    val props = (0 until array.length()).map { idx =>
+      val theValue = marshaller.marshal(array.getValue(idx))
+      idx.toString -> createProp(theValue)
+    } :+ ("length" -> createProp(SimpleValue(array.length())))
+    props.toMap
+  }
 
   private def propertiesFromScriptObject(scriptObject: ObjectReference, onlyOwn: Boolean, onlyAccessors: Boolean)(implicit marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
     val thread = marshaller.thread
@@ -975,6 +988,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               propertiesFromScriptObject(ref, onlyOwn, onlyAccessors)
             case Some(ref: ObjectReference) if marshaller.isJSObject(ref) =>
               propertiesFromJSObject(ref, node.isInstanceOf[ArrayNode])
+            case Some(ref: ArrayReference) =>
+              propertiesFromArray(ref)
             case _ => Map.empty
           }
 

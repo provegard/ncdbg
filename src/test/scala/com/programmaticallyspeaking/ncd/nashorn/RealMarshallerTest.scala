@@ -27,6 +27,14 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
     ("NaN", "NaN", SimpleValue(Double.NaN))
   )
 
+  def evalArray(expr: String)(handler: (ArrayNode) => Unit): Unit = {
+    evaluateExpression(expr) { (host, actual) =>
+      inside(actual) {
+        case an: ArrayNode => handler(an)
+      }
+    }
+  }
+
   "Marshalling to ValueNode works for" - {
     forAll(simpleValues) { (desc, expr, expected) =>
       desc in {
@@ -96,13 +104,6 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
     }
 
     "JSObject-based array" - {
-      def evalArray(expr: String)(handler: (ArrayNode) => Unit): Unit = {
-        evaluateExpression(expr) { (host, actual) =>
-          inside(actual) {
-            case an: ArrayNode => handler(an)
-          }
-        }
-      }
 
       val testCases = Table(
         ("description", "class"),
@@ -116,6 +117,23 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
           evalArray(expr) { an =>
             an.size should be (2)
           }
+        }
+      }
+    }
+
+    "Java array" - {
+      "gets correct size" in {
+        val expr =
+          """(function() {
+            |var StringArray = Java.type("java.lang.String[]");
+            |var arr = new StringArray(2);
+            |arr[0] = "testing";
+            |arr[1] = "foobar";
+            |return arr;
+            |})()
+          """.stripMargin
+        evalArray(expr) { an =>
+          an.size should be (2)
         }
       }
     }
