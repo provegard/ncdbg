@@ -95,9 +95,13 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     val invoker = new DynamicInvoker(thread, value)
     val v = value.referenceType().name() match {
       case "java.lang.Double" => invoker.doubleValue()
+      case "java.lang.Float" => invoker.floatValue()
+      case "java.lang.Character" => invoker.charValue()
       case "java.lang.Boolean" => invoker.booleanValue()
       case "java.lang.Integer" => invoker.intValue()
       case "java.lang.Long" => invoker.longValue()
+      case "java.lang.Short" => invoker.shortValue()
+      case "java.lang.Byte" => invoker.byteValue()
       case _ => null
     }
     Option(v).map(marshal)
