@@ -315,6 +315,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   def handleOperation(eventQueueItem: NashornScriptOperation): Done = eventQueueItem match {
+    case NashornEventSet(es) if pausedData.isDefined =>
+      // Don't react on events if we're paused. Only one thread can be debugged at a time. Only log this on trace
+      // level to avoid excessive logging in a multi-threaded system.
+      val eventName = es.asScala.headOption.map(_.getClass.getSimpleName).getOrElse("<unknown>")
+      log.trace(s"Ignoring Nashorn event $eventName since we're already paused.")
+      es.resume()
+      Done
     case NashornEventSet(eventSet) =>
       var doResume = true
       eventSet.asScala.foreach { ev =>

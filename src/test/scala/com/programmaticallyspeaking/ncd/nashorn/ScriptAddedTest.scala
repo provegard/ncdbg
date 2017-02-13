@@ -62,14 +62,4 @@ object ScriptAddingScriptExecutor extends App with ScriptExecutorBase {
 
   println("Waiting...")
   readStdin()
-
-  private def readStdin(): String = reader.readLine()
-  private def waitForSignal(expected: String): Unit = {
-    println(s"Awaiting '$expected' signal")
-    val signal = readStdin()
-    if (signal != expected) {
-      println(s"Didn't get '$expected' signal, got: " + signal)
-      System.exit(1)
-    }
-  }
 }

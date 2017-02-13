@@ -1,7 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import java.io._
-import java.util
 
 import com.programmaticallyspeaking.ncd.host.ScriptEvent
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
@@ -9,13 +8,12 @@ import com.programmaticallyspeaking.ncd.testing.{FreeActorTesting, StringUtils, 
 import com.sun.jdi.connect.LaunchingConnector
 import com.sun.jdi.event.VMStartEvent
 import com.sun.jdi.{Bootstrap, VirtualMachine}
-import jdk.nashorn.api.scripting.{AbstractJSObject, NashornScriptEngineFactory}
+import jdk.nashorn.api.scripting.NashornScriptEngineFactory
 import org.slf4s.Logging
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
-import scala.util.Try
 import scala.util.control.NonFatal
 
 trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
@@ -153,19 +151,25 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorT
   }
 }
 
-// A marker trait for parametrization of NashornScriptHostTestFixtureBase
-trait ScriptExecutorBase
+trait ScriptExecutorBase {
+  val reader: BufferedReader
+
+  protected def readStdin(): String = reader.readLine()
+  protected def waitForSignal(expected: String): Unit = {
+    println(s"Awaiting '$expected' signal")
+    val signal = readStdin()
+    if (signal != expected) {
+      println(s"Didn't get '$expected' signal, got: " + signal)
+      System.exit(1)
+    }
+  }
+}
 
 object ScriptExecutor extends App with ScriptExecutorBase {
   println("ScriptExecutor starting. Java version: " + System.getProperty("java.version"))
   val scriptEngine = new NashornScriptEngineFactory().getScriptEngine
   val reader = new BufferedReader(new InputStreamReader(System.in))
-  println("Awaiting go signal")
-  val signal = readStdin()
-  if (signal != "go") {
-    println("Didn't get go signal, got: " + signal)
-    System.exit(1)
-  }
+  waitForSignal("go")
 
   scriptEngine.eval(
     """this.createInstance = function (typeName) {
@@ -187,8 +191,6 @@ object ScriptExecutor extends App with ScriptExecutorBase {
         t.printStackTrace(System.err)
     }
   }
-
-  private def readStdin(): String = reader.readLine()
 }
 
 class StreamReadingThread(in: InputStream, appender: (String) => Unit) extends Thread {
