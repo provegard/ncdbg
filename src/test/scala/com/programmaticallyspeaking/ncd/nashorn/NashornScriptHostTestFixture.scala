@@ -158,19 +158,6 @@ object ScriptExecutor extends App {
     System.exit(1)
   }
 
-//  val bindings = scriptEngine.createBindings()
-//  bindings.put("createArray", new FunctionLikeJSObject((args) => new ArrayLikeJSObject(args)))
-//  bindings.put("createObject", new FunctionLikeJSObject((args) => {
-//    // assume key,value,key,value...
-//    assert(args.size % 2 == 0, "must have even no. of args")
-//    val theMap = args.grouped(2).map(tup => tup(0).toString -> tup(1)).toMap
-//    new ObjectLikeJSObject(theMap)
-//  }))
-//  bindings.put("createFunction", new FunctionLikeJSObject((args) => new FunctionLikeJSObject(_ => null)))
-//  bindings.put("createInstance", new FunctionLikeJSObject((args) => {
-//    val typeName = args.headOption.map(_.toString).getOrElse(throw new IllegalArgumentException("Missing type name"))
-//
-//  }))
   scriptEngine.eval(
     """this.createInstance = function (typeName) {
       |  var Type = Java.type(typeName);
@@ -212,44 +199,3 @@ class StreamReadingThread(in: InputStream, appender: (String) => Unit) extends T
     }
   }
 }
-
-//class ArrayLikeJSObject(items: Seq[AnyRef]) extends AbstractJSObject {
-//  import scala.collection.JavaConverters._
-//  override def hasSlot(slot: Int): Boolean = slot >= 0 && slot < items.size
-//
-//  override def getSlot(index: Int): AnyRef = items(index)
-//
-//  override def hasMember(name: String): Boolean = Try(name.toInt).map(hasSlot).getOrElse(name == "length")
-//
-//  override def getMember(name: String): AnyRef = Try(name.toInt).map(getSlot).getOrElse(if (name == "length") items.size.asInstanceOf[AnyRef] else null)
-//
-//  override def getClassName: String = "Array"
-//
-//  override def isArray: Boolean = true
-//
-//  override def keySet(): util.Set[String] = (items.indices.map(_.toString) :+ "length").toSet.asJava
-//
-//  override def values(): util.Collection[AnyRef] = items.asJava
-//}
-//
-//class ObjectLikeJSObject(data: Map[String, AnyRef]) extends AbstractJSObject {
-//  import scala.collection.JavaConverters._
-//
-//  override def values(): util.Collection[AnyRef] = data.values.toList.asJava
-//
-//  override def hasMember(name: String): Boolean = data.contains(name)
-//
-//  override def getMember(name: String): AnyRef = data(name)
-//
-//  override def getClassName: String = "Object"
-//
-//  override def keySet(): util.Set[String] = data.keySet.asJava
-//}
-//
-//class FunctionLikeJSObject(fun: (Seq[AnyRef]) => AnyRef) extends AbstractJSObject {
-//  override def getClassName: String = "Function"
-//
-//  override def call(thiz: scala.Any, args: AnyRef*): AnyRef = fun(args.toSeq)
-//
-//  override def isFunction: Boolean = true
-//}
