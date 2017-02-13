@@ -73,9 +73,7 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorT
     host.pauseOnBreakpoints()
   }
 
-  override def afterAllTests(): Unit = {
-    vm.process().destroy()
-  }
+  override def afterAllTests(): Unit = vm.process().destroy()
 
   private def addObserver(observer: Observer[ScriptEvent]): Unit = {
     while (subscriptions.nonEmpty) {
@@ -85,10 +83,7 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorT
     subscriptions.enqueue(eventSubject.subscribe(observer))
   }
 
-  protected def getHost = {
-    if (host == null) throw new IllegalStateException("Host not set")
-    host
-  }
+  protected def getHost = Option(host).getOrElse(throw new IllegalStateException("Host not set"))
 
   protected def runScriptWithObserverSync[R](script: String, observer: Observer[ScriptEvent])(handler: (NashornScriptHost) => Future[R]): Unit = {
     addObserver(observer)
