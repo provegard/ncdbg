@@ -10,6 +10,8 @@ import org.mockito.ArgumentMatchers._
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.TimeoutException
+import scala.concurrent.duration._
 
 class ResponseException(msg: String) extends RuntimeException(msg)
 
@@ -49,7 +51,7 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
     }
   }
 
-  def receiveScriptEventTriggeredEvent(actorRef: ActorRef, requests: Seq[Messages.Request], scriptEvents: Seq[ScriptEvent]): Messages.Event = {
+  def receiveScriptEventTriggeredEvents(actorRef: ActorRef, requests: Seq[Messages.Request], scriptEvents: Seq[ScriptEvent], expectedCount: Int): Seq[Messages.Event] = {
     val inbox = Inbox.create(system)
 
     requests.foreach { req =>
@@ -60,13 +62,28 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
     }
     scriptEvents.foreach(emitScriptEvent)
 
-    while (true) {
-      inbox.receive(receiveTimeout) match {
-        case event: Messages.Event => return event
-        case _ => // ignore
+    val events = ListBuffer[Messages.Event]()
+    val before = System.nanoTime()
+    while ((System.nanoTime() - before).nanos < receiveTimeout) {
+      try {
+        inbox.receive(receiveTimeout / 10) match {
+          case event: Messages.Event =>
+            events += event
+            if (events.size >= expectedCount) return events
+          case _ => // ignore
+        }
+      } catch {
+        case ex: TimeoutException => // ignore
       }
     }
-    ??? // shouldn't get here
+    events
+  }
+
+  def receiveScriptEventTriggeredEvent(actorRef: ActorRef, requests: Seq[Messages.Request], scriptEvents: Seq[ScriptEvent]): Messages.Event = {
+    receiveScriptEventTriggeredEvents(actorRef, requests, scriptEvents, 1).headOption match {
+      case Some(e) => e
+      case None => throw new TimeoutException("Timed out waiting for events")
+    }
   }
 
   def createScriptHost(): ScriptHost = {

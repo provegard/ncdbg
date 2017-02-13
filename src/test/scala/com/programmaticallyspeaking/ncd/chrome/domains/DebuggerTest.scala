@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 
 import akka.actor.{ActorRef, PoisonPill}
 import akka.testkit.TestProbe
-import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{Location, PausedEventParams}
+import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{Location, PausedEventParams, ScriptParsedEventParams}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor, PropertyDescriptorType}
@@ -168,6 +168,34 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         }
 
         result.locations should be (Seq(Location("a", 0, 0), Location("a", 1, 0), Location("a", 2, 0)))
+      }
+    }
+
+    "ScriptAdded handling" - {
+      def simulateScriptAdded(script: Script): Seq[Messages.Event] = {
+        val debugger = newActorInstance[Debugger]
+
+        // Receive at most 2 events.
+        receiveScriptEventTriggeredEvents(debugger, Seq(Messages.Request("1", Domain.enable)),
+          Seq(ScriptAdded(script)), 2)
+      }
+      def getEventParams(ev: Messages.Event): ScriptParsedEventParams = ev.params match {
+        case p: ScriptParsedEventParams => p
+        case other => throw new IllegalArgumentException("Unknown params: " + other)
+      }
+
+      "results in a ScriptParsed event for a new script" in {
+        val events = simulateScriptAdded(script("xx1"))
+        val scriptIds = events.map(getEventParams).map(_.scriptId)
+        scriptIds should contain ("xx1")
+      }
+
+      "results in no event for an existing script" in {
+        addScript(script("xx1"))
+        val events = simulateScriptAdded(script("xx1"))
+        val scriptIds = events.map(getEventParams).map(_.scriptId)
+        // Only expect the event for the known script!
+        scriptIds should be (Seq("xx1"))
       }
     }
 

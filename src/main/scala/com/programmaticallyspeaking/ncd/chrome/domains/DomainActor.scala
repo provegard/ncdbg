@@ -74,6 +74,9 @@ abstract class DomainActor extends Actor with Logging with Stash {
 
   protected def scriptHostReceived(): Unit = {}
 
+  /** Override in a base actor to receive custom messages (e.g. those sent to itself). */
+  protected def customReceive: Receive = PartialFunction.empty
+
   override def receive: Receive = {
     case ScriptHostRef(actorRef) =>
       log.info(s"[$name] Obtained a ScriptHost reference")
@@ -97,6 +100,9 @@ abstract class DomainActor extends Actor with Logging with Stash {
     case req: Messages.Request =>
       val err = Messages.ErrorResponse(req.id, s"Domain $name is not enabled")
       sender() ! err
+
+    case other =>
+      customReceive.apply(other)
   }
 
   def receiveEnabled: Receive = {
@@ -131,6 +137,9 @@ abstract class DomainActor extends Actor with Logging with Stash {
       log.error(s"Message handling error for domain $name", ex)
       sender() ! Messages.ErrorResponse(req.id, ex.getMessage)
       finishProcessingRequest(req)
+
+    case other =>
+      customReceive.apply(other)
   }
 
   private def finishProcessingRequest(req: Messages.Request): Unit = {

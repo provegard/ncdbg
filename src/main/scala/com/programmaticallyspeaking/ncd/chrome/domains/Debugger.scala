@@ -4,6 +4,8 @@ import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 import com.programmaticallyspeaking.ncd.host.{Scope => HostScope, _}
 import org.slf4s.Logging
 
+import scala.collection.mutable
+
 object Debugger {
   type CallFrameId = String
 
@@ -68,6 +70,8 @@ object Debugger {
   case class Scope(`type`: String, `object`: RemoteObject)
 
   case class PausedEventParams(callFrames: Seq[CallFrame], reason: String, hitBreakpoints: Seq[String])
+
+  private[Debugger] case class EmitScriptParsed(script: Script)
 }
 
 class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
@@ -78,12 +82,25 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
     Option(scriptHost).foreach(_.reset())
   } finally super.postStop()
 
+  private val emittedScriptIds = mutable.Set[String]()
+
+  private def emitScriptParsedEvent(script: Script) = {
+    if (emittedScriptIds.contains(script.id)) {
+      log.trace(s"Won't re-emit scriptParsed event for script with ID '${script.id}'.")
+    } else {
+      emittedScriptIds += script.id
+      emitEvent("Debugger.scriptParsed", ScriptParsedEventParams(script))
+    }
+  }
+
+  override protected def customReceive: Receive = {
+    case EmitScriptParsed(script) => emitScriptParsedEvent(script)
+  }
+
   override def handle = {
     case Domain.enable =>
       log.info("Enabling debugging, sending all parsed scripts to the client.")
-      scriptHost.scripts.foreach { script =>
-        emitEvent("Debugger.scriptParsed", ScriptParsedEventParams(script))
-      }
+      scriptHost.scripts.foreach(emitScriptParsedEvent)
 
       scriptHost.pauseOnBreakpoints()
 
@@ -145,6 +162,8 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
 
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
     case hb: HitBreakpoint => pauseBasedOnBreakpoint(hb)
+
+    case ScriptAdded(script) => self ! EmitScriptParsed(script)
 
     case Resumed =>
       emitEvent("Debugger.resumed", null)
