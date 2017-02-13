@@ -226,6 +226,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
               addBreakableLocations(script, breakableLocations)
 
+              emitEvent(ScriptAdded(script))
+
               Some(script)
             case Success(Left(msg)) =>
               log.info(s"Ignoring script because $msg")
