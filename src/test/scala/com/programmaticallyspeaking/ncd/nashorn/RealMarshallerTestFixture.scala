@@ -10,8 +10,7 @@ import scala.concurrent.{ExecutionContext, Promise}
 trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
-  override val resultTimeout: FiniteDuration = 5.seconds
-
+  override val resultTimeout: FiniteDuration = 10.seconds
 
   protected def evaluateExpression(expr: String)(tester: (ScriptHost, ValueNode) => Unit): Unit = {
     val wrapped =
@@ -29,8 +28,6 @@ trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixtu
                 s.value match {
                   case obj: ObjectNode =>
                     getHost.getObjectProperties(obj.objectId, true, false).find(_._1 == "result").flatMap(_._2.value)
-//                    None
-//                    obj.extraEntries.find(_._1 == "result").map(_._2.resolve())
 
                   case _ => None
                 }

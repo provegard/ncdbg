@@ -16,7 +16,7 @@ import scala.concurrent.{ExecutionContext, Promise}
 trait ScriptAddedTestFixture extends UnitTest with Logging with FreeActorTesting with VirtualMachineLauncher with ScalaFutures with IntegrationPatience {
   override val scriptExecutor: ScriptExecutorBase = ScriptAddingScriptExecutor
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
-  override val resultTimeout: FiniteDuration = 5.seconds
+  override val resultTimeout: FiniteDuration = 10.seconds
 
   def ready = vmRunningPromise.future
 }
