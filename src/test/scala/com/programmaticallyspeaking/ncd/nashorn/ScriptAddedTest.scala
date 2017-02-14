@@ -7,7 +7,7 @@ import com.programmaticallyspeaking.ncd.host.{Script, ScriptAdded, ScriptEvent}
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.ExecutionContext
 
 trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with ScalaFutures with FairAmountOfPatience with Eventually {
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
@@ -19,16 +19,11 @@ trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with ScalaFutu
       case _ =>
     })
 
-    eventSubject.subscribe(observer)
-
-    val f = vmRunningPromise.future.map { host =>
-      sendToVm(scriptContents, encodeBase64 = true)
-
+    observeAndRunScriptSync(scriptContents, observer) { host =>
       eventually {
         handler(scripts)
       }
     }
-    Await.result(f, resultTimeout)
   }
 }
 
