@@ -11,7 +11,7 @@ import scala.concurrent.duration._
 class StepTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
-  override val resultTimeout: FiniteDuration = 5.seconds
+  override val resultTimeout: FiniteDuration = 10.seconds
 
   protected def stepInScript(script: String, stepTypes: Seq[StepType])(tester: (Breakpoint) => Unit): Unit = {
     assert(script.contains("debugger;"), "Script must contain a 'debugger' statement")
