@@ -9,12 +9,28 @@ import com.sun.jdi.connect.LaunchingConnector
 import com.sun.jdi.event.VMStartEvent
 import com.sun.jdi.{Bootstrap, VirtualMachine}
 import jdk.nashorn.api.scripting.NashornScriptEngineFactory
+import org.scalatest.concurrent.{AbstractPatienceConfiguration, PatienceConfiguration}
+import org.scalatest.time.{Millis, Seconds, Span}
 import org.slf4s.Logging
 
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.util.control.NonFatal
+
+/** Provides a patience configuration that has a timeout that is shorter than the default timeout in
+  * [[VirtualMachineLauncher]]. This ensures that any ScalaTest wait operations complete/stop before our own.
+  */
+trait FairAmountOfPatience extends AbstractPatienceConfiguration { this: PatienceConfiguration =>
+
+  private val defaultPatienceConfig: PatienceConfig =
+    PatienceConfig(
+      timeout = scaled(Span(10, Seconds)),
+      interval = scaled(Span(150, Millis))
+    )
+
+  implicit abstract override val patienceConfig: PatienceConfig = defaultPatienceConfig
+}
 
 trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
   import scala.collection.JavaConverters._

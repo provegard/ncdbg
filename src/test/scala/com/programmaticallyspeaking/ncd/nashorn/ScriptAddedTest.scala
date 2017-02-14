@@ -1,13 +1,15 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import java.io.File
+import java.nio.file.Files
+
 import com.programmaticallyspeaking.ncd.host.{Script, ScriptAdded, ScriptEvent}
 import com.programmaticallyspeaking.ncd.messaging.Observer
-import org.scalatest.concurrent.{Eventually, IntegrationPatience, ScalaFutures}
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
-import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext}
 
-trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with ScalaFutures with IntegrationPatience with Eventually {
+trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with ScalaFutures with FairAmountOfPatience with Eventually {
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
   def testAddScript(scriptContents: String)(handler: (Seq[Script] => Unit)): Unit = {
@@ -48,6 +50,22 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
 
     testAddScript(script) { scripts =>
       atLeast(1, scripts.map(_.contents)) should include ("5 + 5")
+    }
+  }
+
+  "A loaded script should result in a ScriptAdded event" in {
+    val tempFile = File.createTempFile("script-to-load", ".js")
+    val scriptInFile =
+      """function () {
+        |  return 'hello from loaded script';
+        |})();
+      """.stripMargin
+    Files.write(tempFile.toPath, scriptInFile.getBytes("utf-8"))
+    val filePathAsUri = tempFile.toURI.toString
+
+    val script = s"load('$filePathAsUri');"
+    testAddScript(script) { scripts =>
+      atLeast(1, scripts.map(_.contents)) should include ("hello from loaded script")
     }
   }
 }
