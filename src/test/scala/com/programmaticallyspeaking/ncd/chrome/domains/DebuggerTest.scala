@@ -21,8 +21,8 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
   import org.mockito.ArgumentMatchers._
   import com.programmaticallyspeaking.ncd.testing.MockingUtils._
 
-  def script(theId: String): Script = new Script {
-    override def contentsHash(): String = "xyz"
+  def script(theId: String, hash: String = "xyz"): Script = new Script {
+    override def contentsHash(): String = hash
     override val uri: String = theId
     override val lineCount: Int = 5
     override val lastLineLength: Int = 10
@@ -196,6 +196,13 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val scriptIds = events.map(getEventParams).map(_.scriptId)
         // Only expect the event for the known script!
         scriptIds should be (Seq("xx1"))
+      }
+
+      "results in a ScriptParsed event for an existing script if the contents hash is new" in {
+        addScript(script("xx1", hash = "hash1"))
+        val events = simulateScriptAdded(script("xx1", hash = "hash2"))
+        val scriptIds = events.map(getEventParams).map(_.scriptId)
+        scriptIds should be (Seq("xx1", "xx1"))
       }
     }
 

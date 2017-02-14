@@ -82,13 +82,17 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
     Option(scriptHost).foreach(_.reset())
   } finally super.postStop()
 
-  private val emittedScriptIds = mutable.Set[String]()
+  /** Key = script ID
+    * Value = contents hash
+    */
+  private val emittedScripts = mutable.Map[String, String]()
 
   private def emitScriptParsedEvent(script: Script) = {
-    if (emittedScriptIds.contains(script.id)) {
-      log.trace(s"Won't re-emit scriptParsed event for script with ID '${script.id}'.")
+    val hash = script.contentsHash()
+    if (emittedScripts.getOrElse(script.id, "") == hash) {
+      log.trace(s"Won't re-emit scriptParsed event for script with ID '${script.id}' and same hash ($hash) as before.")
     } else {
-      emittedScriptIds += script.id
+      emittedScripts += script.id -> hash
       emitEvent("Debugger.scriptParsed", ScriptParsedEventParams(script))
     }
   }
