@@ -12,7 +12,7 @@ def jdkHome = System.getenv("JAVA_HOME")
 
 sourceCompatibility = 1.8
 
-mainClassName = "com.programmaticallyspeaking.ncd.boot.Main"
+mainClassName = "com.programmaticallyspeaking.ncd.boot.Boot"
 
 test {
     // Always run tests!
