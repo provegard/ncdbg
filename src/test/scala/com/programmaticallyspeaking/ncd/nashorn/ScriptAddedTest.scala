@@ -21,14 +21,8 @@ trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with ScalaFutu
 
     eventSubject.subscribe(observer)
 
-    val script =
-      """(function () {
-        |  return 5 + 5;
-        |})();
-      """.stripMargin
-
     val f = vmRunningPromise.future.map { host =>
-      sendToVm(script, encodeBase64 = true)
+      sendToVm(scriptContents, encodeBase64 = true)
 
       eventually {
         handler(scripts)
@@ -56,7 +50,7 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
   "A loaded script should result in a ScriptAdded event" in {
     val tempFile = File.createTempFile("script-to-load", ".js")
     val scriptInFile =
-      """function () {
+      """(function () {
         |  return 'hello from loaded script';
         |})();
       """.stripMargin
@@ -64,8 +58,12 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
     val filePathAsUri = tempFile.toURI.toString
 
     val script = s"load('$filePathAsUri');"
-    testAddScript(script) { scripts =>
-      atLeast(1, scripts.map(_.contents)) should include ("hello from loaded script")
+    try {
+      testAddScript(script) { scripts =>
+        atLeast(1, scripts.map(_.contents)) should include("hello from loaded script")
+      }
+    } finally {
+      Files.delete(tempFile.toPath)
     }
   }
 }
