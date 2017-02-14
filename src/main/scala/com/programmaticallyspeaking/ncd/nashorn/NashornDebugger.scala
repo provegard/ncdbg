@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import akka.actor.{ActorSystem, TypedActor, TypedProps}
 import com.sun.jdi.event.EventQueue
-import com.sun.jdi.{VirtualMachine, StackFrame => _}
+import com.sun.jdi.{VMDisconnectedException, VirtualMachine, StackFrame => _}
 import org.slf4s.Logging
 
 import scala.annotation.tailrec
@@ -84,9 +84,12 @@ class NashornScriptHostInteractionThread(host: NashornScriptHost, initPromise: P
       initPromise.trySuccess()
       listenIndefinitely(host.virtualMachine.eventQueue())
     } catch {
-      case ex: Exception =>
+      case ex: VMDisconnectedException =>
+        log.info("Virtual machine disconnected")
         initPromise.tryFailure(ex)
-        log.error("Interaction failure", ex)
+      case ex: Exception =>
+        log.error("VM interaction failure", ex)
+        initPromise.tryFailure(ex)
     }
   }
 

@@ -5,6 +5,8 @@ import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import com.programmaticallyspeaking.ncd.chrome.domains.DefaultDomainFactory
 import com.programmaticallyspeaking.ncd.chrome.net.Webservice
+import com.programmaticallyspeaking.ncd.host.ScriptEvent
+import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.nashorn.{NashornDebugger, NashornDebuggerConnector, NashornScriptHost}
 import org.slf4s.Logging
 
@@ -21,7 +23,7 @@ object Boot extends App with Logging {
 
   debuggerReady.andThen {
     case Success(host) =>
-//      startListening(host)
+      startListening(host)
       startHttpServer()
     case Failure(t) =>
       log.error("Failed to start the debugger", t)
@@ -34,9 +36,21 @@ object Boot extends App with Logging {
     System.exit(code)
   }
 
-//  private def startListening(host: NashornScriptHost) = {
-//    debugger.activateAsActor(host)
-//  }
+  private def startListening(host: NashornScriptHost) = {
+    host.events.subscribe(new Observer[ScriptEvent] {
+      override def onNext(item: ScriptEvent): Unit = {}
+
+      override def onError(error: Throwable): Unit = {
+        log.error("Exiting due to an error", error)
+        die(2)
+      }
+
+      override def onComplete(): Unit = {
+        log.info("Exiting because the debug target disconnected")
+        die(0)
+      }
+    })
+  }
 
   private def startHttpServer(): Unit = {
     val service = new Webservice(new DefaultDomainFactory())

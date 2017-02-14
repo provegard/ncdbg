@@ -297,6 +297,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     Future(eventSubject.onNext(event))
   }
 
+  private def signalComplete(): Unit = {
+    // Emit asynchronously so that code that observes the event can interact with the host without deadlocking it.
+    log.info("Signalling completion.")
+    Future(eventSubject.onComplete())
+  }
+
   // toList => iterate over a copy since we mutate inside the foreach
   private def attemptToResolveSourceLessReferenceTypes(): Unit = scriptTypesWaitingForSource.toList match {
     case Nil => // noop
@@ -314,7 +320,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       }
   }
 
+  private def hasDeathOrDisconnectEvent(eventSet: EventSet) = eventSet.asScala.collect {
+    case e: VMDeathEvent => e
+    case e: VMDisconnectEvent => e
+  }.nonEmpty
+
   def handleOperation(eventQueueItem: NashornScriptOperation): Done = eventQueueItem match {
+    case NashornEventSet(es) if hasDeathOrDisconnectEvent(es) =>
+      signalComplete()
+      Done
     case NashornEventSet(es) if pausedData.isDefined =>
       // Don't react on events if we're paused. Only one thread can be debugged at a time. Only log this on trace
       // level to avoid excessive logging in a multi-threaded system.
