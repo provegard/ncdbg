@@ -1,65 +1,54 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import java.io.{BufferedReader, InputStreamReader}
-import javax.script.Compilable
-
 import com.programmaticallyspeaking.ncd.host.{Script, ScriptAdded, ScriptEvent}
 import com.programmaticallyspeaking.ncd.messaging.Observer
-import com.programmaticallyspeaking.ncd.testing.{FreeActorTesting, UnitTest}
-import jdk.nashorn.api.scripting.NashornScriptEngineFactory
-import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
-import org.slf4s.Logging
+import org.scalatest.concurrent.{Eventually, IntegrationPatience, ScalaFutures}
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Promise}
+import scala.concurrent.{Await, ExecutionContext}
 
-trait ScriptAddedTestFixture extends UnitTest with Logging with FreeActorTesting with VirtualMachineLauncher with ScalaFutures with IntegrationPatience {
-  override val scriptExecutor: ScriptExecutorBase = ScriptAddingScriptExecutor
+trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with ScalaFutures with IntegrationPatience with Eventually {
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
   override val resultTimeout: FiniteDuration = 10.seconds
 
-  def ready = vmRunningPromise.future
+  def testAddScript(scriptContents: String)(handler: (Seq[Script] => Unit)): Unit = {
+    var scripts = Seq.empty[Script]
+    val observer = Observer.from[ScriptEvent]({
+      case ScriptAdded(s) => scripts :+= s
+      case _ =>
+    })
+
+    eventSubject.subscribe(observer)
+
+    val script =
+      """(function () {
+        |  return 5 + 5;
+        |})();
+      """.stripMargin
+
+    val f = vmRunningPromise.future.map { host =>
+      sendToVm(script, encodeBase64 = true)
+
+      eventually {
+        handler(scripts)
+      }
+    }
+    Await.result(f, resultTimeout)
+  }
 }
 
 class ScriptAddedTest extends ScriptAddedTestFixture {
 
   "An added script should result in a ScriptAdded event" in {
-    val scriptAddedPromise = Promise[Script]()
-    eventSubject.subscribe(new Observer[ScriptEvent] {
 
-      override def onNext(item: ScriptEvent): Unit = item match {
-        case ScriptAdded(script) => scriptAddedPromise.success(script)
-        case _ =>
-      }
+    val script =
+      """(function () {
+        |  return 5 + 5;
+        |})();
+      """.stripMargin
 
-      override def onError(error: Throwable): Unit = {}
-
-      override def onComplete(): Unit = {}
-    })
-
-    whenReady(ready) { _ =>
-      sendToVm("add")
-      whenReady(scriptAddedPromise.future) { script =>
-        script.contents should include ("5 + 5")
-      }
+    testAddScript(script) { scripts =>
+      atLeast(1, scripts.map(_.contents)) should include ("5 + 5")
     }
   }
-}
-
-object ScriptAddingScriptExecutor extends App with ScriptExecutorBase {
-  println("MultiThreadedScriptExecutor starting. Java version: " + System.getProperty("java.version"))
-  val scriptEngine = new NashornScriptEngineFactory().getScriptEngine
-  val reader = new BufferedReader(new InputStreamReader(System.in))
-
-  waitForSignal("go")
-  waitForSignal("add")
-
-  val compiledScript = scriptEngine.asInstanceOf[Compilable].compile(
-    """(function () {
-      |  return 5 + 5;
-      |})();
-    """.stripMargin)
-
-  println("Waiting...")
-  readStdin()
 }

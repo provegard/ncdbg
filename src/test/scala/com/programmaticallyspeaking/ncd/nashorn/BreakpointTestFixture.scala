@@ -15,19 +15,11 @@ class BreakpointTestFixture extends UnitTest with NashornScriptHostTestFixture {
   protected def waitForBreakpoint(script: String)(tester: (ScriptHost, HitBreakpoint) => Unit): Unit = {
     assert(script.contains("debugger;"), "Script must contain a 'debugger' statement")
     val stackframesPromise = Promise[HitBreakpoint]()
-    val observer = new Observer[ScriptEvent] {
-      override def onNext(item: ScriptEvent): Unit = item match {
-        case bp: HitBreakpoint =>
-          stackframesPromise.trySuccess(bp)
-
-        case _ => // ignore
-      }
-
-      override def onError(error: Throwable): Unit = stackframesPromise.tryFailure(error)
-
-      override def onComplete(): Unit = {}
+    val observer = Observer.from[ScriptEvent] {
+      case bp: HitBreakpoint => stackframesPromise.trySuccess(bp)
+      case _ => // ignore
     }
-    runScriptWithObserverSync(script, observer) { host =>
+    observeAndRunScriptAsync(script, observer) { host =>
       stackframesPromise.future.map(bp => {
         try tester(host, bp) finally {
           host.resume()

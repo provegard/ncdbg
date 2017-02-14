@@ -131,19 +131,32 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorT
   override val scriptExecutor = ScriptExecutor
 
   private val subscriptions = mutable.Queue[Subscription]()
-
-  private def addObserver(observer: Observer[ScriptEvent]): Unit = {
+  private def unsubscribeAll(): Unit =
     while (subscriptions.nonEmpty) {
       subscriptions.dequeue().unsubscribe()
     }
 
+  override def afterAllTests(): Unit = try unsubscribeAll() finally super.afterAllTests()
+
+  protected def addObserver(observer: Observer[ScriptEvent]): Unit = {
+    unsubscribeAll()
     subscriptions.enqueue(eventSubject.subscribe(observer))
   }
 
-  protected def runScriptWithObserverSync[R](script: String, observer: Observer[ScriptEvent])(handler: (NashornScriptHost) => Future[R]): Unit = {
+  protected def observeAndRunScriptAsync[R](script: String, observer: Observer[ScriptEvent])(handler: (NashornScriptHost) => Future[R]): Unit = {
     addObserver(observer)
 
     val f = vmRunningPromise.future.flatMap { host =>
+      sendToVm(script, encodeBase64 = true)
+      handler(host)
+    }
+    Await.result(f, resultTimeout)
+  }
+
+  protected def observeAndRunScriptSync[R](script: String, observer: Observer[ScriptEvent])(handler: (NashornScriptHost) => R): Unit = {
+    addObserver(observer)
+
+    val f = vmRunningPromise.future.map { host =>
       sendToVm(script, encodeBase64 = true)
       handler(host)
     }
