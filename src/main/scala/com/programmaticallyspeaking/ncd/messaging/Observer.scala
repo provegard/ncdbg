@@ -1,6 +1,20 @@
 package com.programmaticallyspeaking.ncd.messaging
 
-// Modeled after TX
+object Observer {
+  /** Creates an observer with only a next handler that invokes the given function.
+    *
+    * @param fun the function to invoke when an item is observed
+    * @tparam T the item type
+    * @return an observer
+    */
+  def from[T](fun: (T) => Unit) = new Observer[T] {
+    override def onNext(item: T): Unit = fun(item)
+    override def onError(error: Throwable): Unit = {}
+    override def onComplete(): Unit = {}
+  }
+}
+
+// Modeled after RX
 trait Observer[T] {
   def onNext(item: T): Unit
 
