@@ -54,7 +54,10 @@ Note that the Dev Tools console can only be used when the debugger is paused in 
 
 ## Contributing
 
-TBD
+Pull requests are welcome! However, before creating a pull request, please open an issue to describe
+the missing/limited/faulty behavior that you intend to fix, along with a solution proposal.
+
+In the absence of a proper style guide, please follow the style of existing code.
 
 ## License
 
