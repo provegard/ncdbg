@@ -1,4 +1,5 @@
 plugins {
+    // Note: Version 0.12 fits Gradle 2.13. For Gradle 2.14.1, use 0.13. For Gradle 3.0, use 0.14 (or newer).
     id "com.github.maiflai.scalatest" version "0.12"
 }
 
