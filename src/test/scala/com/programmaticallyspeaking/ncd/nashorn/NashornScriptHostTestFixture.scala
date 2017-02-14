@@ -26,7 +26,7 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
 
   implicit val executionContext: ExecutionContext
 
-  val resultTimeout: FiniteDuration
+  val resultTimeout: FiniteDuration = 12.seconds
 
   private var vm: VirtualMachine = _
   private var host: NashornScriptHost = _
@@ -127,7 +127,6 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
 trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorTesting with VirtualMachineLauncher {
   implicit val executionContext: ExecutionContext
 
-  val resultTimeout: FiniteDuration
   override val scriptExecutor = ScriptExecutor
 
   private val subscriptions = mutable.Queue[Subscription]()

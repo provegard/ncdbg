@@ -10,7 +10,6 @@ import scala.concurrent.{ExecutionContext, Promise}
 trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
-  override val resultTimeout: FiniteDuration = 10.seconds
 
   protected def evaluateExpression(expr: String)(tester: (ScriptHost, ValueNode) => Unit): Unit = {
     val wrapped =

@@ -10,7 +10,6 @@ import scala.concurrent.{ExecutionContext, Promise}
 class EvaluateTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
-  override val resultTimeout: FiniteDuration = 15.seconds
 
   protected def evaluateInScript(script: String)(tester: (ScriptHost, Seq[StackFrame]) => Unit): Unit = {
     assert(script.contains("debugger;"), "Script must contain a 'debugger' statement")

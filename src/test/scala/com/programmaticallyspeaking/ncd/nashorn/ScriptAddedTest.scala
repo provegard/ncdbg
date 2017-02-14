@@ -9,7 +9,6 @@ import scala.concurrent.{Await, ExecutionContext}
 
 trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with ScalaFutures with IntegrationPatience with Eventually {
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
-  override val resultTimeout: FiniteDuration = 10.seconds
 
   def testAddScript(scriptContents: String)(handler: (Seq[Script] => Unit)): Unit = {
     var scripts = Seq.empty[Script]
