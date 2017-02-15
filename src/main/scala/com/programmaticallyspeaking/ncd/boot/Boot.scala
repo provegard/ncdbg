@@ -1,5 +1,7 @@
 package com.programmaticallyspeaking.ncd.boot
 
+import java.net.ConnectException
+
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
@@ -26,7 +28,14 @@ object Boot extends App with Logging {
       startListening(host)
       startHttpServer()
     case Failure(t) =>
-      log.error("Failed to start the debugger", t)
+      t match {
+        case _: ConnectException =>
+          log.error("Failed to connect to the debug target.")
+          log.error("Please make sure that the debug target is started with debug VM arguments, for example:")
+          log.error("  -Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=7777")
+        case other =>
+          log.error("Failed to start the debugger", t)
+      }
       system.terminate()
       die(1)
   }
