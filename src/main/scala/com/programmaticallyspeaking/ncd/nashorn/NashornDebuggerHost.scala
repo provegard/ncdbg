@@ -111,6 +111,12 @@ object NashornDebuggerHost {
   }
 
   private[NashornDebuggerHost] case class ObjectPropertiesKey(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean)
+
+  /** This marker is embedded in all scripts evaluated by NashornDebuggerHost on behalf of the debugger. The problem
+    * this solves is that such evaluated scripts are detected on startup but they are not interesting to show in the
+    * debugger. Thus NashornDebuggerHost will not consider scripts that contain this marker.
+s    */
+  val EvaluatedCodeMarker = "__af4caa215e04411083cfde689d88b8e6__"
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis: ((NashornScriptHost) => Unit) => Unit) extends NashornScriptHost with Logging {
@@ -209,7 +215,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           val triedScript: Try[Either[String, Script]] = Try {
             if (firstLocation.sourceName() == "<eval>") {
               shamelesslyExtractEvalSourceFromPrivatePlaces(refType) match {
-                case Some(src) => Right(getOrAddEvalScript(scriptPath, src))
+                case Some(src) =>
+                  // NOTE: The Left here is untested. Our test setup doesn't allow us to connect multiple times to
+                  // the same VM, in which case we could observe these "leftover" scripts.
+                  if (src.contains(EvaluatedCodeMarker)) Left("it contains internally evaluated code")
+                  else Right(getOrAddEvalScript(scriptPath, src))
                 case None =>
                   val willRetry = attemptsLeft > 2
                   if (willRetry) {
@@ -510,7 +520,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         val contextInvoker = new DynamicInvoker(thread, context.asInstanceOf[ObjectReference])
 
         try {
-          contextInvoker.eval(initialScope, code, callThis, null)
+          val codeWithMarker = s"""('$EvaluatedCodeMarker',$code)"""
+          contextInvoker.eval(initialScope, codeWithMarker, callThis, null)
         } catch {
           case ex: InvocationException =>
             new ThrownExceptionReference(virtualMachine, ex.exception())
