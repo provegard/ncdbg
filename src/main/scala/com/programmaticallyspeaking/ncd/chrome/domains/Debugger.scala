@@ -23,6 +23,13 @@ object Debugger {
 
   case class setBreakpointsActive(active: Boolean)
 
+  /** Defines pause on exceptions state. Can be set to stop on all exceptions, uncaught exceptions or no exceptions.
+    * Initial pause on exceptions state is none.
+    *
+    * @param state Pause on exceptions mode. Allowed values: none, uncaught, all.
+    */
+  case class setPauseOnExceptions(state: String)
+
   /** Returns possible locations for breakpoint. scriptId in start and end range locations should be the same.
     *
     * Note: Not part of stable API!?
@@ -138,6 +145,15 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
 
     case Debugger.stepOut =>
       scriptHost.step(StepOut)
+
+    case Debugger.setPauseOnExceptions(state) =>
+      val pauseType = state match {
+        case "none" => ExceptionPauseType.None
+        case "uncaught" => ExceptionPauseType.Uncaught
+        case "all" => ExceptionPauseType.All
+        case _ => throw new IllegalArgumentException("Unknown pause state: " + state)
+      }
+      scriptHost.pauseOnExceptions(pauseType)
 
     case Debugger.evaluateOnCallFrame(callFrameId, expression, maybeSilent, maybeReturnByValue, maybeGeneratePreview) =>
       // TODO: "In silent mode exceptions thrown during evaluation are not reported and do not pause execution. Overrides setPauseOnException state."

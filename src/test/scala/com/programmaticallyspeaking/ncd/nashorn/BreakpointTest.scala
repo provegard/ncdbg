@@ -1,7 +1,8 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{ObjectNode, Scope, ScriptHost}
+import com.programmaticallyspeaking.ncd.host.{ExceptionPauseType, ObjectNode, Scope, ScriptHost}
 import org.scalactic.Equality
+import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyChecks {
@@ -66,6 +67,12 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
       """.stripMargin, Seq("Local:x", "Global:.*"))
   )
 
+  val exceptionTests = Table(
+    ("desc", "thrownValue"),
+    ("Error", "new Error('oops')"),
+    ("value", "42")
+  )
+
   "when a breakpoint is hit" - {
     "the scopes should be sorted out" - {
       implicit val regexpEq = new Equality[Seq[String]] {
@@ -94,6 +101,35 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     }
   }
 
+  "when an exception is thrown" - {
+    forAll(exceptionTests) { (desc, value) =>
+      s"a caught $desc should be detected" in {
+        val script =
+          s"""try {
+             |  throw $value; // row 2
+             |} catch (e) {
+             |  if (false) debugger; // waitForBreakpoint requires it
+             |}
+           """.stripMargin
+
+        waitForBreakpoint(script, _.pauseOnExceptions(ExceptionPauseType.Caught)) { (_, breakpoint) =>
+          breakpoint.stackFrames.headOption.map(_.breakpoint.lineNumberBase1) should be(Some(2))
+        }
+      }
+    }
+
+    "a caught (by ScriptExecutor) non-Error value should be detected" in {
+      val script =
+        """throw 42; // row 1
+          |if (false) debugger; // waitForBreakpoint requires it
+          """.stripMargin
+
+      waitForBreakpoint(script, _.pauseOnExceptions(ExceptionPauseType.Caught)) { (_, breakpoint) =>
+        breakpoint.stackFrames.headOption.map(_.breakpoint.lineNumberBase1) should be(Some(1))
+      }
+    }
+  }
+
   private def describeScope(host: ScriptHost, scope: Scope) = {
     scope.scopeType.getClass.getSimpleName.replace("$", "") + ":" + (scope.value match {
       case obj: ObjectNode =>
@@ -102,52 +138,4 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     })
   }
 
-//  "bbb" - {
-//    "fooo" in {
-//      // this/scope = Global
-////      val script = "debugger;"
-//
-//      // 1: this = Global
-//      // 2: this/scope = Global
-////      val script =
-////        """(function () {
-////          |debugger;
-////          |})();
-////        """.stripMargin
-//      // this = Global
-//      // scope = JO1P0
-////      val script =
-////        """try {
-////          |  throw new Error("ex");
-////          |} catch (e) {
-////          |  debugger;
-////          |}
-////        """.stripMargin
-//
-//      // this = Global
-//      // scope = WithObject
-////      val script =
-////        """var obj = { "foo": 42 };
-////          |with (obj) {
-////          |  debugger;
-////          |}
-////        """.stripMargin
-//
-//      val script =
-//        """(function () {
-//          |var foo = 42;
-//          |debugger;
-//          |foo.toString();
-//          |})();
-//        """.stripMargin
-//
-//      waitForBreakpoint(script) { (host, breakpoint) =>
-//        breakpoint.stackFrames.foreach { st =>
-//          println(st.scopeObj)
-//          println(st.thisObj)
-//          println(st.locals.extraEntries.keys.mkString(", "))
-//        }
-//      }
-//    }
-//  }
 }

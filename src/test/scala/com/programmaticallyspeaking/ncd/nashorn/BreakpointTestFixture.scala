@@ -11,7 +11,7 @@ class BreakpointTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
-  protected def waitForBreakpoint(script: String)(tester: (ScriptHost, HitBreakpoint) => Unit): Unit = {
+  protected def waitForBreakpoint(script: String, hostSetup: (NashornScriptHost) => Unit = (_) => {})(tester: (ScriptHost, HitBreakpoint) => Unit): Unit = {
     assert(script.contains("debugger;"), "Script must contain a 'debugger' statement")
     val stackframesPromise = Promise[HitBreakpoint]()
     val observer = Observer.from[ScriptEvent] {
@@ -19,6 +19,7 @@ class BreakpointTestFixture extends UnitTest with NashornScriptHostTestFixture {
       case _ => // ignore
     }
     observeAndRunScriptAsync(script, observer) { host =>
+      hostSetup(host)
       stackframesPromise.future.map(bp => {
         try tester(host, bp) finally {
           host.resume()

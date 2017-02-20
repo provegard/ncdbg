@@ -34,6 +34,13 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
   def setProperties(c: ComplexNode, props: Map[String, Any]): Unit = objectProperties += (c.objectId -> props)
 
+  val setPauseOnExceptionsCases = Table(
+    ("state", "expected"),
+    ("none", ExceptionPauseType.None),
+    ("uncaught", ExceptionPauseType.Uncaught),
+    ("all", ExceptionPauseType.All)
+  )
+
   "Debugger" - {
     "enable" - {
       "should emit a ScriptParsed event for a script" in {
@@ -51,6 +58,21 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         requestAndReceiveResponse(debugger, "1", Domain.enable)
 
         verify(currentScriptHost).pauseOnBreakpoints()
+      }
+    }
+
+    "setPauseOnExceptions" - {
+      forAll(setPauseOnExceptionsCases) { (state, expected) =>
+        s"should handle state '$state'" in {
+          val debugger = newActorInstance[Debugger]
+          requestAndReceiveResponse(debugger, "1", Domain.enable)
+
+          // Clear invocations since Domain.enable generates a call to setBreakpointsActive also
+//          clearInvocations(currentScriptHost)
+
+          requestAndReceiveResponse(debugger, "2", Debugger.setPauseOnExceptions(state))
+          verify(currentScriptHost).pauseOnExceptions(expected)
+        }
       }
     }
 

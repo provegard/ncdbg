@@ -17,6 +17,14 @@ object ScopeType {
 
 case class Scope(value: ValueNode, scopeType: ScopeType)
 
+sealed trait ExceptionPauseType
+object ExceptionPauseType {
+  object None extends ExceptionPauseType
+  object Caught extends ExceptionPauseType
+  object Uncaught extends ExceptionPauseType
+  object All extends ExceptionPauseType
+}
+
 trait StackFrame {
   val id: String
   val thisObj: ValueNode
@@ -101,4 +109,6 @@ trait ScriptHost {
   def ignoreBreakpoints(): Done
 
   def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor]
+
+  def pauseOnExceptions(pauseType: ExceptionPauseType): Done
 }

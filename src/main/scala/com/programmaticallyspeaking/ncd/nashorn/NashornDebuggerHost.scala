@@ -10,7 +10,7 @@ import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Subject}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.{JSObjectMirror, ReflectionFieldMirror, ScriptObjectMirror}
 import com.sun.jdi.event._
-import com.sun.jdi.request.EventRequest
+import com.sun.jdi.request.{EventRequest, ExceptionRequest}
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
@@ -27,6 +27,7 @@ object NashornDebuggerHost {
   val InitialScriptResolveAttempts = 5
 
   val NIR_ScriptRuntime = "jdk.nashorn.internal.runtime.ScriptRuntime"
+  val NIR_ECMAException = "jdk.nashorn.internal.runtime.ECMAException"
   val NIR_Context = "jdk.nashorn.internal.runtime.Context"
   val JL_Boolean = "java.lang.Boolean"
   val JL_Integer = "java.lang.Integer"
@@ -36,8 +37,11 @@ object NashornDebuggerHost {
   // The name of the DEBUGGER method in the ScriptRuntime class
   val ScriptRuntime_DEBUGGER = "DEBUGGER"
 
+  val ECMAException_create = "create"
+
   val wantedTypes = Set(
     NIR_ScriptRuntime,
+//    NIR_ECMAException,
     NIR_Context,
     JL_Boolean,
     JL_Integer,
@@ -151,28 +155,33 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private var seenClassPrepareRequests = 0
   private var lastSeenClassPrepareRequests = -1L
 
+  private val exceptionRequests = ListBuffer[ExceptionRequest]()
+
   private def addBreakableLocations(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
     breakableLocationsByScriptUri.getOrElseUpdate(script.uri, ListBuffer.empty) ++= breakableLocations
   }
 
-  private def enableBreakingAtDebuggerStatement(/*scriptRuntime: ClassType*/): Unit = {
-    val debuggerLoc = for {
-      scriptRuntime <- optionToEither(foundWantedTypes.get(NIR_ScriptRuntime), "no ScriptRuntime type found")
-      debuggerMethod <- optionToEither(scriptRuntime.methodsByName(ScriptRuntime_DEBUGGER).asScala.headOption, "ScriptRuntime.DEBUGGER method not found")
-      location <- optionToEither(debuggerMethod.allLineLocations().asScala.headOption, "no line location found in ScriptRuntime.DEBUGGER")
+  private def enableBreakingAt(typeName: String, methodName: String, statementName: String): Unit = {
+    val methodLoc = for {
+      theType <- optionToEither(foundWantedTypes.get(typeName), s"no $typeName type found")
+      theMethod <- optionToEither(theType.methodsByName(methodName).asScala.headOption, s"$typeName.$methodName method not found")
+      location <- optionToEither(theMethod.allLineLocations().asScala.headOption, s"no line location found in $typeName.$methodName")
     } yield location
 
-    debuggerLoc match {
+    methodLoc match {
       case Right(location) =>
-        log.info("Enabling automatic breaking at JavaScript 'debugger' statements")
+        log.info(s"Enabling automatic breaking at JavaScript '$statementName' statements")
         // TODO: BreakableLocation also does this. Reuse code!
         val br = virtualMachine.eventRequestManager().createBreakpointRequest(location)
         br.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
         br.setEnabled(true)
       case Left(msg) =>
-        log.warn(s"Won't be able to break at JavaScript 'debugger' statements because $msg")
+        log.warn(s"Won't be able to break at JavaScript '$statementName' statements because $msg")
     }
   }
+
+  private def enableBreakingAtDebuggerStatement(): Unit =
+    enableBreakingAt(NIR_ScriptRuntime, ScriptRuntime_DEBUGGER, "debugger")
 
   private def considerReferenceType(refType: ReferenceType, attemptsLeft: Int): Option[Script] = {
     if (attemptsLeft == 0) return None
@@ -368,8 +377,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               } else {
                 seenClassPrepareRequests += 1
               }
+            case ev: ExceptionEvent =>
+              attemptToResolveSourceLessReferenceTypes()
+
+              val isECMAException = ev.exception().referenceType().name() == NIR_ECMAException
+              doResume = !isECMAException || handleBreakpoint(ev)
+
             case other =>
-              log.debug("Unknown event: " + other)
+              log.warn("Unknown event: " + other)
           }
         } catch {
           case ex: Exception =>
@@ -507,7 +522,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   // Determines if the location is in ScriptRuntime.DEBUGGER.
-  private def isDebuggerStatementLocation(loc: Location)=
+  private def isDebuggerStatementLocation(loc: Location) =
     loc.declaringType().name() == NIR_ScriptRuntime && loc.method().name() == ScriptRuntime_DEBUGGER
 
   private def scopeTypeFromValueType(value: Value): ScopeType = {
@@ -641,10 +656,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
                 log.warn(s"Won't create a stack frame for location ($location) since there's no source information.")
                 StackFrameHolder(None)
             }
-          case None if isDebuggerStatementLocation(location) =>
-            StackFrameHolder(None, isAtDebuggerStatement = true)
           case _ =>
-            StackFrameHolder(None)
+            StackFrameHolder(None, Some(location))
         }
 
     }
@@ -654,7 +667,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     // Resume right away if we're not pausing on breakpoints
     if (!willPauseOnBreakpoints) return true
 
-    log.info(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")
+    // Log at debug level because we get noise due to exception requests.
+    log.debug(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")
     val thread = ev.thread()
 
     // Start with a fresh object registry
@@ -674,15 +688,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     val stackFrames = buildStackFramesSequence(perStackFrame, thread)
 
     stackFrames.headOption match {
-      case Some(holder) if holder.stackFrame.isEmpty && !holder.isAtDebuggerStatement =>
+      case Some(holder) if holder.stackFrame.isEmpty && !holder.mayBeAtSpecialStatement =>
         // First/top stack frame doesn't belong to a script. Resume!
         log.debug(s"Ignoring breakpoint at ${ev.location()} because it doesn't belong to a script.")
         true
       case Some(holder) =>
         if (holder.isAtDebuggerStatement) log.debug("Breakpoint is at JavaScript 'debugger' statement")
-        doPause(thread, stackFrames.flatMap(_.stackFrame))
+        val didPause = doPause(thread, stackFrames.flatMap(_.stackFrame), holder.location)
         // Resume will be controlled externally
-        false
+        !didPause // false
       case None =>
         // Hm, no stack frames at all... Resume!
         log.debug(s"Ignoring breakpoint at ${ev.location()} because no stack frames were found at all.")
@@ -690,19 +704,25 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame]): Unit = {
-    pausedData = Some(new PausedData(thread, stackFrames))
+  private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame], location: Option[Location]): Boolean = {
+    stackFrames.headOption.map(_.breakpoint) match {
+      case Some(breakpoint) =>
+        pausedData = Some(new PausedData(thread, stackFrames))
 
-    val breakpoint = stackFrames.head.breakpoint
-    scriptById(breakpoint.scriptId).foreach {
-      case s: ScriptImpl =>
-        val line = s.lines(breakpoint.lineNumberBase1 - 1)
-        log.debug(s"Pausing at ${s.uri}:${breakpoint.lineNumberBase1}: $line")
-      case _ =>
+        scriptById(breakpoint.scriptId).foreach {
+          case s: ScriptImpl =>
+            val line = s.lines(breakpoint.lineNumberBase1 - 1)
+            log.info(s"Pausing at ${s.uri}:${breakpoint.lineNumberBase1}: $line")
+          case _ =>
+        }
+
+        val hitBreakpoint = HitBreakpoint(stackFrames)
+        emitEvent(hitBreakpoint)
+        true
+      case None =>
+        log.debug(s"Won't pause at $location since there are no stack frames at all.")
+        false
     }
-
-    val hitBreakpoint = HitBreakpoint(stackFrames)
-    emitEvent(hitBreakpoint)
   }
 
   private def scriptPathFromLocation(location: Location): String = {
@@ -923,6 +943,30 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     Done
   }
 
+  override def pauseOnExceptions(pauseType: ExceptionPauseType): Done = {
+    val erm = virtualMachine.eventRequestManager()
+
+    // Clear all first, simpler than trying to keep in sync
+    erm.deleteEventRequests(exceptionRequests.asJava)
+    exceptionRequests.clear()
+
+    val pauseOnCaught = pauseType == ExceptionPauseType.Caught || pauseType == ExceptionPauseType.All
+    // Note that uncaught is currently untested since our test setup doesn't really allow it.
+    val pauseOnUncaught = pauseType == ExceptionPauseType.Uncaught || pauseType == ExceptionPauseType.All
+
+    if (pauseOnCaught || pauseOnUncaught) {
+      log.info(s"Will pause on exceptions (caught=$pauseOnCaught, uncaught=$pauseOnUncaught)")
+      val request = erm.createExceptionRequest(null, pauseOnCaught, pauseOnUncaught)
+      request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD) // TODO: Duplicate code
+      request.setEnabled(true)
+      exceptionRequests += request
+    } else {
+      log.info("Won't pause on exceptions")
+    }
+
+    Done
+  }
+
   private def propertiesFromJSObject(objectId: ObjectId, jsObject: ObjectReference, isArray: Boolean)(implicit marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
     val key = ObjectPropertiesKey(objectId, onlyOwn = true, onlyAccessors = false)
     pausedData.get.objectPropertiesCache.getOrElseUpdate(key, {
@@ -1101,7 +1145,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     val breakpoint = breakableLocation.toBreakpoint
   }
 
-  case class StackFrameHolder(stackFrame: Option[StackFrame], isAtDebuggerStatement: Boolean = false)
+  case class StackFrameHolder(stackFrame: Option[StackFrame], location: Option[Location] = None) {
+    val mayBeAtSpecialStatement = location.isDefined
+    val isAtDebuggerStatement = location.exists(isDebuggerStatementLocation)
+  }
 
 }
 
