@@ -111,7 +111,7 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport with R
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case Runtime.getProperties(strObjectId, ownProperties, accessorPropertiesOnly, maybeGeneratePreview) =>
 
-      log.info(s"Runtime.getProperties: ownProperties = $ownProperties, accessorPropertiesOnly = $accessorPropertiesOnly")
+      log.debug(s"Runtime.getProperties: objectId = $strObjectId, ownProperties = $ownProperties, accessorPropertiesOnly = $accessorPropertiesOnly")
 
       val generatePreview = maybeGeneratePreview.getOrElse(false)
       implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, byValue = false)
