@@ -10,6 +10,8 @@ object Runtime {
   type ExecutionContextId = Int
   type ScriptId = String
   type RemoteObjectId = String
+  type Timestamp = Long
+
   /**
     * Allowed values: Infinity, NaN, -Infinity, -0.
     */
@@ -97,6 +99,8 @@ object Runtime {
   object RemoteObject extends RemoteObjectBuilder
 
   object PropertyDescriptor extends PropertyDescriptorBuilder
+
+  case class ConsoleAPICalledEventParams(`type`: String, args: Seq[RemoteObject], executionContextId: ExecutionContextId, timestamp: Timestamp)
 }
 
 class Runtime extends DomainActor with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
@@ -127,6 +131,9 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport with R
     case Domain.enable =>
       emitEvent("Runtime.executionContextCreated",
         ExecutionContextCreatedEventParams(ExecutionContextDescription(StaticExecutionContextId, "top", "top", null)))
+
+      emitEvent("Runtime.consoleAPICalled",
+        ConsoleAPICalledEventParams("log", Seq(RemoteObject.forString("Greetings from ncdbg!")), StaticExecutionContextId, System.currentTimeMillis()))
 
     case Runtime.releaseObjectGroup(grp) =>
       log.debug(s"Request to release object group '$grp'")
