@@ -70,7 +70,7 @@ object Boot extends App with Logging {
         val localAddress = b.localAddress
         log.info(s"Server is listening on ${localAddress.getHostName}:${localAddress.getPort}")
         val url = s"chrome-devtools://devtools/bundled/inspector.html?experiments=true&v8only=true&ws=${localAddress.getHostName}:${localAddress.getPort}/dbg"
-        log.info(url)
+        log.info("Open this URL in Chrome: " + url)
       case Failure(e) =>
         log.error("Binding failed", e)
         die(2)

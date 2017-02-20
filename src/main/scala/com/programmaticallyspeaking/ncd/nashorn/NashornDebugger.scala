@@ -63,7 +63,7 @@ class NashornDebugger(implicit executionContext: ExecutionContext) extends Loggi
     initAndListen(scriptHostAsActor)
 
     val scriptHostActorRef = TypedActor(system).getActorRefFor(scriptHostAsActor)
-    log.info(s"ScriptHost actor is at ${scriptHostActorRef.path.toStringWithoutAddress}")
+    log.debug(s"ScriptHost actor is at ${scriptHostActorRef.path.toStringWithoutAddress}")
     scriptHostAsActor
   }
 
