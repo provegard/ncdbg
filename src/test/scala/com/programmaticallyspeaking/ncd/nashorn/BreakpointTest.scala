@@ -77,9 +77,9 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     "the scopes should be sorted out" - {
       implicit val regexpEq = new Equality[Seq[String]] {
         override def areEqual(a: Seq[String], b: Any): Boolean = b match {
-          case regexpes: Seq[String] =>
+          case regexpes: Seq[_] =>
             a.size == regexpes.size && a.zip(regexpes).forall { case (str, regexp) =>
-              regexp.r.pattern.matcher(str).matches
+              regexp.toString.r.pattern.matcher(str).matches
             }
 
           case _ => false
