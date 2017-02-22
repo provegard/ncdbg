@@ -1,11 +1,15 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import com.programmaticallyspeaking.ncd.host.{ComplexNode, ErrorValue, ValueNode}
 import com.sun.jdi._
 
 import scala.language.implicitConversions
 import scala.language.dynamics
+import scala.util.control.NonFatal
 
 class MissingMethodException(val name: String, message: String) extends RuntimeException(message)
+
+class InvocationFailedException(message: String) extends RuntimeException(message)
 
 abstract class Invoker(val thread: ThreadReference) extends ThreadUser {
   import scala.collection.JavaConverters._
@@ -44,6 +48,38 @@ abstract class Invoker(val thread: ThreadReference) extends ThreadUser {
     throw new MissingMethodException(methodName, s"Cannot find a method '$methodName' on type '${referenceType.name()}' matching: " + args.mkString(", ") +
       "\n\nCandidates:\n" + candidates.map(m => s"- ${m.name()}${m.signature()}").mkString("\n"))
   }
+
+  protected def unpackError[R](handle: => R): R = {
+    try handle catch {
+      case ex: InvocationException =>
+        try {
+          // Try to marshal the exception. We expect Marshaller to register an ErrorValue with extra property 'javaStack'.
+          val marshaller = new Marshaller(thread, new ThrowingMappingRegistry)
+          marshaller.marshal(ex.exception())
+          throw new RuntimeException("Invocation failed", ex)
+        } catch {
+          case e: InvocationFailedException =>
+            throw e
+          case NonFatal(t) =>
+            val rex = new RuntimeException("Marshalling of exception failed", t)
+            rex.addSuppressed(ex)
+            throw rex
+        }
+    }
+  }
+
+  class ThrowingMappingRegistry extends MappingRegistry {
+    override def register(value: Value, valueNode: ComplexNode, extraProperties: Map[String, ValueNode]): Unit = valueNode match {
+      case ErrorValue(data, _, _) =>
+        extraProperties.get("javaStack") match {
+          case Some(stackWithMessage) =>
+            throw new InvocationFailedException("Invocation failed: " + stackWithMessage.asString)
+          case None =>
+            throw new InvocationFailedException(s"Invocation failed: ${data.name}: ${data.message}")
+        }
+      case _ => // noop
+    }
+  }
 }
 
 class DynamicInvoker(thread: ThreadReference, objectReference: ObjectReference) extends Invoker(thread) with Dynamic {
@@ -55,7 +91,7 @@ class DynamicInvoker(thread: ThreadReference, objectReference: ObjectReference) 
       case Right(method) =>
         val argValues = args.map(toValue)
         thread.virtualMachine().withoutClassPrepareRequests {
-          objectReference.invokeMethod(suspendedThread(), method, argValues.asJava, ObjectReference.INVOKE_SINGLE_THREADED)
+          unpackError(objectReference.invokeMethod(suspendedThread(), method, argValues.asJava, ObjectReference.INVOKE_SINGLE_THREADED))
         }
       case Left(candidates) =>
         rejectCall(methodName, objectReference.referenceType(), args, candidates)
@@ -72,7 +108,7 @@ class StaticInvoker(thread: ThreadReference, classType: ClassType) extends Invok
       case Right(method) =>
         val argValues = args.map(toValue)
         thread.virtualMachine().withoutClassPrepareRequests {
-          classType.invokeMethod(suspendedThread(), method, argValues.asJava, ObjectReference.INVOKE_SINGLE_THREADED)
+          unpackError(classType.invokeMethod(suspendedThread(), method, argValues.asJava, ObjectReference.INVOKE_SINGLE_THREADED))
         }
       case Left(candidates) =>
         rejectCall(methodName, classType, args, candidates)
