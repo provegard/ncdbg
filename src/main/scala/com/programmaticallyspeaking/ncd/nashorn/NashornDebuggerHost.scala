@@ -1004,7 +1004,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
       properties.map { prop =>
         val theValue =
-          if (isArray && isUnsignedInt(prop)) mirror.getSlot(prop.toInt) else mirror.getUnknown(prop)
+          if (isArray && isUnsignedInt(prop)) mirror.getSlot(prop.toInt) else mirror.getMember(prop)
 
         // Note: A ValueNode shouldn't be null/undefined, so use Some(...) rather than Option(...) for the value
         prop -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,

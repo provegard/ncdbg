@@ -25,7 +25,7 @@ class JSObjectMirror(val jsObject: ObjectReference)(implicit marshaller: Marshal
   def getString(key: String): String = invoker.applyDynamic(getMemberSignature)(key).asString
   def getInt(key: String, defaultValue: Int): Int = invoker.applyDynamic(getMemberSignature)(key).asNumber(defaultValue).intValue()
 
-  def getUnknown(key: String): ValueNode = invoker.applyDynamic(getMemberSignature)(key)
+  def getMember(key: String): ValueNode = invoker.applyDynamic(getMemberSignature)(key)
 
   def getSlot(index: Int): ValueNode = invoker.applyDynamic(getSlotSignature)(index)
 }
