@@ -999,17 +999,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       import com.programmaticallyspeaking.ncd.infra.StringUtils._
       val mirror = new JSObjectMirror(jsObject)
 
-      // For an array, keySet should return indices + "length", and then we get use getMember. An alternative would be to
-      // use getSlot, but that'd require us to figure out the length (or just increase until hasSlot returns false).
+      // For an array, keySet should return indices + "length", and then we get use getSlot.
       val properties = mirror.keySet()
 
       properties.map { prop =>
-        val theValue = mirror.getUnknown(prop) match {
-          case EmptyNode|SimpleValue(Undefined) if isArray && isUnsignedInt(prop) =>
-            // For a slot-based array JSObject, getMember may return nothing (which admittedly is wrong).
-            mirror.getSlot(prop.toInt)
-          case other => other
-        }
+        val theValue =
+          if (isArray && isUnsignedInt(prop)) mirror.getSlot(prop.toInt) else mirror.getUnknown(prop)
 
         // Note: A ValueNode shouldn't be null/undefined, so use Some(...) rather than Option(...) for the value
         prop -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,

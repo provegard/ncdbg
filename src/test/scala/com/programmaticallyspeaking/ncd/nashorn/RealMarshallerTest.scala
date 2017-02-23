@@ -247,6 +247,12 @@ class OnlySlotBasedArrayJSObject extends IsArrayBasedArrayJSObject {
   override def getMember(name: String): AnyRef = if (name == "length") super.getMember("length") else null
 }
 
+class SlotBasedArrayJSObjectThatMisbehavesForGetMember extends IsArrayBasedArrayJSObject {
+  override def getMember(name: String): AnyRef = {
+    if (name == "length") super.getMember("length") else throw new RuntimeException("oops")
+  }
+}
+
 class ObjectLikeJSObject extends AbstractJSObject {
   import scala.collection.JavaConverters._
   val data: Map[String, AnyRef] = Map("a" -> 42.asInstanceOf[AnyRef], "b" -> 43.asInstanceOf[AnyRef])
