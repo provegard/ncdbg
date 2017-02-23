@@ -15,12 +15,17 @@ import org.slf4s.Logging
 import scala.util.{Failure, Success}
 
 object Boot extends App with Logging {
+  val conf = new Conf(args)
+
+  // Set the idle timeout as a system property *before* Akka performs config init.
+  System.setProperty("akka.http.server.idle-timeout", s"${conf.idleTimeout()}s")
 
   implicit val system = ActorSystem()
   import system.dispatcher
   implicit val materializer = ActorMaterializer()
 
-  val connector = new NashornDebuggerConnector("localhost", 7777)
+  val connectAddr = conf.connect()
+  val connector = new NashornDebuggerConnector(connectAddr.host, connectAddr.port)
   val debuggerReady = connector.connect().map(vm => new NashornDebugger().create(vm))
 
   debuggerReady.andThen {
@@ -64,7 +69,8 @@ object Boot extends App with Logging {
   private def startHttpServer(): Unit = {
     val service = new Webservice(new DefaultDomainFactory())
 
-    val binding = Http().bindAndHandle(service.route, "localhost", 7778)
+    val listenAddr = conf.listen()
+    val binding = Http().bindAndHandle(service.route, listenAddr.host, listenAddr.port)
     binding.onComplete {
       case Success(b) =>
         val localAddress = b.localAddress
