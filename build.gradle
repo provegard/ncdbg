@@ -30,7 +30,7 @@ repositories {
 
 dependencies {
     def logbackVersion = '1.1.7'
-    def akkaHttpVersion = '10.0.0'
+    def akkaHttpVersion = '10.0.3'
     def akkaVersion = '2.4.17'
 
     // needed for gradle-scalatest
