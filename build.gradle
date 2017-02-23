@@ -26,6 +26,13 @@ test {
     systemProperty "logback.configurationFile", "logback-off.xml"
 }
 
+run {
+    // Useful for testing command-line argument parsing using "gradle run -Pargs='...'"
+    if (project.hasProperty('args')){
+        args project.args.split('\\s+')
+    }
+}
+
 repositories {
     mavenCentral()
     maven { url "https://jitpack.io" }
