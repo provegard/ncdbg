@@ -4,12 +4,14 @@ import java.io.File
 import java.nio.file.Files
 
 import com.programmaticallyspeaking.ncd.host.{Script, ScriptAdded, ScriptEvent}
+import com.programmaticallyspeaking.ncd.infra.DelayedFuture
 import com.programmaticallyspeaking.ncd.messaging.Observer
-import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.concurrent.{Eventually, IntegrationPatience, ScalaFutures}
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.duration._
 
-trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with ScalaFutures with FairAmountOfPatience with Eventually {
+trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with FairAmountOfPatience with Eventually with ScalaFutures with IntegrationPatience {
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
   def testAddScript(scriptContents: String)(handler: (Seq[Script] => Unit)): Unit = {
@@ -25,6 +27,20 @@ trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with ScalaFutu
       }
     }
   }
+
+  def testAddScriptWithWait(scriptContents: String, waitTime: FiniteDuration): Future[Seq[Script]] = {
+    var scripts = Seq.empty[Script]
+    val observer = Observer.from[ScriptEvent]({
+      case ScriptAdded(s) => scripts :+= s
+      case _ =>
+    })
+
+    val p = Promise[Seq[Script]]()
+    observeAndRunScriptSync(scriptContents, observer) { host =>
+      DelayedFuture(waitTime)(p.success(scripts))
+    }
+    p.future
+  }
 }
 
 class ScriptAddedTest extends ScriptAddedTestFixture {
@@ -39,6 +55,21 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
 
     testAddScript(script) { scripts =>
       atLeast(1, scripts.map(_.contents)) should include ("5 + 5")
+    }
+  }
+
+  "Recompilation of eval script should be merged with the original" in {
+
+    val script =
+      """(function () {
+        |  var f = function (x) { return x + x; };
+        |  return f(5);
+        |})();
+      """.stripMargin
+
+    whenReady(testAddScriptWithWait(script, 500.millis)) { scripts =>
+      val relevantScripts = scripts.filter(s => s.contents.contains("x + x"))
+      relevantScripts.size should be (1)
     }
   }
 

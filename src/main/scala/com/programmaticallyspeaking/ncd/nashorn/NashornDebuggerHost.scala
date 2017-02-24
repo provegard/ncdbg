@@ -218,13 +218,18 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def registerScript(script: Script, scriptPath: String, locations: Seq[Location]): Unit = {
-    log.info(s"Adding script at path '$scriptPath' with ID '${script.id}' and URI '${script.uri}'")
+    val isKnownScript = breakableLocationsByScriptUri.contains(script.uri)
 
     val erm = virtualMachine.eventRequestManager()
     val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
     addBreakableLocations(script, breakableLocations)
 
-    emitEvent(ScriptAdded(script))
+    if (isKnownScript) {
+      log.debug(s"Reusing script with URI '${script.uri}' for script path '$scriptPath'")
+    } else {
+      log.info(s"Adding script at path '$scriptPath' with ID '${script.id}' and URI '${script.uri}'")
+      emitEvent(ScriptAdded(script))
+    }
   }
 
   private def handleScriptResult(result: Try[Either[String, Script]], refType: ReferenceType, scriptPath: String, locations: Seq[Location], attemptsLeft: Int): Option[Script] = result match {
@@ -772,8 +777,27 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private def getOrAddScript(path: String): Script =
     scriptByPath.getOrElseUpdate(path, ScriptImpl.fromFile(path, scriptIdGenerator.next))
 
-  private def getOrAddEvalScript(artificialPath: String, source: String): Script =
-    scriptByPath.getOrElseUpdate(artificialPath, ScriptImpl.fromSource(artificialPath, source, scriptIdGenerator.next))
+  private def getOrAddEvalScript(artificialPath: String, source: String): Script = {
+    val isRecompilation = artificialPath.contains("Recompilation")
+    val newScript = ScriptImpl.fromSource(artificialPath, source, scriptIdGenerator.next)
+    if (!isRecompilation) return scriptByPath.getOrElseUpdate(artificialPath, newScript)
+
+    // For a recompilation, we will (most likely) already have the original script that was recompiled (recompilation
+    // happens for example when a function inside the eval script is called with known types). We find the original
+    // script by comparing contents hashes. If we find the original script, we just discard the new one and use the
+    // original.
+    scriptByPath.values.find(_.contentsHash() == newScript.contentsHash()) match {
+      case Some(scriptWithSameSource) =>
+        // Note that we add a map entry for the original script with the new path as key. This way we'll find our
+        // reused script using all its "alias paths".
+        // Note 2: I worry that comparing contents hashes isn't enough - that we need to verify no overlapping
+        // line locations also. But we don't have locations here, and I don't want to do too much defensive coding.
+        scriptByPath += (artificialPath -> scriptWithSameSource)
+        scriptWithSameSource
+      case None =>
+        scriptByPath.getOrElseUpdate(artificialPath, newScript)
+    }
+  }
 
   override def scripts: Seq[Script] = scriptByPath.values.toSeq
 
