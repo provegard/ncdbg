@@ -59,12 +59,12 @@ abstract class DomainActor extends Actor with Logging with Stash {
       override def onNext(item: ScriptEvent): Unit = self ! item
 
       override def onError(error: Throwable): Unit = {
-        log.error(s"[$name] Script event error, exiting")
+        log.error("Script event error, exiting")
         context.stop(self)
       }
 
       override def onComplete(): Unit = {
-        log.info(s"[$name] Script event completion, exiting")
+        log.info("Script event completion, exiting")
         context.stop(self)
       }
     })
@@ -79,7 +79,7 @@ abstract class DomainActor extends Actor with Logging with Stash {
 
   override def receive: Receive = {
     case ScriptHostRef(actorRef) =>
-      log.info(s"[$name] Obtained a ScriptHost reference")
+      log.debug("Obtained a ScriptHost reference")
       // TODO: Error handling!
       val host = TypedActor(context).typedActorOf(TypedProps[ScriptHost], actorRef)
       setScriptHost(host)
@@ -89,7 +89,7 @@ abstract class DomainActor extends Actor with Logging with Stash {
     case scriptEvent: ScriptEvent => // Ignore events when disabled
 
     case req: Messages.Request if scriptHost == null =>
-      log.debug(s"[$name] Got a Request without a ScriptHost, stashing...")
+      log.debug("Got a Request without a ScriptHost, stashing...")
       stash() //TODO: Test
 
     case req@Messages.Request(_, Domain.enable) =>
@@ -114,9 +114,9 @@ abstract class DomainActor extends Actor with Logging with Stash {
       processRequest(req)
 
     case scriptEvent: ScriptEvent =>
-      log.debug(s"[$name] Got script event $scriptEvent")
+      log.debug(s"Got script event $scriptEvent")
       handleScriptEvent.applyOrElse(scriptEvent, { se: ScriptEvent =>
-        log.debug(s"[$name] Dropping unhandled script event $scriptEvent")
+        log.debug(s"Dropping unhandled script event $scriptEvent")
       })
 
     case ProcessingResult(req, result) =>

@@ -57,7 +57,7 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
       // TODO: Test getOrElseUpdate!!
       // TODO: context.watch on the child actor and break if it fails!!
       val domainActor = domains.getOrElseUpdate(domain, {
-        log.info(s"Creating a new domain actor for $domain")
+        log.debug(s"Creating a new domain actor for $domain")
         domainFactory.create(domain)
       })
       val domainMessageArg = DomainMethodArgumentFactory.create(msg)
@@ -145,7 +145,8 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
       sendToDevTools(Protocol.Event(event.method, event.params))
 
     case DevToolsConnected(devToolsRef) =>
-      log.info(s"New Developer Tools client: $devToolsRef")
+      log.debug(s"New Developer Tools client: $devToolsRef")
+      log.info("A new Developer Tools client connected!")
 
       // Disconnect from current Dev Tools
       disconnectDevTools("bye")

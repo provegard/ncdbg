@@ -21,7 +21,7 @@ class Webservice(domainFactory: DomainFactory)(implicit fm: Materializer, system
     }
 
   def websocketDebugFlow(): Flow[Message, Message, Any] = {
-    log.info("Got a websocket debug connection.")
+    log.debug("Got a websocket debug connection.")
     val chromeServer = chromeServerFactory.create()
     Flow[Message]
       .collect {

@@ -227,7 +227,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     if (isKnownScript) {
       log.debug(s"Reusing script with URI '${script.uri}' for script path '$scriptPath'")
     } else {
-      log.info(s"Adding script at path '$scriptPath' with ID '${script.id}' and URI '${script.uri}'")
+      // Reason for logging double at different levels: info typically goes to the console, debug to the log file.
+      log.debug(s"Adding script at path '$scriptPath' with ID '${script.id}' and URI '${script.uri}'")
+      log.info(s"Adding script with URI '${script.uri}'")
       emitEvent(ScriptAdded(script))
     }
   }
@@ -237,7 +239,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       registerScript(script, scriptPath, locations)
       Some(script)
     case Success(Left(msg)) =>
-      log.info(s"Ignoring script because $msg")
+      log.debug(s"Ignoring script because $msg")
       None
     case Failure(ex: FileNotFoundException) =>
       log.warn(s"Script at path '$scriptPath' doesn't exist. Trying the source route...")
@@ -319,7 +321,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     referenceTypes.asScala.foreach(considerReferenceType(_: ReferenceType, InitialScriptResolveAttempts))
 
     val breakableLocationCount = breakableLocationsByScriptUri.foldLeft(0)((sum, e) => sum + e._2.size)
-    log.info(s"$typeCount types checked, ${scriptByPath.size} scripts added, $breakableLocationCount breakable locations identified")
+    log.debug(s"$typeCount types checked, ${scriptByPath.size} scripts added, $breakableLocationCount breakable locations identified")
 
     enableBreakingAtDebuggerStatement()
 
