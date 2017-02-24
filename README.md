@@ -87,6 +87,10 @@ In the absence of a proper style guide, please follow the style of existing code
 The code in this repository is licensed under the MIT license. See the *LICENCE* file
 for details.
 
+## Sponsoring
+
+This project is partly sponsored by my employer, [factor10](http://factor10.com/).
+
 ## Contact
 
 Twitter: [@provegard](https://twitter.com/provegard)
