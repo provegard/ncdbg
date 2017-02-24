@@ -79,6 +79,7 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
 
   override def receive: Receive = {
     case DevToolsConnected(actorRef) =>
+      log.info("A Developer Tools client connected!")
       currentDevToolsRef = Some(actorRef)
       context.become(receiveClient)
   }
