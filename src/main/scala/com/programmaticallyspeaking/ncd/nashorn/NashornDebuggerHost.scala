@@ -532,8 +532,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           val codeWithMarker = s"""'$EvaluatedCodeMarker';$code"""
           contextInvoker.eval(initialScope, codeWithMarker, callThis, null)
         } catch {
-          case ex: InvocationException =>
-            new ThrownExceptionReference(virtualMachine, ex.exception())
+          case ex: InvocationFailedException =>
+            new ThrownExceptionReference(virtualMachine, ex.exceptionReference)
         }
 
       case _ =>

@@ -9,7 +9,7 @@ import scala.util.control.NonFatal
 
 class MissingMethodException(val name: String, message: String) extends RuntimeException(message)
 
-class InvocationFailedException(message: String) extends RuntimeException(message)
+class InvocationFailedException(message: String, val exceptionReference: ObjectReference) extends RuntimeException(message)
 
 abstract class Invoker(val thread: ThreadReference) extends ThreadUser {
   import scala.collection.JavaConverters._
@@ -71,11 +71,12 @@ abstract class Invoker(val thread: ThreadReference) extends ThreadUser {
   class ThrowingMappingRegistry extends MappingRegistry {
     override def register(value: Value, valueNode: ComplexNode, extraProperties: Map[String, ValueNode]): Unit = valueNode match {
       case ErrorValue(data, _, _) =>
+        val exceptionRef = value.asInstanceOf[ObjectReference]
         extraProperties.get("javaStack") match {
           case Some(stackWithMessage) =>
-            throw new InvocationFailedException("Invocation failed: " + stackWithMessage.asString)
+            throw new InvocationFailedException("Invocation failed: " + stackWithMessage.asString, exceptionRef)
           case None =>
-            throw new InvocationFailedException(s"Invocation failed: ${data.name}: ${data.message}")
+            throw new InvocationFailedException(s"Invocation failed: ${data.name}: ${data.message}", exceptionRef)
         }
       case _ => // noop
     }
