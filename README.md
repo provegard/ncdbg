@@ -30,27 +30,50 @@ persists, please open an issue.
 Start the debug target with the following VM arguments:
 
     -Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=7777
-    
-**Note**: Right now, ncdbg hard-codes localhost:7777 (see [this issue](https://github.com/provegard/ncdbg/issues/11)).
+
+Port 7777 is just an example, but is the port that NCDbg by default will connect to. If you use a different
+port, make sure you configure NCDbg appropriately, see below.
 
 If you prefer, use `suspend=y` instead to have the debug target wait until the debugger
 attaches.
 
-Once the debug target is up and running, connect the debugger. Right now, there is no release
-package to run, so run using Gradle:
+It's possible to run NCDbg using Gradle, which you'll want to do to run the bleeding edge version.
+Another option is to download and run a distribution.
+
+### The Gradle way
+
+Once the debug target is up and running, connect the debugger:
 
     ./gradlew run
     
-The log output may be a bit intimidating, but look for a line that looks something like this:
+The console only shows information messages, warnings and errors. For debug messages, see the file _logs/ncdbg.log_.
 
-> chrome-devtools://devtools/bundled/inspector.html?experiments=true&v8only=true&ws=localhost:7778/dbg
+In the console output, you'll find the following line:
 
-(Yes, localhost:7778 is currently also hard-coded...)
+> Open this URL in Chrome: chrome-devtools://devtools/bundled/inspector.html?experiments=true&v8only=true&ws=localhost:7778/dbg
+
+(The exact address towards the end depends on runtime configuration options, see below.)
 
 Copy that URL and open it in Chrome. Chrome Dev Tools should now open. Go to the Sources tab and
-take a look at the scripts!
+take a look at the scripts, set breakpoints etc.!
 
 Note that the Dev Tools console can only be used when the debugger is paused in a breakpoint.
+
+### The distribution way
+
+TBD
+
+## Configuring options
+
+NCDbg supports configuration via the command line. When running using Gradle, the syntax is a bit awkward. To see the possible configuration options, run:
+
+    ./gradlew run -Pargs='--help'
+    
+For example, to connect to a debug target listening at port 9999 and listen on port 10000, run:
+
+    ./gradlew run -Pargs='-c 9999 -l 10000'
+
+When running a distribution, just pass arguments the normal way.
 
 ## Contributing
 
