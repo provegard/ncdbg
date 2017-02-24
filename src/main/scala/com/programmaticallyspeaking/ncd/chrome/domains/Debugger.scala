@@ -126,7 +126,6 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
 
     case Debugger.setBreakpointByUrl(lineNumberBase0, url, _, _) =>
       val lineNumberBase1 = lineNumberBase0 + 1
-      log.info(s"Setting breakpoint in '$url' at line $lineNumberBase1.")
       val bp = scriptHost.setBreakpoint(url, lineNumberBase1)
 
       SetBreakpointByUrlResult(bp.breakpointId, Seq(Location(bp.scriptId, bp.lineNumberBase1 - 1, 0)))
