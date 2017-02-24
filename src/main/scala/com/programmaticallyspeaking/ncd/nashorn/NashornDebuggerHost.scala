@@ -520,7 +520,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         val contextInvoker = new DynamicInvoker(thread, context.asInstanceOf[ObjectReference])
 
         try {
-          val codeWithMarker = s"""('$EvaluatedCodeMarker',$code)"""
+          val codeWithMarker = s"""'$EvaluatedCodeMarker';$code"""
           contextInvoker.eval(initialScope, codeWithMarker, callThis, null)
         } catch {
           case ex: InvocationException =>
