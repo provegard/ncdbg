@@ -1,7 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import java.io.{File, FileNotFoundException}
-import java.net.URI
+import java.net.{URI, URL}
 import java.util.Collections
 
 import com.programmaticallyspeaking.ncd.host._
@@ -189,6 +189,59 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private def enableBreakingAtDebuggerStatement(): Unit =
     enableBreakingAt(NIR_ScriptRuntime, ScriptRuntime_DEBUGGER, "debugger")
 
+  private def scriptFromEval(refType: ReferenceType, scriptPath: String, attemptsLeft: Int): Either[String, Script] = {
+    shamelesslyExtractEvalSourceFromPrivatePlaces(refType) match {
+      case Some(src) =>
+        // NOTE: The Left here is untested. Our test setup doesn't allow us to connect multiple times to
+        // the same VM, in which case we could observe these "leftover" scripts.
+        if (src.contains(EvaluatedCodeMarker)) Left("it contains internally evaluated code")
+        else Right(getOrAddEvalScript(scriptPath, src))
+      case None =>
+        val willRetry = attemptsLeft > 2
+        if (willRetry) {
+
+          // Since a breakpoint may be hit before our retry attempt, we add the reference type to our list
+          // ouf source-less types. If we hit a breakpoint, we try to "resolve" all references in that list.
+          scriptTypesWaitingForSource += refType
+
+          // I couldn't get a modification watchpoint to work (be triggered). Perhaps it's because the 'source'
+          // field is set using reflection? So instead retry in a short while.
+          val item = ConsiderReferenceType(refType, attemptsLeft - 1)
+          DelayedFuture(50.milliseconds) {
+            asyncInvokeOnThis(_.handleOperation(item))
+          }
+        }
+
+        val retryStr = if (willRetry) ", will retry" else ""
+        Left(s"no source available (yet$retryStr)")
+    }
+  }
+
+  private def registerScript(script: Script, scriptPath: String, locations: Seq[Location]): Unit = {
+    log.info(s"Adding script at path '$scriptPath' with ID '${script.id}' and URI '${script.uri}'")
+
+    val erm = virtualMachine.eventRequestManager()
+    val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
+    addBreakableLocations(script, breakableLocations)
+
+    emitEvent(ScriptAdded(script))
+  }
+
+  private def handleScriptResult(result: Try[Either[String, Script]], refType: ReferenceType, scriptPath: String, locations: Seq[Location], attemptsLeft: Int): Option[Script] = result match {
+    case Success(Right(script)) =>
+      registerScript(script, scriptPath, locations)
+      Some(script)
+    case Success(Left(msg)) =>
+      log.info(s"Ignoring script because $msg")
+      None
+    case Failure(ex: FileNotFoundException) =>
+      log.warn(s"Script at path '$scriptPath' doesn't exist. Trying the source route...")
+      handleScriptResult(Try(scriptFromEval(refType, scriptPath, attemptsLeft)), refType, scriptPath, locations, attemptsLeft)
+    case Failure(t) =>
+      log.error(s"Ignoring script at path '$scriptPath'", t)
+      None
+  }
+
   private def considerReferenceType(refType: ReferenceType, attemptsLeft: Int): Option[Script] = {
     if (attemptsLeft == 0) return None
 
@@ -213,32 +266,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           val scriptPath = scriptPathFromLocation(firstLocation)
 
           val triedScript: Try[Either[String, Script]] = Try {
-            if (firstLocation.sourceName() == "<eval>") {
-              shamelesslyExtractEvalSourceFromPrivatePlaces(refType) match {
-                case Some(src) =>
-                  // NOTE: The Left here is untested. Our test setup doesn't allow us to connect multiple times to
-                  // the same VM, in which case we could observe these "leftover" scripts.
-                  if (src.contains(EvaluatedCodeMarker)) Left("it contains internally evaluated code")
-                  else Right(getOrAddEvalScript(scriptPath, src))
-                case None =>
-                  val willRetry = attemptsLeft > 2
-                  if (willRetry) {
-
-                    // Since a breakpoint may be hit before our retry attempt, we add the reference type to our list
-                    // ouf source-less types. If we hit a breakpoint, we try to "resolve" all references in that list.
-                    scriptTypesWaitingForSource += refType
-
-                    // I couldn't get a modification watchpoint to work (be triggered). Perhaps it's because the 'source'
-                    // field is set using reflection? So instead retry in a short while.
-                    val item = ConsiderReferenceType(refType, attemptsLeft - 1)
-                    DelayedFuture(50.milliseconds) {
-                      asyncInvokeOnThis(_.handleOperation(item))
-                    }
-                  }
-
-                  val retryStr = if (willRetry) ", will retry" else ""
-                  Left(s"no source available (yet$retryStr)")
-              }
+            if (firstLocation.sourceName() == "<eval>" || scriptTypesWaitingForSource.contains(refType)) {
+              scriptFromEval(refType, scriptPath, attemptsLeft)
             } else {
               // Create and add the Script object. Note that we may hit the same script multiple times, e.g. if the
               // script contains inner functions, which are compiled into separate classes.
@@ -246,27 +275,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             }
           }
 
-          triedScript match {
-            case Success(Right(script)) =>
-              log.info(s"Adding script at path '$scriptPath' with ID '${script.id}' and URI '${script.uri}'")
-
-              val erm = virtualMachine.eventRequestManager()
-              val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
-              addBreakableLocations(script, breakableLocations)
-
-              emitEvent(ScriptAdded(script))
-
-              Some(script)
-            case Success(Left(msg)) =>
-              log.info(s"Ignoring script because $msg")
-              None
-            case Failure(ex: FileNotFoundException) =>
-              log.warn(s"Ignoring non-existent script at path '$scriptPath'")
-              None
-            case Failure(t) =>
-              log.error(s"Ignoring script at path '$scriptPath'", t)
-              None
-          }
+          handleScriptResult(triedScript, refType, scriptPath, locations, attemptsLeft)
         case None =>
           log.info(s"Ignoring script type '${refType.name} because it has no line locations.")
           None
@@ -748,7 +757,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       val typeName = location.declaringType().name()
       return "file:/" + typeName.replace('.', '/').replace('\\', '/').replaceAll("[$^]", "_")
     }
-    if (path.startsWith("file:/")) new File(new URI(path)).getAbsolutePath else path
+    if (path.startsWith("file:/")) {
+      new File(new URI(path)).getAbsolutePath
+    } else {
+      // May be a relative path, maybe Windows slashes
+      new URL(new URL("file:///"), path.replace('\\', '/')).toString
+    }
   }
 
 

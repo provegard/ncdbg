@@ -54,11 +54,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     result.valueNode
   }
 
-  private def register(value: Value, c: ComplexNode, extraData: Map[String, ValueNode] = Map.empty): ComplexNode = {
-    mappingRegistry.register(value, c, extraData)
-    c
-  }
-
   /**
     * Generate an ID for an object. If possible, we generate an ID based on the unique ID of the object reference,
     * so that two references to the same object get the same ID.
