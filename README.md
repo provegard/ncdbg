@@ -75,6 +75,10 @@ For example, to connect to a debug target listening at port 9999 and listen on p
 
 When running a distribution, just pass arguments the normal way.
 
+## FAQ
+
+The FAQ is [here](FAQ.md).
+
 ## Contributing
 
 Pull requests are welcome! However, before creating a pull request, please open an issue to describe
