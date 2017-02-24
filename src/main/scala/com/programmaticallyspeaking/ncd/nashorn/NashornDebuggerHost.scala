@@ -659,7 +659,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
                   marshaller.marshal(ret)
                 } catch {
                   case ex: Exception =>
-                    log.error("Code evaluation failed.", ex)
+                    // Don't log this at error level, because the error may be "ok". For example, if the user hovers over
+                    // a property of a variable that contains undefined then DevTools will ask about the property value
+                    // with silent errors, and when getting the value blows up we shouldn't be noisy!
+                    log.debug("Code evaluation failed.", ex)
                     throw ex
                 }
             }
