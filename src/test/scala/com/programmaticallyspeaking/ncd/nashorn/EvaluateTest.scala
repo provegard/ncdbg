@@ -86,7 +86,8 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
 
       "results in the correct exception data" in {
         evaluateError(script, expression) { err =>
-          err.data.copy(stackIncludingMessage = None) should be (ExceptionData(
+          // Reset column number since it's affected by the "evaluated code marker"
+          err.data.copy(stackIncludingMessage = None, columnNumber = 0) should be (ExceptionData(
             "jdk.nashorn.internal.runtime.ECMAException", "TypeError: ugh", 1, 0, "<eval>", None))
         }
       }
