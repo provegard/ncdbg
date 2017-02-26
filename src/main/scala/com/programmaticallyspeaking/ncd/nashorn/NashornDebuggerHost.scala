@@ -41,7 +41,6 @@ object NashornDebuggerHost {
 
   val wantedTypes = Set(
     NIR_ScriptRuntime,
-//    NIR_ECMAException,
     NIR_Context,
     JL_Boolean,
     JL_Integer,
@@ -480,28 +479,20 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     // If there aren't any free variables, we don't need to create a wrapper scope
     if (freeVariables.isEmpty) return scopeObject
 
-    // Create a wrapper scope using ScriptRuntime.openWith, which corresponds to `with (obj) { ... }` in JS.
-    foundWantedTypes.get(NIR_ScriptRuntime) match {
-      case Some(scriptRuntime) =>
-        // Just using "{}" returns undefined - don't know why - but "Object.create" works well.
-        // Use the passed scope object as prototype object so that scope variables will be seen as well.
-        val anObject = DebuggerSupport_eval_custom(marshaller.thread, scopeObject, null, "Object.create(this)").asInstanceOf[ObjectReference]
-        val mirror = new ScriptObjectMirror(anObject)
-        freeVariables.foreach {
-          case (name, value) =>
-            val valueToPut = value match {
-              case prim: PrimitiveValue => boxed(marshaller.thread, prim)
-              case other => other
-            }
-            mirror.put(name, valueToPut, isStrict = false)
+    // Just using "{}" returns undefined - don't know why - but "Object.create" works well.
+    // Use the passed scope object as prototype object so that scope variables will be seen as well.
+    val anObject = DebuggerSupport_eval_custom(marshaller.thread, scopeObject, null, "Object.create(this)").asInstanceOf[ObjectReference]
+    val mirror = new ScriptObjectMirror(anObject)
+    freeVariables.foreach {
+      case (name, value) =>
+        val valueToPut = value match {
+          case prim: PrimitiveValue => boxed(marshaller.thread, prim)
+          case other => other
         }
-
-        anObject
-
-      case None =>
-        log.warn("Don't have the ScriptRuntime type available to wrap the scope.")
-        scopeObject
+        mirror.put(name, valueToPut, isStrict = false)
     }
+
+    anObject
   }
 
   /** Custom version of jdk.nashorn.internal.runtime.DebuggerSupport.eval that makes a difference between a returned
