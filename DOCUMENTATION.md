@@ -77,7 +77,7 @@ timeout value in seconds.
 
 ## Nashorn behavior
 
-This section lists some Nashorn behavior that may be suprising at first.
+This section lists some Nashorn behavior that may be surprising at first.
 
 ### A variable is undefined right after an assignment
 
@@ -94,7 +94,7 @@ it is optimized away. To see its value, make sure it's used somewhere, e.g.:
     debugger;
     now.toString(); // dummy usage
 
-### I cannot set a breakpoint in a function
+### Setting a breakpoint in a function doesn't work
 
 Consider this code:
 
@@ -110,3 +110,19 @@ don't exist.
 
 To turn off lazy compilation (not recommended), run the debug target with
 `-Dnashorn.args=--lazy-compilation=false`.
+
+## Troubleshooting
+
+### NCDbg doesn't work
+
+Please open an issue and _include the version of Chrome_. I've created NCDbg based on the stable
+[Chrome Debugging Protocol](https://chromedevtools.github.io/debugger-protocol-viewer/1-2/), but since
+NCDbg doesn't advertise that (becuase I don't know how), Chrome Developer Tools happily sends tip-of-tree
+commands and gets cranky when it doesn't get proper responses back.
+
+### Console evaluation doesn't work
+
+I've observed this behavior in Chrome 55 but not in Chrome 56, so if you're running Chrome 55 you
+may want to upgrade. The problem is that a debugger breakpoint may be hit before the Developer Tools console 
+"subsystem" has initialized, and in this situation console input is basically ignored. A reload usually
+helps also.
