@@ -409,6 +409,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               val isECMAException = ev.exception().referenceType().name() == NIR_ECMAException
               doResume = !isECMAException || handleBreakpoint(ev)
 
+            case _: VMStartEvent =>
+              // ignore it, but don't log a warning
+
             case other =>
               log.warn("Unknown event: " + other)
           }
