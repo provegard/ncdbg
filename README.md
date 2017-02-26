@@ -8,15 +8,11 @@ my profound lack of imagination when it comes to naming things.
 
 ## Building & running tests
 
-Make sure [Gradle](https://gradle.org/) 2.13 is installed. If you have a newer version, the version of the 
-`com.github.maiflai.scalatest` plugin needs to be adjusted accordingly. See *build.gradle*
-for details.
-
 To compile in a Unix-like shell:
 
     ./gradlew compileScala
     
-If you prefer a Windows command prompt, use `gradlew.bat` instead of `./gradlew`.
+If you prefer a Windows command prompt, just use `gradlew` instead of `./gradlew`.
 
 To run tests:
 
@@ -25,59 +21,13 @@ To run tests:
 Note that at least one test is unstable. If the test suite fails, re-run it. If the failure
 persists, please open an issue.
 
-## Usage
+If you use a globally installed Gradle, then you must use version 2.13 because of the ScalaTest plugin. If you use
+another version, the version of the `com.github.maiflai.scalatest` plugin needs to be adjusted accordingly.
+See *build.gradle* for details.
 
-Start the debug target with the following VM arguments:
+## Documentation
 
-    -Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=7777
-
-Port 7777 is just an example, but is the port that NCDbg by default will connect to. If you use a different
-port, make sure you configure NCDbg appropriately, see below.
-
-If you prefer, use `suspend=y` instead to have the debug target wait until the debugger
-attaches.
-
-It's possible to run NCDbg using Gradle, which you'll want to do to run the bleeding edge version.
-Another option is to download and run a distribution.
-
-### The Gradle way
-
-Once the debug target is up and running, connect the debugger:
-
-    ./gradlew run
-    
-The console only shows information messages, warnings and errors. For debug messages, see the file _logs/ncdbg.log_.
-
-In the console output, you'll find the following line:
-
-> Open this URL in Chrome: chrome-devtools://devtools/bundled/inspector.html?experiments=true&v8only=true&ws=localhost:7778/dbg
-
-(The exact address towards the end depends on runtime configuration options, see below.)
-
-Copy that URL and open it in Chrome. Chrome Dev Tools should now open. Go to the Sources tab and
-take a look at the scripts, set breakpoints etc.!
-
-Note that the Dev Tools console can only be used when the debugger is paused in a breakpoint.
-
-### The distribution way
-
-TBD
-
-## Configuring options
-
-NCDbg supports configuration via the command line. When running using Gradle, the syntax is a bit awkward. To see the possible configuration options, run:
-
-    ./gradlew run -Pargs='--help'
-    
-For example, to connect to a debug target listening at port 9999 and listen on port 10000, run:
-
-    ./gradlew run -Pargs='-c 9999 -l 10000'
-
-When running a distribution, just pass arguments the normal way.
-
-## FAQ
-
-The FAQ is [here](FAQ.md).
+The documentation is [here](DOCUMENTATION.md).
 
 ## Contributing
 
