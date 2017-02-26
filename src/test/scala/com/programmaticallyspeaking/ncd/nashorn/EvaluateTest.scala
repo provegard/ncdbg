@@ -81,6 +81,19 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
       }
     }
 
+    // Failing test for #20
+    "remembers a var-defined variable in a function with a local scope" ignore {
+      val script = "(function () { var forceScope = 0; debugger; forceScope.toString(); })();"
+      evaluateInScript(script) { (host, stackframes) =>
+        testSuccess(for {
+          _ <- host.evaluateOnStackFrame(stackframes.head.id, "var zz = 21;", Map.empty)
+          result <- host.evaluateOnStackFrame(stackframes.head.id, "zz+zz", Map.empty)
+        } yield result) { r =>
+          r should be (SimpleValue(42))
+        }
+      }
+    }
+
     "and throwing a JS error" - {
       val script = "(function () { debugger; })();"
       val expression = "throw new TypeError('ugh');"
