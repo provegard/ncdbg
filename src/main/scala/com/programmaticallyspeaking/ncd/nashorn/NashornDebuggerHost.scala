@@ -112,10 +112,11 @@ object NashornDebuggerHost {
 
   private[NashornDebuggerHost] case class ObjectPropertiesKey(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean)
 
-  /** This marker is embedded in all scripts evaluated by NashornDebuggerHost on behalf of the debugger. The problem
-    * this solves is that such evaluated scripts are detected on startup but they are not interesting to show in the
-    * debugger. Thus NashornDebuggerHost will not consider scripts that contain this marker.
-s    */
+  /** This marker is embedded in all scripts evaluated by NashornDebuggerHost on behalf of Chrome DevTools. The problem
+    * this solves is that such evaluated scripts are detected on startup (i.e. when reconnecting to a running target)
+    * but they are not interesting to show in DevTools. Thus NashornDebuggerHost will not consider scripts that contain
+    * this marker.
+    */
   val EvaluatedCodeMarker = "__af4caa215e04411083cfde689d88b8e6__"
 }
 
@@ -666,7 +667,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
                 try {
                   val ret = DebuggerSupport_eval_custom(thread, originalThis, scopeToUse, code)
-                  marshaller.marshal(ret)
+                  marshaller.marshal(ret) match {
+                    case SimpleValue(str: String) if str == EvaluatedCodeMarker =>
+                      // A non-expression statements such as "var x = 42" causes the evaluation marker to leak as an
+                      // expression result. We suppress it here!
+                      SimpleValue(Undefined)
+                    case other => other
+                  }
                 } catch {
                   case ex: Exception =>
                     // Don't log this at error level, because the error may be "ok". For example, if the user hovers over

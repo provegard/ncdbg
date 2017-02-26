@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.types.ExceptionData
+import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, Undefined}
 import com.programmaticallyspeaking.ncd.host.{ErrorValue, SimpleValue, ValueNode}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
@@ -55,7 +55,8 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
         |  local.toString(); // don't optimize away local
         |};
         |fun();
-      """.stripMargin, "x", SimpleValue(21))
+      """.stripMargin, "x", SimpleValue(21)),
+    ("var statement on global level", "debugger;", "var x = 55;", SimpleValue(Undefined))
   )
 
   "Evaluating on a stack frame" - {
