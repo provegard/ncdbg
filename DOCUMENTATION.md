@@ -115,10 +115,16 @@ To turn off lazy compilation (not recommended), run the debug target with
 
 ### NCDbg doesn't work
 
-Please open an issue and _include the version of Chrome_. I've created NCDbg based on the stable
+Please open an issue and _include the versions of Chrome and Java_.
+
+I've created NCDbg based on the stable
 [Chrome Debugging Protocol](https://chromedevtools.github.io/debugger-protocol-viewer/1-2/), but since
 NCDbg doesn't advertise that (becuase I don't know how), Chrome Developer Tools happily sends tip-of-tree
 commands and gets cranky when it doesn't get proper responses back.
+
+Furthermore, Oracle sometimes breaks Nashorn backwards compatibility between minor versions of Java, and
+to make things worse NCDbg uses some classes that are internal to Nashorn. In other words, a new minor version
+of Java may not play well with NCDbg.
 
 ### Console evaluation doesn't work
 
