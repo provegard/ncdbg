@@ -59,6 +59,13 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
     ("var statement on global level", "debugger;", "var x = 55;", SimpleValue(Undefined))
   )
 
+  val varRemember = Table(
+    ("desc", "script"),
+    ("in a function with a local variable", "(function () { var freeVar = 0; debugger; freeVar.toString(); })();"),
+    ("in a function without local variables", "(function () { debugger; })();"),
+    ("in a function called on an object", "function fun() { debugger; } var obj = {x:fun}; obj.x();")
+  )
+
   "Evaluating on a stack frame" - {
     def evaluate(script: String, expression: String)(handler: (ValueNode) => Unit): Unit = {
       evaluateInScript(script) { (host, stackframes) =>
@@ -82,16 +89,18 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
     }
 
     // Failing test for #20
-    "remembers a var-defined variable in a function with a local scope" ignore {
-      val script = "(function () { var forceScope = 0; debugger; forceScope.toString(); })();"
-      evaluateInScript(script) { (host, stackframes) =>
-        testSuccess(for {
-          _ <- host.evaluateOnStackFrame(stackframes.head.id, "var zz = 21;", Map.empty)
-          result <- host.evaluateOnStackFrame(stackframes.head.id, "zz+zz", Map.empty)
-        } yield result) { r =>
-          r should be (SimpleValue(42))
+    forAll(varRemember) { (desc, script) =>
+      s"remembers a var-defined variable $desc" in {
+        evaluateInScript(script) { (host, stackframes) =>
+          testSuccess(for {
+            _ <- host.evaluateOnStackFrame(stackframes.head.id, "var zz = 21;", Map.empty)
+            result <- host.evaluateOnStackFrame(stackframes.head.id, "zz+zz", Map.empty)
+          } yield result) { r =>
+            r should be (SimpleValue(42))
+          }
         }
       }
+
     }
 
     "and throwing a JS error" - {

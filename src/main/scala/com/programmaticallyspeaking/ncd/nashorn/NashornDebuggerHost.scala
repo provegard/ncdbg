@@ -651,10 +651,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
             val scopeChain = createScopeChain(marshaller, originalScope, originalThis, thisObj, localNode)
 
+            // If needed, create a scope object to hold the local variables as "free" variables - so that evaluated
+            // code can refer to them.
+            // If we don't have :scope, use :this - it's used as a parent object for the created scope object.
+            val localScope = scopeWithFreeVariables(originalScope.getOrElse(originalThis), localValues)
+
             def evaluateCodeOnFrame: CodeEvaluator = {
               case (code, namedValues) =>
-                // If we don't have :scope, use :this - it's used as a parent object for the created 'with' object.
-                val scopeToUse = scopeWithFreeVariables(originalScope.getOrElse(originalThis), namedValues ++ localValues)
+                // Create a scope object for the extra variables to use during evaluation, if any.
+                val scopeToUse = scopeWithFreeVariables(localScope, namedValues)
 
                 try {
                   val ret = DebuggerSupport_eval_custom(thread, originalThis, scopeToUse, code)
