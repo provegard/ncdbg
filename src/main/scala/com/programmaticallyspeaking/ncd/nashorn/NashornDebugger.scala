@@ -81,7 +81,7 @@ class NashornScriptHostInteractionThread(host: NashornScriptHost, initPromise: P
   override def run(): Unit = {
     try {
       host.initialize()
-      initPromise.trySuccess()
+      initPromise.trySuccess(())
       listenIndefinitely(host.virtualMachine.eventQueue())
     } catch {
       case ex: VMDisconnectedException =>
