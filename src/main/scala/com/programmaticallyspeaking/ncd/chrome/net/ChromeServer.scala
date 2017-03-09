@@ -1,17 +1,16 @@
 package com.programmaticallyspeaking.ncd.chrome.net
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props, Stash, Status, Terminated}
-import akka.stream.OverflowStrategy
-import akka.stream.scaladsl.{Flow, Sink, Source}
+import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props, Stash, Status, Terminated}
 import com.programmaticallyspeaking.ncd.chrome.domains.{DomainFactory, DomainMethodArgumentFactory, Messages}
-import com.programmaticallyspeaking.ncd.chrome.net.Protocol.Message
-import com.programmaticallyspeaking.ncd.infra.ObjectMapping._
+import com.programmaticallyspeaking.ncd.messaging.{Observable, SerializedSubject}
 import org.slf4s.Logging
 
 import scala.collection.mutable
 
 trait ChromeServer {
-  def messageFlow(): Flow[String, Protocol.Message, Any]
+  def connect(): Observable[Protocol.Message]
+  def disconnect(): Unit
+  def sendMessage(message: Protocol.IncomingMessage): Unit
 }
 
 private sealed trait DevToolsInteraction
@@ -108,10 +107,7 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
     case DevToolsDisconnected =>
       log.info("Developer Tools client disconnected")
 
-      // TODO: Why the heck is this needed? Bug in Akka??
-      // https://github.com/jrudolph/akka-http-scala-js-websocket-chat/blob/master/backend/src/main/scala/example/akkawschat/Chat.scala
-      // report downstream of completion, otherwise, there's a risk of leaking the
-      // downstream when the TCP connection is only half-closed
+      // The client actor should know about this itself, but disconnecting it here results in more consistent code.
       disconnectDevTools(Status.Success(Unit))
 
       if (domains.isEmpty) {
@@ -182,31 +178,38 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
 }
 
 class ChromeServerFactory(domainFactory: DomainFactory)(implicit system: ActorSystem) extends Logging {
+  private val handler: ActorRef = system.actorOf(Props(new DevToolsHandler(domainFactory)))
 
-  val handler = system.actorOf(Props(new DevToolsHandler(domainFactory)))
+  def create(): ChromeServer = new ChromeServerImpl
 
-  def create(): ChromeServer = {
-    def debugInSink = Sink.actorRef[DevToolsInteraction](handler, DevToolsDisconnected)
+  private class ChromeServerImpl extends ChromeServer {
 
-    new ChromeServer {
-      override def messageFlow(): Flow[String, Message, Any] = {
-        val in =
-          Flow[String]
-            .map(toIncomingMessage)
-            .to(debugInSink)
+    private val subject = new SerializedSubject[Protocol.Message]
 
-        // https://github.com/jrudolph/akka-http-scala-js-websocket-chat/blob/master/backend/src/main/scala/example/akkawschat/Chat.scala
-        // The counter-part which is a source that will create a target ActorRef per
-        // materialization where the server actor will send its messages to.
-        // This source has a limited buffer and will fail if the client doesn't read messages fast enough.
-        val out =
-          Source.actorRef[Protocol.Message](100, OverflowStrategy.fail)
-            .mapMaterializedValue(handler ! DevToolsConnected(_))
-
-        Flow.fromSinkAndSource(in, out)
+    private val innerActor = system.actorOf(Props(new Actor {
+      override def receive: Receive = {
+        case msg: Protocol.Message => subject.onNext(msg)
+        case _: Status.Success =>
+          subject.onComplete()
+          context.stop(self)
+        case Status.Failure(t) =>
+          subject.onError(t)
+          context.stop(self)
       }
-    }
-  }
+    }))
 
-  private def toIncomingMessage(data: String): FromDevTools = FromDevTools(fromJson[Protocol.IncomingMessage](data))
+    override def disconnect() = {
+      handler ! DevToolsDisconnected
+      innerActor ! PoisonPill
+      subject.onComplete()
+    }
+
+    override def connect(): Observable[Protocol.Message] = {
+      handler ! DevToolsConnected(innerActor)
+      subject
+    }
+
+    override def sendMessage(message: Protocol.IncomingMessage) =
+      handler ! FromDevTools(message)
+  }
 }

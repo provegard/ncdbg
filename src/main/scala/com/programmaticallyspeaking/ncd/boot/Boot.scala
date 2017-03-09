@@ -3,15 +3,14 @@ package com.programmaticallyspeaking.ncd.boot
 import java.net.ConnectException
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
-import akka.stream.ActorMaterializer
 import com.programmaticallyspeaking.ncd.chrome.domains.DefaultDomainFactory
-import com.programmaticallyspeaking.ncd.chrome.net.Webservice
+import com.programmaticallyspeaking.ncd.chrome.net.WebSocketServer
 import com.programmaticallyspeaking.ncd.host.ScriptEvent
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.nashorn.{NashornDebugger, NashornDebuggerConnector, NashornScriptHost}
 import org.slf4s.Logging
 
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success}
 
 object Boot extends App with Logging {
@@ -22,7 +21,6 @@ object Boot extends App with Logging {
 
   implicit val system = ActorSystem()
   import system.dispatcher
-  implicit val materializer = ActorMaterializer()
 
   val connectAddr = conf.connect()
   val connector = new NashornDebuggerConnector(connectAddr.host, connectAddr.port)
@@ -67,18 +65,16 @@ object Boot extends App with Logging {
   }
 
   private def startHttpServer(): Unit = {
-    val service = new Webservice(new DefaultDomainFactory())
-
-    val listenAddr = conf.listen()
-    val binding = Http().bindAndHandle(service.route, listenAddr.host, listenAddr.port)
-    binding.onComplete {
-      case Success(b) =>
-        val localAddress = b.localAddress
-        log.info(s"Server is listening on ${localAddress.getHostName}:${localAddress.getPort}")
-        val url = s"chrome-devtools://devtools/bundled/inspector.html?experiments=true&v8only=true&ws=${localAddress.getHostName}:${localAddress.getPort}/dbg"
-        log.info("Open this URL in Chrome: " + url)
-      case Failure(e) =>
-        log.error("Binding failed", e)
+    val server = new WebSocketServer(new DefaultDomainFactory())
+    try {
+      val listenAddr = conf.listen()
+      server.start(listenAddr.host, listenAddr.port)
+      log.info(s"Server is listening on ${listenAddr.host}:${listenAddr.port}")
+      val url = s"chrome-devtools://devtools/bundled/inspector.html?experiments=true&v8only=true&ws=${listenAddr.host}:${listenAddr.port}/dbg"
+      log.info("Open this URL in Chrome: " + url)
+    } catch {
+      case NonFatal(t) =>
+        log.error("Binding failed", t)
         die(2)
     }
   }
