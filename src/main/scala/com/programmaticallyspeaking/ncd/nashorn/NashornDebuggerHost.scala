@@ -34,6 +34,14 @@ object NashornDebuggerHost {
   val JL_Long = "java.lang.Long"
   val JL_Double = "java.lang.Double"
 
+//  val JDWP_ERR_INVALID_SLOT = 35
+  object JDWP_ERR_INVALID_SLOT {
+    def unapply(v: Any): Option[Throwable] = v match {
+      case e: InternalException if e.errorCode() == 35 => Some(e)
+      case _ => None
+    }
+  }
+
   // The name of the DEBUGGER method in the ScriptRuntime class
   val ScriptRuntime_DEBUGGER = "DEBUGGER"
 
@@ -716,8 +724,26 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       // In the step tests, I get JDWP error 35 (INVALID SLOT) for ':return' and since we don't use it, leave it for
       // now. If we need it, we can get it separately.
       val variables = Try(sf.visibleVariables()).getOrElse(Collections.emptyList()).asScala.filter(_.name() != ":return").asJava
-      val values = sf.getValues(variables).asScala.map(e => e._1.name() -> e._2)
-      (values.toMap, sf.location())
+      try {
+        val values = sf.getValues(variables).asScala.map(e => e._1.name() -> e._2)
+        (values.toMap, sf.location())
+      } catch {
+        case JDWP_ERR_INVALID_SLOT(_) =>
+          val scalaVars = variables.asScala
+          val vars = scalaVars.map(_.name()).mkString(", ")
+          log.warn(s"INVALID_SLOT error for: $vars")
+
+          // Get variable values one by one, and ignore the ones that result in INVALID_SLOT.
+          // Another idea is to generate a fake value, something like "@@ERR:INVALID_SLOT". Good?
+          val entries = scalaVars.flatMap(v => {
+            try Some(v.name() -> sf.getValue(v)) catch {
+              case JDWP_ERR_INVALID_SLOT(_) =>
+                log.warn(s"INVALID_SLOT error for variable '${v.name()}', ignoring")
+                None
+            }
+          })
+          (entries.toMap, sf.location())
+      }
     }
 
     // Second pass, marshal
