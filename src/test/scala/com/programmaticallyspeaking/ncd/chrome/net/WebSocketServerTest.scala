@@ -1,6 +1,7 @@
 package com.programmaticallyspeaking.ncd.chrome.net
 
 import java.net.URI
+import java.util.concurrent.ConcurrentHashMap
 
 import akka.actor.{TypedActor, TypedProps}
 import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
@@ -103,6 +104,7 @@ class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSu
   class Client extends org.java_websocket.client.WebSocketClient(new URI(s"ws://localhost:$serverPort/dbg"), new Draft_17) {
 
     private val messagePromises = TrieMap[String, Promise[Unit]]()
+    private val outstandingMessages = ConcurrentHashMap.newKeySet[String]()
 
     override def onError(ex: Exception): Unit = {}
 
@@ -117,12 +119,19 @@ class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSu
 
     override def onOpen(handshakedata: ServerHandshake): Unit = {}
 
-    def sendMessage(s: String): Unit = send(s)
+    def sendMessage(s: String): Unit = {
+      outstandingMessages.clear() // remove old messages
+      send(s)
+    }
 
     def expectMessage(msg: String): Unit = {
+      // Check if we have seen the message prior to this call.
+      if (outstandingMessages.remove(msg)) return
+
+      // We haven't seen the message, so wait for it.
       val p = Promise[Unit]()
       messagePromises += msg -> p
-      Await.result(p.future, 2.seconds)
+      Await.result(p.future, 3.seconds)
     }
   }
 }
