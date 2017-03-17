@@ -16,9 +16,6 @@ import scala.util.{Failure, Success}
 object Boot extends App with Logging {
   val conf = new Conf(args)
 
-  // Set the idle timeout as a system property *before* Akka performs config init.
-  System.setProperty("akka.http.server.idle-timeout", s"${conf.idleTimeout()}s")
-
   implicit val system = ActorSystem()
   import system.dispatcher
 
