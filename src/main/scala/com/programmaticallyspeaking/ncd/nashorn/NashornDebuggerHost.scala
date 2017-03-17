@@ -839,21 +839,21 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   override def events: Observable[ScriptEvent] = eventSubject
 
-  override def setBreakpoint(scriptUri: String, lineNumberBase1: Int): Breakpoint = {
-    findBreakableLocation(scriptUri, lineNumberBase1) match {
-      case Some(br) =>
-        if (br.lineNumber != lineNumberBase1) {
-          log.info(s"Client asked for a breakpoint at line $lineNumberBase1 in $scriptUri, setting it at line ${br.lineNumber}.")
-        } else {
-          log.info(s"Setting a breakpoint at line ${br.lineNumber} in $scriptUri")
-        }
+  override def setBreakpoint(scriptUri: String, lineNumberBase1: Int): Option[Breakpoint] = {
+    findBreakableLocation(scriptUri, lineNumberBase1).map { br =>
+      if (br.lineNumber != lineNumberBase1) {
+        log.info(s"Client asked for a breakpoint at line $lineNumberBase1 in $scriptUri, setting it at line ${br.lineNumber}.")
+      } else {
+        log.info(s"Setting a breakpoint at line ${br.lineNumber} in $scriptUri")
+      }
 
-        br.enable()
-        enabledBreakpoints += (br.id -> br)
-        br.toBreakpoint
+      br.enable()
+      enabledBreakpoints += (br.id -> br)
+      br.toBreakpoint
 
-      case None =>
-        throw new IllegalArgumentException(s"Cannot identify location '$scriptUri', line $lineNumberBase1")
+    }.orElse {
+      log.debug(s"Cannot identify location '$scriptUri', line $lineNumberBase1")
+      None
     }
   }
 

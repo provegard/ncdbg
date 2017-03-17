@@ -92,7 +92,7 @@ trait ScriptHost {
     * @param lineNumberBase1 the 1-based line number in the script where the breakpoint should be set
     * @return a structure describing the breakpoint that was set
     */
-  def setBreakpoint(scriptUri: String, lineNumberBase1: Int): Breakpoint
+  def setBreakpoint(scriptUri: String, lineNumberBase1: Int): Option[Breakpoint]
 
   def getBreakpointLineNumbers(scriptId: String, fromLineNumberBase1: Int, toLineNumberBase1: Option[Int]): Seq[Int]
 

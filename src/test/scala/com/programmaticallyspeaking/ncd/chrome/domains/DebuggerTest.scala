@@ -140,6 +140,16 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val result = setBreakpointByUrl(3, "a")
         result.locations.headOption.map(_.lineNumber) should be (Some(3))
       }
+
+      "should return null breakpoint ID if the breakpoint location is unknown" in {
+        val result = setBreakpointByUrl(101, "a")
+        result.breakpointId should be (null)
+      }
+
+      "should return no locatoins if the breakpoint location is unknown" in {
+        val result = setBreakpointByUrl(101, "a")
+        result.locations should be ('empty)
+      }
     }
 
     "removeBreakpoint" - {
@@ -456,8 +466,12 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     when(host.setBreakpoint(any[String], any[Int])).thenAnswerWith({
       case (uri: String) :: (lineNumber : Integer) :: Nil =>
         val id = "bp_" + lineNumber
-        activeBreakpoints += id
-        Breakpoint(id, uri + "_id", lineNumber)
+        // Arbitrary test stuff. High line numbers don't exist!
+        if (lineNumber > 100) None
+        else {
+          activeBreakpoints += id
+          Some(Breakpoint(id, uri + "_id", lineNumber))
+        }
     })
     when(host.removeBreakpointById(any[String])).thenAnswerWith({
       case (id: String) :: Nil =>
