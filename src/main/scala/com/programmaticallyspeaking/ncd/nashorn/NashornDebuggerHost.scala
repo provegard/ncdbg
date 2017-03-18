@@ -125,6 +125,38 @@ object NashornDebuggerHost {
     * this marker.
     */
   val EvaluatedCodeMarker = "__af4caa215e04411083cfde689d88b8e6__"
+
+  def scriptPathFromLocation(sourceName: String, typeName: String): String = {
+    // It appears *name* is a path on the form 'file:/c:/...', whereas path has a namespace prefix
+    // (jdk\nashorn\internal\scripts\). This seems to be consistent with the documentation (although it's a bit
+    // surprising), where it is stated that the Java stratum doesn't use source paths and a path therefore is a
+    // package-qualified file name in path form, whereas name is the unqualified file name (e.g.:
+    // java\lang\Thread.java vs Thread.java).
+    val path = sourceName
+    if (path == "<eval>") {
+      // For evaluated scripts, convert the type name into something that resembles a file URI.
+      return "file://" + typeName.replace('.', '/').replace('\\', '/').replaceAll("[$^]", "_")
+    }
+    val pathAsUri = if (path.startsWith("file:/")) {
+      //      new File(new URI(path)).getAbsolutePath
+      path
+    } else {
+      // May be a relative path, maybe Windows slashes
+      new URL(new URL("file:///"), path.replace('\\', '/')).toString
+    }
+
+    fixFileURI(pathAsUri)
+  }
+
+  private def fixFileURI(pathAsUri: String): String = {
+    Try(new URI(pathAsUri)) match {
+      case Success(u) if u.getHost == null => fixFileURI(pathAsUri.replace("file:/", "file://"))
+      case Success(u) =>
+        // file://c:/some/path -> file://c/some/path
+        s"file://${u.getHost}${u.getPath}"
+      case _ => pathAsUri // file:// or unknown
+    }
+  }
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis: ((NashornScriptHost) => Unit) => Unit) extends NashornScriptHost with Logging {
@@ -788,25 +820,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def scriptPathFromLocation(location: Location): String = {
-    // It appears *name* is a path on the form 'file:/c:/...', whereas path has a namespace prefix
-    // (jdk\nashorn\internal\scripts\). This seems to be consistent with the documentation (although it's a bit
-    // surprising), where it is stated that the Java stratum doesn't use source paths and a path therefore is a
-    // package-qualified file name in path form, whereas name is the unqualified file name (e.g.:
-    // java\lang\Thread.java vs Thread.java).
-    val path = location.sourceName()
-    if (path == "<eval>") {
-      // For evaluated scripts, convert the type name into something that resembles a file URI.
-      val typeName = location.declaringType().name()
-      return "file:/" + typeName.replace('.', '/').replace('\\', '/').replaceAll("[$^]", "_")
-    }
-    if (path.startsWith("file:/")) {
-      new File(new URI(path)).getAbsolutePath
-    } else {
-      // May be a relative path, maybe Windows slashes
-      new URL(new URL("file:///"), path.replace('\\', '/')).toString
-    }
+    NashornDebuggerHost.scriptPathFromLocation(location.sourceName(), location.declaringType().name())
   }
-
 
   private def getOrAddScript(path: String): Script =
     scriptByPath.getOrElseUpdate(path, ScriptImpl.fromFile(path, scriptIdGenerator.next))
