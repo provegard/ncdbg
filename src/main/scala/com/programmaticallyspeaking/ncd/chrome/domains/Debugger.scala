@@ -19,7 +19,8 @@ object Debugger {
 
   case class EvaluateOnCallFrameResult(result: Runtime.RemoteObject, exceptionDetails: Option[Runtime.ExceptionDetails] = None)
 
-  case class ScriptParsedEventParams(scriptId: String, url: String, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int, executionContextId: Int, hash: String)
+  case class ScriptParsedEventParams(scriptId: String, url: String, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int, executionContextId: Int, hash: String,
+                                     hasSourceURL: Boolean)
 
   case class setBreakpointsActive(active: Boolean)
 
@@ -49,7 +50,8 @@ object Debugger {
       Math.max(script.lineCount - 1, 0), // offset
       endColumn = script.lastLineLength, // NOT an offset: "Length of the last line of the script" according to the docs
       Runtime.StaticExecutionContextId,
-      script.contentsHash())
+      script.contentsHash(),
+      true // we have an URL for all scripts
   }
 
   case class getScriptSource(scriptId: String)
