@@ -866,9 +866,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       enabledBreakpoints += (br.id -> br)
       br.toBreakpoint
 
-    }.orElse {
-      log.debug(s"Cannot identify location '$scriptUri', line $lineNumberBase1")
-      None
     }
   }
 

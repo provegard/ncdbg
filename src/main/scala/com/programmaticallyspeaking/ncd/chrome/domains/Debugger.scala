@@ -132,6 +132,7 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
         case Some(bp) =>
           SetBreakpointByUrlResult(bp.breakpointId, Seq(Location(bp.scriptId, bp.lineNumberBase1 - 1, 0)))
         case None =>
+          log.warn(s"Cannot identify breakpoint at $url:$lineNumberBase1")
           SetBreakpointByUrlResult(null, Seq.empty)
       }
 
