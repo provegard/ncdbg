@@ -52,6 +52,7 @@ object Debugger {
       Runtime.StaticExecutionContextId,
       script.contentsHash(),
       true // we have an URL for all scripts
+    )
   }
 
   case class getScriptSource(scriptId: String)
