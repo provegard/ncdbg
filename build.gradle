@@ -12,6 +12,10 @@ apply plugin: 'application'
 
 def jdkHome = System.getenv("JAVA_HOME")
 
+if (jdkHome == null || "".equals(jdkHome)) {
+    throw new RuntimeException("JAVA_HOME is not set")
+}
+
 sourceCompatibility = 1.8
 
 mainClassName = "com.programmaticallyspeaking.ncd.boot.Boot"
