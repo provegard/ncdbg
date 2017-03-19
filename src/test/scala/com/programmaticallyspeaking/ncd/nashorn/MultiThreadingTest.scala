@@ -62,7 +62,8 @@ object MultiThreadedScriptExecutor extends App with ScriptExecutorBase {
   println("MultiThreadedScriptExecutor starting. Java version: " + System.getProperty("java.version"))
   val scriptEngine = new NashornScriptEngineFactory().getScriptEngine
   val reader = new BufferedReader(new InputStreamReader(System.in))
-  waitForSignal("go")
+  println(Signals.ready)
+  waitForSignal(Signals.go)
 
   val compiledScript = scriptEngine.asInstanceOf[Compilable].compile(
     """(function () {

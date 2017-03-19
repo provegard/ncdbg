@@ -17,6 +17,7 @@ import org.slf4s.Logging
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent._
+import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 /** Provides a patience configuration that has a timeout that is shorter than the default timeout in
@@ -33,14 +34,24 @@ trait FairAmountOfPatience extends AbstractPatienceConfiguration { this: Patienc
   implicit abstract override val patienceConfig: PatienceConfig = defaultPatienceConfig
 }
 
+object Signals {
+  val go = "go"
+  val ready = "ready"
+}
+
 trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
   import scala.collection.JavaConverters._
 
   val scriptExecutor: ScriptExecutorBase
 
   def logVirtualMachineOutput(output: String) = {
-    reportProgress("VM output: " + output)
-    log.info("VM output: " + output)
+    // When we receive "ready", the VM is ready to listen for "go".
+    if (output == Signals.ready) {
+      vmReadyPromise.success(())
+    } else {
+      reportProgress("VM output: " + output)
+      log.info("VM output: " + output)
+    }
   }
   def logVirtualMachineError(error: String) = {
     reportProgress("VM error: " + error)
@@ -56,6 +67,7 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
 
   private var vmStdinWriter: PrintWriter = _
   protected var vmRunningPromise: Promise[NashornScriptHost] = _
+  protected var vmReadyPromise: Promise[Unit] = _
 
   // Tracks progress for better timeout failure reporting
   private val progress = new ConcurrentLinkedQueue[String]()
@@ -73,6 +85,7 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
     host = debugger.create(vm)
 
     vmRunningPromise = Promise[NashornScriptHost]()
+    vmReadyPromise = Promise[Unit]()
 
     setupHost()
   }
@@ -92,14 +105,22 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
 
       override def onNext(item: ScriptEvent): Unit = item match {
         case InitialInitializationComplete =>
+          // Host initialization is complete, so let ScriptExecutor know that it can continue.
           reportProgress("host initialization complete")
 
-          // Host initialization is complete, so let ScriptExecutor know that it can continue.
-          sendToVm("go")
+          // Wait until we observe that the VM is ready to receive the go command.
+          vmReadyPromise.future.onComplete {
+            case Success(_) =>
+              reportProgress("VM is ready!")
 
-          // Resolve the promise on which we chain script execution in runScript. This means that any script execution
-          // will wait until the infrastructure is ready.
-          vmRunningPromise.trySuccess(host)
+              sendToVm(Signals.go)
+
+              // Resolve the promise on which we chain script execution in runScript. This means that any script execution
+              // will wait until the infrastructure is ready.
+              vmRunningPromise.trySuccess(host)
+
+            case Failure(t) => vmRunningPromise.tryFailure(t)
+          }
         case other =>
           reportProgress("Unknown event: " + other)
           eventSubject.onNext(other)
@@ -221,7 +242,8 @@ object ScriptExecutor extends App with ScriptExecutorBase {
   println("ScriptExecutor starting. Java version: " + System.getProperty("java.version"))
   val scriptEngine = new NashornScriptEngineFactory().getScriptEngine
   val reader = new BufferedReader(new InputStreamReader(System.in))
-  waitForSignal("go")
+  println(Signals.ready)
+  waitForSignal(Signals.go)
   println("Got the go signal!")
 
   scriptEngine.eval(
