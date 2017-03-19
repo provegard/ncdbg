@@ -79,6 +79,7 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
 
   protected def sendToVm(data: String, encodeBase64: Boolean = false): Unit = {
     val dataToSend = if (encodeBase64) StringUtils.toBase64(data) else data
+    reportProgress("Sending to VM: " + dataToSend)
     vmStdinWriter.println(dataToSend)
   }
 
@@ -221,6 +222,7 @@ object ScriptExecutor extends App with ScriptExecutorBase {
   val scriptEngine = new NashornScriptEngineFactory().getScriptEngine
   val reader = new BufferedReader(new InputStreamReader(System.in))
   waitForSignal("go")
+  println("Got the go signal!")
 
   scriptEngine.eval(
     """this.createInstance = function (typeName) {
