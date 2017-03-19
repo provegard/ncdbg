@@ -1,5 +1,7 @@
 # NCDbg
 
+[![Build Status](https://travis-ci.org/provegard/ncdbg.svg?branch=master)](https://travis-ci.org/provegard/ncdbg)
+
 NCDbg is a debugger for Nashorn (the JavaScript engine in Java 8 and onward) that
 uses Google Chrome DevTools as frontend.
 
