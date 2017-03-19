@@ -47,6 +47,7 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
   def logVirtualMachineOutput(output: String) = {
     // When we receive "ready", the VM is ready to listen for "go".
     if (output == Signals.ready) {
+      reportProgress("Got the ready signal from the VM")
       vmReadyPromise.success(())
     } else {
       reportProgress("VM output: " + output)
