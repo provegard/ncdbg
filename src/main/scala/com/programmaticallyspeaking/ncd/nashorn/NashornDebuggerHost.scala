@@ -7,7 +7,7 @@ import java.util.Collections
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
-import com.programmaticallyspeaking.ncd.messaging.{Observable, Subject}
+import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.{JSObjectMirror, ReflectionFieldMirror, ScriptObjectMirror}
 import com.sun.jdi.event._
 import com.sun.jdi.request.{EventRequest, ExceptionRequest}
@@ -837,7 +837,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   override def scriptById(id: String): Option[Script] = scripts.find(_.id == id) //TODO: make more efficient
 
-  override def events: Observable[ScriptEvent] = eventSubject
+  override def events: Observable[ScriptEvent] = new Observable[ScriptEvent] {
+    override def subscribe(observer: Observer[ScriptEvent]): Subscription = {
+      // Make sure the observer sees that we're initialized
+      if (isInitialized) {
+        observer.onNext(InitialInitializationComplete)
+      }
+      eventSubject.subscribe(observer)
+    }
+  }
 
   override def setBreakpoint(scriptUri: String, lineNumberBase1: Int): Option[Breakpoint] = {
     findBreakableLocation(scriptUri, lineNumberBase1).map { br =>
