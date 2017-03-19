@@ -102,7 +102,6 @@ class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSu
   }
 
   class Client extends org.java_websocket.client.WebSocketClient(new URI(s"ws://localhost:$serverPort/dbg"), new Draft_17) {
-
     private val messagePromises = TrieMap[String, Promise[Unit]]()
     private val outstandingMessages = ConcurrentHashMap.newKeySet[String]()
 
@@ -111,7 +110,7 @@ class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSu
     override def onMessage(message: String): Unit = {
       messagePromises.remove(message) match {
         case Some(p) => p.success(())
-        case None =>
+        case None => outstandingMessages.add(message)
       }
     }
 

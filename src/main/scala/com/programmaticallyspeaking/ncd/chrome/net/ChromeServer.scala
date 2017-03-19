@@ -1,8 +1,11 @@
 package com.programmaticallyspeaking.ncd.chrome.net
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props, Stash, Status, Terminated}
 import com.programmaticallyspeaking.ncd.chrome.domains.{DomainFactory, DomainMethodArgumentFactory, Messages}
-import com.programmaticallyspeaking.ncd.messaging.{Observable, SerializedSubject}
+import com.programmaticallyspeaking.ncd.chrome.net.Protocol.Message
+import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, SerializedSubject}
 import org.slf4s.Logging
 
 import scala.collection.mutable
@@ -15,7 +18,7 @@ trait ChromeServer {
 
 private sealed trait DevToolsInteraction
 private case class FromDevTools(msg: Protocol.IncomingMessage) extends DevToolsInteraction
-private case class DevToolsConnected(devToolsRef: ActorRef) extends DevToolsInteraction
+private case object DevToolsConnected extends DevToolsInteraction
 private case object DevToolsDisconnected extends DevToolsInteraction
 
 class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging with Stash {
@@ -77,9 +80,9 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
   }
 
   override def receive: Receive = {
-    case DevToolsConnected(actorRef) =>
+    case DevToolsConnected =>
       log.info("A Developer Tools client connected!")
-      currentDevToolsRef = Some(actorRef)
+      currentDevToolsRef = Some(sender())
       context.become(receiveClient)
   }
 
@@ -104,7 +107,7 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
   }
 
   def receiveClient: Receive = {
-    case DevToolsDisconnected =>
+    case DevToolsDisconnected if currentDevToolsRef.contains(sender()) =>
       log.info("Developer Tools client disconnected")
 
       // The client actor should know about this itself, but disconnecting it here results in more consistent code.
@@ -117,13 +120,18 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
         // Stop any domain actors - we'll get fresh ones later on
         stopDomainActors()
       }
+    case DevToolsDisconnected =>
+      log.debug("Ignoring disconnect signal from unknown dev tools sender")
 
-    case FromDevTools(msg) =>
+    case FromDevTools(msg) if currentDevToolsRef.contains(sender()) =>
       log.debug(s"Incoming message from Developer Tools: $msg")
 
       if (!invalidMethods.contains(msg.method)) {
         handleIncomingMessage(msg)
       }
+
+    case FromDevTools(msg) =>
+      log.debug(s"Ignoring message ($msg) from unknown dev tools sender")
 
     case response: Messages.Accepted =>
       log.debug("Got accepted-response (no response data) from domain: " + response)
@@ -141,7 +149,8 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
       log.debug("Got event from domain: " + event)
       sendToDevTools(Protocol.Event(event.method, event.params))
 
-    case DevToolsConnected(devToolsRef) =>
+    case DevToolsConnected =>
+      val devToolsRef = sender()
       log.debug(s"New Developer Tools client: $devToolsRef")
       log.info("A new Developer Tools client connected!")
 
@@ -186,30 +195,49 @@ class ChromeServerFactory(domainFactory: DomainFactory)(implicit system: ActorSy
 
     private val subject = new SerializedSubject[Protocol.Message]
 
+    // Track connection status in order to not bug DevToolsHandler when we're not connected (though it
+    // shouldn't matter, because it shouldn't listen to us at that point).
+    private val isConnected = new AtomicBoolean()
+
+    // Make sure the isConnected flag is updated when DevToolsHandler disconnects us.
+    subject.subscribe(new Observer[Protocol.Message] {
+      override def onNext(item: Message): Unit = {}
+      override def onError(error: Throwable): Unit = isConnected.set(false)
+      override def onComplete(): Unit = isConnected.set(false)
+    })
+
     private val innerActor = system.actorOf(Props(new Actor {
       override def receive: Receive = {
         case msg: Protocol.Message => subject.onNext(msg)
         case _: Status.Success =>
+          // DevToolsHandler disconnected us!
           subject.onComplete()
           context.stop(self)
         case Status.Failure(t) =>
+          // Not really used, implemented for the sake of completeness.
           subject.onError(t)
           context.stop(self)
       }
     }))
 
     override def disconnect() = {
-      handler ! DevToolsDisconnected
-      innerActor ! PoisonPill
-      subject.onComplete()
+      if (isConnected.compareAndSet(true, false)) {
+        handler.tell(DevToolsDisconnected, innerActor)
+        innerActor ! PoisonPill
+        subject.onComplete()
+      }
     }
 
     override def connect(): Observable[Protocol.Message] = {
-      handler ! DevToolsConnected(innerActor)
+      if (isConnected.compareAndSet(false, true)) {
+        handler.tell(DevToolsConnected, innerActor)
+      }
       subject
     }
 
     override def sendMessage(message: Protocol.IncomingMessage) =
-      handler ! FromDevTools(message)
+      if (isConnected.get()) {
+        handler.tell(FromDevTools(message), innerActor)
+      }
   }
 }
