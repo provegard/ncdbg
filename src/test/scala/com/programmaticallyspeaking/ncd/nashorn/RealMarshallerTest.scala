@@ -125,6 +125,39 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
       }
     }
 
+    "plain array" - {
+      "should not get a class name" in {
+        val expr = "[1,2]"
+        evalArray(expr) { an =>
+          an.typedClassName should be (None)
+        }
+      }
+    }
+
+    "typed array" - {
+      val typedArrayCases = Table(
+        ("className"),
+        ("Int8Array"),
+        ("Uint8Array"),
+        ("Uint8ClampedArray"),
+        ("Int16Array"),
+        ("Uint16Array"),
+        ("Int32Array"),
+        ("Uint32Array"),
+        ("Float32Array"),
+        ("Float64Array")
+      )
+
+      forAll(typedArrayCases) { (className) =>
+        s"gets a class name for $className" in {
+          val expr = s"new $className([1,2])"
+          evalArray(expr) { an =>
+            an.typedClassName should be (Some(className))
+          }
+        }
+      }
+    }
+
     "Java array" - {
       "gets correct size" in {
         val expr =

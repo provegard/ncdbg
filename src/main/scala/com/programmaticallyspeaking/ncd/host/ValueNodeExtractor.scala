@@ -53,13 +53,12 @@ class ValueNodeExtractor(objectInteraction: ObjectInteraction) {
     case SimpleValue(value) if value == Undefined => null
     case SimpleValue(value) => value
     case lzy: LazyNode => extract(lzy.resolve(), observedObjectIds)
-    case ArrayNode(_, oid) if observedObjectIds.contains(oid) => s"<Error: cycle detected for array '${oid.id}'>"
-    case ArrayNode(items, oid) =>
+    case ArrayNode(_, _, oid) if observedObjectIds.contains(oid) => s"<Error: cycle detected for array '${oid.id}'>"
+    case ArrayNode(size, _, oid) =>
       val propMap = propertyMap(oid, observedObjectIds)
-      val length = propMap.get("length").map(_.toString.toInt).getOrElse(0)
-      val array = new Array[Any](length)
+      val array = new Array[Any](size)
       propMap.foreach {
-        case (UnsignedIntString(idx), value) if idx < length => array(idx) = value
+        case (UnsignedIntString(idx), value) if idx < size => array(idx) = value
         case _ =>
       }
       array

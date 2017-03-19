@@ -22,6 +22,9 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
 
   lazy val isArray: Boolean = invoker.isArray().asBool(false)
 
+  lazy val isRegularOrTypedArray: Boolean =
+    isArray || className.endsWith("Array")
+
   def propertyIterator(): Iterator[String] = new IteratorMirror[String](invoker.propertyIterator().asInstanceOf[ObjectReference]) // Iterator<String>
 
   def getOwnKeys(all: Boolean): Array[String] = invoker.getOwnKeys(all) match {

@@ -44,7 +44,7 @@ class ValueNodeExtractorTest extends UnitTest {
     "should convert ArrayNode to an array" in {
       val v1 = SimpleValue("test1")
       val v2 = SimpleValue("test2")
-      val a = ArrayNode(2, ObjectId("a"))
+      val a = ArrayNode(2, None, ObjectId("a"))
       newExtractor(Map(a.objectId -> arrayToMap(Seq(v1, v2)))).extract(a) should be (Array("test1", "test2"))
     }
 
@@ -79,7 +79,7 @@ class ValueNodeExtractorTest extends UnitTest {
       val item = new LazyNode {
         override def resolve(): ValueNode = a
       }
-      a = ArrayNode(1, ObjectId("x"))
+      a = ArrayNode(1, None, ObjectId("x"))
       newExtractor(Map(a.objectId -> arrayToMap(Seq(item)))).extract(a) should be (Array("<Error: cycle detected for array 'x'>"))
     }
   }

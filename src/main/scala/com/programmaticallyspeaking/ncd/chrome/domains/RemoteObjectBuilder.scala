@@ -22,10 +22,16 @@ trait RemoteObjectBuilder {
     RemoteObject("object", None, Some("Object"), Some("Object"), Some(value), None, None)
   }
 
-  def forArray(length: Int, objectId: String) = {
+  def forArray(length: Int, typedClassName: Option[String], objectId: String) = {
     require(length >= 0, "array length must be non-negative")
-    val desc = s"Array[$length]"
-    RemoteObject("object", Some("array"), Some("Array"), Some(desc), None, None, validObjectId(objectId))
+    val className = typedClassName.getOrElse("Array")
+    val subtype = typedClassName match {
+      case Some(_) => "typedarray"
+      case None => "array"
+    }
+
+    val desc = s"$className[$length]"
+    RemoteObject("object", Some(subtype), Some(className), Some(desc), None, None, validObjectId(objectId))
   }
 
   def forArray(items: Seq[_]) = {

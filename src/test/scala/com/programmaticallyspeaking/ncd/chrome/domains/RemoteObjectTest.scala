@@ -64,23 +64,28 @@ class RemoteObjectTest extends UnitTest {
 
     "forArray" - {
       "should handle an empty array" in {
-        RemoteObject.forArray(0, "arr-id") should be (RemoteObject("object", Some("array"), Some("Array"), Some("Array[0]"), None, None, Some("arr-id")))
+        RemoteObject.forArray(0, None, "arr-id") should be (RemoteObject("object", Some("array"), Some("Array"), Some("Array[0]"), None, None, Some("arr-id")))
       }
 
       "should handle an array with a size" in {
-        RemoteObject.forArray(3, "arr-id") should be (RemoteObject("object", Some("array"), Some("Array"), Some("Array[3]"), None, None, Some("arr-id")))
+        RemoteObject.forArray(3, None, "arr-id") should be (RemoteObject("object", Some("array"), Some("Array"), Some("Array[3]"), None, None, Some("arr-id")))
+      }
+
+      "should handle a typed array with a size" in {
+        RemoteObject.forArray(3, Some("Int8Array"), "arr-id") should be (
+          RemoteObject("object", Some("typedarray"), Some("Int8Array"), Some("Int8Array[3]"), None, None, Some("arr-id")))
       }
 
       "should reject a negative size" in {
-        assertThrows[IllegalArgumentException](RemoteObject.forArray(-1, "arr-id"))
+        assertThrows[IllegalArgumentException](RemoteObject.forArray(-1, None, "arr-id"))
       }
 
       "should reject null object ID" in {
-        assertThrows[IllegalArgumentException](RemoteObject.forArray(1, null))
+        assertThrows[IllegalArgumentException](RemoteObject.forArray(1, None, null))
       }
 
       "should reject empty object ID" in {
-        assertThrows[IllegalArgumentException](RemoteObject.forArray(1, ""))
+        assertThrows[IllegalArgumentException](RemoteObject.forArray(1, None, ""))
       }
 
       "should accept an Array" in {

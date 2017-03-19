@@ -50,10 +50,15 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
     }
 
     "convert ArrayNode to an array-based RemoteObject with a JSON object Id" in {
-      val lzy = lazyNode(SimpleValue("s"))
-      val arr = ArrayNode(1, ObjectId("obj-1"))
+      val arr = ArrayNode(1, None, ObjectId("obj-1"))
 
-      converter.toRemoteObject(arr) should be (RemoteObject.forArray(1, """{"id":"obj-1"}"""))
+      converter.toRemoteObject(arr) should be (RemoteObject.forArray(1, None, """{"id":"obj-1"}"""))
+    }
+
+    "convert typed ArrayNode to an array-based RemoteObject with a JSON object Id" in {
+      val arr = ArrayNode(1, Some("Int8Array"), ObjectId("obj-1"))
+
+      converter.toRemoteObject(arr) should be (RemoteObject.forArray(1, Some("Int8Array"), """{"id":"obj-1"}"""))
     }
 
     "convert ObjectNode to an object-based RemoteObject with a JSON object Id" in {
@@ -109,7 +114,7 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
     "convert ArrayNode by-value to an array value without object ID" in {
       val data = Seq(SimpleValue("bar"))
       val objectId = ObjectId("obj-1")
-      val arr = ArrayNode(1, objectId)
+      val arr = ArrayNode(1, None, objectId)
 
       valueConverter(objectId, data).toRemoteObject(arr) should be (RemoteObject.forArray(Array("bar")))
     }

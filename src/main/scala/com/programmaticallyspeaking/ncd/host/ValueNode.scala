@@ -75,7 +75,14 @@ case class SimpleValue(value: Any) extends ValueNode
 // TODO: Naming - all ComplexNode classes are named XXNode, but not this.
 case class ErrorValue(data: ExceptionData, isThrown: Boolean, objectId: ObjectId) extends ComplexNode
 
-case class ArrayNode(size: Int, objectId: ObjectId) extends ComplexNode
+/**
+  * Represents an array.
+  *
+  * @param size the size of the array
+  * @param typedClassName optional class name, `None` for a regular array, a class name for a typed array (e.g. Int8Array)
+  * @param objectId the object ID
+  */
+case class ArrayNode(size: Int, typedClassName: Option[String], objectId: ObjectId) extends ComplexNode
 
 case class ObjectNode(objectId: ObjectId) extends ComplexNode
 

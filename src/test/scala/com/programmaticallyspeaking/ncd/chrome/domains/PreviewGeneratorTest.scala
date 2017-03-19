@@ -98,19 +98,19 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
       Some(previewWithProperties())),
 
     ("ignores 'length' property of an array",
-      RemoteObject.forArray(2, objectIdString("array2")),
+      RemoteObject.forArray(2, None, objectIdString("array2")),
       Some(arrayPreviewWithProperties(PropertyPreview("0", "number", "42", None), PropertyPreview("1", "number", "43", None)))),
 
     ("handles array of objects with description",
-      RemoteObject.forArray(1, objectIdString("arrayofobject")),
+      RemoteObject.forArray(1, None, objectIdString("arrayofobject")),
       Some(arrayPreviewWithProperties(PropertyPreview("0", "object", "Object", None)))),
 
     ("handles array of functions with empty value for a function",
-      RemoteObject.forArray(1, objectIdString("arrayoffunction")),
+      RemoteObject.forArray(1, None, objectIdString("arrayoffunction")),
       Some(arrayPreviewWithProperties(PropertyPreview("0", "function", "", None)))),
 
     ("handles array of undefined",
-      RemoteObject.forArray(1, objectIdString("arrayofundefined")),
+      RemoteObject.forArray(1, None, objectIdString("arrayofundefined")),
       Some(arrayPreviewWithProperties(PropertyPreview("0", "undefined", "undefined", None)))),
 
     ("ignores an object property with a function value",
@@ -163,7 +163,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
       def preview = {
         val objId = objectIdString("toomanyindices")
         val props = propertyMaps.getOrElse(objId, Map.empty)
-        val obj = RemoteObject.forArray(props.size, objId)
+        val obj = RemoteObject.forArray(props.size, None, objId)
         getPreview(obj, props)
       }
 

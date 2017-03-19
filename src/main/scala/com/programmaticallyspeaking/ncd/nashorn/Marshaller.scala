@@ -105,7 +105,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   private def marshalScriptObject(value: Value): ValueNode = {
     val scriptObject = value.asInstanceOf[ObjectReference]
     val mirror = new ScriptObjectMirror(scriptObject)
-    if (mirror.isArray) toArray(mirror)
+    if (mirror.isRegularOrTypedArray) toArray(mirror)
     else mirror.className match {
       case "Function" => toFunction(mirror.asFunction)
       case "Error" => toError(mirror)
@@ -154,17 +154,18 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case _ => false
   }
 
-  private def toArray(ref: ArrayReference) = ArrayNode(ref.length(), objectId(ref))
+  private def toArray(ref: ArrayReference) = ArrayNode(ref.length(), None, objectId(ref))
 
   private def toArray(mirror: ScriptObjectMirror) = {
     val size = mirror.getRequiredInt("length")
-    ArrayNode(size, objectId(mirror.scriptObject))
+    val typedClassName = if (mirror.className != "Array") Some(mirror.className) else None
+    ArrayNode(size, typedClassName, objectId(mirror.scriptObject))
   }
 
   private def toArray(mirror: JSObjectMirror) = {
     // Not required here - JSObject can have a custom implementation that is broken.
     val size = mirror.getInt("length", 0)
-    ArrayNode(size, objectId(mirror.jsObject)) // TODO: Items, but we will refactor...
+    ArrayNode(size, None, objectId(mirror.jsObject)) // TODO: Items, but we will refactor...
   }
 
   private def toDate(mirror: ScriptObjectMirror) = {
