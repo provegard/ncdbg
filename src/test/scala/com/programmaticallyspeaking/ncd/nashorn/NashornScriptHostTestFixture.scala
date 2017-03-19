@@ -83,6 +83,7 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
   }
 
   protected def setupHost(): Unit = {
+    reportProgress("VM is running, setting up host")
     host.events.subscribe(new Observer[ScriptEvent] {
       override def onError(error: Throwable): Unit = vmRunningPromise.tryFailure(error)
 
@@ -98,7 +99,9 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
           // Resolve the promise on which we chain script execution in runScript. This means that any script execution
           // will wait until the infrastructure is ready.
           vmRunningPromise.trySuccess(host)
-        case other => eventSubject.onNext(other)
+        case other =>
+          reportProgress("Unknown event: " + other)
+          eventSubject.onNext(other)
       }
     })
     host.pauseOnBreakpoints()
@@ -184,7 +187,7 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorT
     }
     try Await.result(f, resultTimeout) catch {
       case t: TimeoutException =>
-        throw new TimeoutException(s"No results with ${resultTimeout.toMillis} ms. Progress:\n" + summarizeProgress())
+        throw new TimeoutException(s"No results within ${resultTimeout.toMillis} ms. Progress:\n" + summarizeProgress())
     }
   }
 
