@@ -1,5 +1,9 @@
 # Documentation
 
+## Requirements
+
+* Java version 1.8.0_66 or newer, though NCDbg currently won't enforce it.
+
 ## The debug target
 
 The Nashorn application to debug is called the _debug target_. Start the debug target with the following VM arguments:
