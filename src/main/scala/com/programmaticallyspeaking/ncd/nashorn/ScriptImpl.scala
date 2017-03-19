@@ -36,11 +36,22 @@ object ScriptImpl {
 
   val UTF8 = Charset.forName("utf8")
 
+  def filePathToUrl(path: String): String = {
+    if (path.startsWith("file:/")) return filePathToUrl(path.substring(6))
+    val parts: Seq[String] = path.split("[/\\\\]").filter(_ != "").toList match {
+      case head :: tail if head.length >= 2 && head(1) == ':' =>
+        Seq(head(0).toString) ++ tail
+      case head :: tail => Seq(head) ++ tail
+      case Nil => Seq.empty
+    }
+    "file://" + parts.mkString("/")
+  }
+
   def fromFile(path: String, id: String): Script = {
     val file = new File(path)
     // Files.readAllBytes doesn't do this, it seems. Weird!
     if (!file.exists) throw new FileNotFoundException(path)
-    new ScriptImpl(file.toURI.toString, Files.readAllBytes(file.toPath), id)
+    new ScriptImpl(filePathToUrl(path), Files.readAllBytes(file.toPath), id)
   }
 
   def fromSource(path: String, source: String, id: String): Script = {
