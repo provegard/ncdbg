@@ -1,6 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import java.io._
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import com.programmaticallyspeaking.ncd.host.ScriptEvent
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
@@ -15,7 +16,7 @@ import org.slf4s.Logging
 
 import scala.collection.mutable
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future, Promise}
+import scala.concurrent._
 import scala.util.control.NonFatal
 
 /** Provides a patience configuration that has a timeout that is shorter than the default timeout in
@@ -37,8 +38,14 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
 
   val scriptExecutor: ScriptExecutorBase
 
-  def logVirtualMachineOutput(output: String) = log.info("VM output: " + output)
-  def logVirtualMachineError(error: String) = log.error("VM error: " + error)
+  def logVirtualMachineOutput(output: String) = {
+    reportProgress("VM output: " + output)
+    log.info("VM output: " + output)
+  }
+  def logVirtualMachineError(error: String) = {
+    reportProgress("VM error: " + error)
+    log.error("VM error: " + error)
+  }
 
   implicit val executionContext: ExecutionContext
 
@@ -50,7 +57,14 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
   private var vmStdinWriter: PrintWriter = _
   protected var vmRunningPromise: Promise[NashornScriptHost] = _
 
+  // Tracks progress for better timeout failure reporting
+  private val progress = new ConcurrentLinkedQueue[String]()
+
   protected val eventSubject = new SerializedSubject[ScriptEvent]
+
+  protected def reportProgress(msg: String): Unit = progress.add(msg)
+
+  protected def summarizeProgress() = progress.asScala.mkString("\n")
 
   override def beforeAllTests(): Unit = {
     vm = launchVm()
@@ -76,13 +90,15 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
 
       override def onNext(item: ScriptEvent): Unit = item match {
         case InitialInitializationComplete =>
+          reportProgress("host initialization complete")
+
           // Host initialization is complete, so let ScriptExecutor know that it can continue.
           sendToVm("go")
 
           // Resolve the promise on which we chain script execution in runScript. This means that any script execution
           // will wait until the infrastructure is ready.
           vmRunningPromise.trySuccess(host)
-        case other => eventSubject.onNext(item)
+        case other => eventSubject.onNext(other)
       }
     })
     host.pauseOnBreakpoints()
@@ -117,7 +133,7 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
       val eventSet = vm.eventQueue().remove(500L)
       Option(eventSet).foreach { es =>
         es.asScala.foreach {
-          case ev: VMStartEvent =>
+          case _: VMStartEvent =>
             done = true
           case _ =>
         }
@@ -162,10 +178,14 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorT
     addObserver(observer)
 
     val f = vmRunningPromise.future.flatMap { host =>
+      reportProgress("VM running, sending script")
       sendToVm(script, encodeBase64 = true)
       handler(host)
     }
-    Await.result(f, resultTimeout)
+    try Await.result(f, resultTimeout) catch {
+      case t: TimeoutException =>
+        throw new TimeoutException(s"No results with ${resultTimeout.toMillis} ms. Progress:\n" + summarizeProgress())
+    }
   }
 
   protected def observeAndRunScriptSync[R](script: String, observer: Observer[ScriptEvent])(handler: (NashornScriptHost) => R): Unit = {
