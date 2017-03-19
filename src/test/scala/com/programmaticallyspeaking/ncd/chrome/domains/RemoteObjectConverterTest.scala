@@ -62,9 +62,15 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
     }
 
     "convert ObjectNode to an object-based RemoteObject with a JSON object Id" in {
-      val obj = ObjectNode(ObjectId("obj-1"))
+      val obj = ObjectNode("Object", ObjectId("obj-1"))
 
-      converter.toRemoteObject(obj) should be (RemoteObject.forObject("""{"id":"obj-1"}"""))
+      converter.toRemoteObject(obj) should be (RemoteObject.forObject("Object", """{"id":"obj-1"}"""))
+    }
+
+    "pass on the class name in ObjectNode" in {
+      val obj = ObjectNode("ArrayBuffer", ObjectId("obj-1"))
+
+      converter.toRemoteObject(obj).className should be (Some("ArrayBuffer"))
     }
 
     "convert FunctionNode to an function-based RemoteObject with a JSON object Id" in {
@@ -106,7 +112,7 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
     "convert ObjectNode by-value to an object value without object ID" in {
       val data = Map("foo" -> SimpleValue("bar"))
       val objectId = ObjectId("obj-1")
-      val obj = ObjectNode(objectId)
+      val obj = ObjectNode("Object", objectId)
 
       valueConverter(objectId, data).toRemoteObject(obj) should be (RemoteObject.forObject(Map("foo" -> "bar")))
     }

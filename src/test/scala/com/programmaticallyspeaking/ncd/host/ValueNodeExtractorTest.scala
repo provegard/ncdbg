@@ -50,7 +50,7 @@ class ValueNodeExtractorTest extends UnitTest {
 
     "should convert ObjectNode to a Map" in {
       val oid = ObjectId("x")
-      val o = ObjectNode(oid)
+      val o = ObjectNode("Object", oid)
       newExtractor(Map(oid -> Map("foo" -> SimpleValue("test1")))).extract(o) should be (Map("foo" -> "test1"))
     }
 
@@ -70,7 +70,7 @@ class ValueNodeExtractorTest extends UnitTest {
         override def resolve(): ValueNode = o
       })
       val objectId = ObjectId("x")
-      o = ObjectNode(objectId)
+      o = ObjectNode("Object", objectId)
       newExtractor(Map(objectId -> data)).extract(o) should be (Map("foo" -> "<Error: cycle detected for object 'x'>"))
     }
 

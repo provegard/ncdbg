@@ -81,7 +81,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       MarshallerResult(vn, extra)
     case obj: ObjectReference =>
       // Scala/Java object perhaps?
-      ObjectNode(objectId(obj))
+      ObjectNode(obj.`type`().name(), objectId(obj))
     case x if x == null => EmptyNode
     case other => throw new IllegalArgumentException("Don't know how to marshal: " + other)
   }
@@ -179,8 +179,8 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     RegExpNode(mirror.actualToString, objectId(mirror.scriptObject))
   }
 
-  private def toObject(mirror: ScriptObjectMirror) = ObjectNode(objectId(mirror.scriptObject))
-  private def toObject(mirror: JSObjectMirror) = ObjectNode(objectId(mirror.jsObject))
+  private def toObject(mirror: ScriptObjectMirror) = ObjectNode(mirror.className, objectId(mirror.scriptObject))
+  private def toObject(mirror: JSObjectMirror) = ObjectNode(mirror.className, objectId(mirror.jsObject))
 
   private def toFunction(mirror: ScriptFunctionMirror) = {
     val name = mirror.name

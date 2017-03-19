@@ -84,7 +84,7 @@ case class ErrorValue(data: ExceptionData, isThrown: Boolean, objectId: ObjectId
   */
 case class ArrayNode(size: Int, typedClassName: Option[String], objectId: ObjectId) extends ComplexNode
 
-case class ObjectNode(objectId: ObjectId) extends ComplexNode
+case class ObjectNode(className: String, objectId: ObjectId) extends ComplexNode
 
 case class DateNode(stringRepresentation: String, objectId: ObjectId) extends ComplexNode
 

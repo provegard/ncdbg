@@ -8,7 +8,7 @@ import org.scalatest.prop.PropertyChecks
 
 class PropertyDescriptorTest extends UnitTest with PropertyChecks {
 
-  private val anObject = ObjectNode(ObjectId("x"))
+  private val anObject = ObjectNode("Object", ObjectId("x"))
   private val aFunction = FunctionNode("fun", "function(){}", ObjectId("x"))
   private val anotherFunction = FunctionNode("fun2", "function(){}", ObjectId("y"))
 
@@ -29,7 +29,7 @@ class PropertyDescriptorTest extends UnitTest with PropertyChecks {
         val desc = ObjectPropertyDescriptor(PropertyDescriptorType.Data, configurable, enumerable, writable,
           own, Some(anObject), None, None)
 
-        val remoteObj = RemoteObject.forObject(anObject.objectId.toString)
+        val remoteObj = RemoteObject.forObject("Object", anObject.objectId.toString)
 
         val expected = PropertyDescriptor("data", writable, configurable, enumerable, own, Some(remoteObj), None, None)
         PropertyDescriptor.from("data", desc) should be(expected)

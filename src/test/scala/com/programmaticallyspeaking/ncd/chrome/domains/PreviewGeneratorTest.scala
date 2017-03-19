@@ -36,7 +36,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     objectIdString("withprotoprop") -> Map("foo" -> valueDescriptor(42), "bar" -> valueDescriptor(43, isOwn = false)),
     objectIdString("array2") -> Map("0" -> valueDescriptor(42), "1" -> valueDescriptor(43), "length" -> valueDescriptor(2)),
     objectIdString("withpropnamedunderscoreproto") -> Map("__proto__" -> valueDescriptor("dummy")),
-    objectIdString("arrayofobject") -> Map("0" -> valueDescriptor(ObjectNode(ObjectId("obj")))),
+    objectIdString("arrayofobject") -> Map("0" -> valueDescriptor(ObjectNode("Object", ObjectId("obj")))),
     objectIdString("arrayoffunction") -> Map("0" -> valueDescriptor(aFunction)),
     objectIdString("arrayofundefined") -> Map("0" -> valueDescriptor(SimpleValue(Undefined))),
     objectIdString("objwithfunctionvalue") -> Map("foo" -> valueDescriptor(aFunction)),
@@ -64,37 +64,39 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     generator.withPreviewForObject(obj).preview
   }
 
+  def forObject(objectId: String) = RemoteObject.forObject("Object", objectId)
+
   val testCases = Table(
     ("description", "object", "expected"),
 
     ("ignores non-object", RemoteObject.forNumber(42), None),
 
     ("handles null property",
-      RemoteObject.forObject(objectIdString("null")),
+      forObject(objectIdString("null")),
       Some(previewWithProperties(PropertyPreview("foo", "object", "null", Some("null"))))),
 
     ("handles primitive property",
-      RemoteObject.forObject(objectIdString("prim")),
+      forObject(objectIdString("prim")),
       Some(previewWithProperties(PropertyPreview("foo", "number", "42", None)))),
 
     ("handles a string property with a string not exceeding the max length",
-      RemoteObject.forObject(objectIdString("string")),
+      forObject(objectIdString("string")),
       Some(previewWithProperties(PropertyPreview("foo", "string", "abcdefghij", None)))),
 
     ("abbreviates a long string",
-      RemoteObject.forObject(objectIdString("longstring")),
+      forObject(objectIdString("longstring")),
       Some(previewWithProperties(PropertyPreview("foo", "string", "abcdefghij\u2026", None)))),
 
     ("ignores prototype properties",
-      RemoteObject.forObject(objectIdString("withprotoprop")),
+      forObject(objectIdString("withprotoprop")),
       Some(previewWithProperties(PropertyPreview("foo", "number", "42", None)))),
 
     ("ignores computed properties",
-      RemoteObject.forObject(objectIdString("withcomputedprop")),
+      forObject(objectIdString("withcomputedprop")),
       Some(previewWithProperties())),
 
     ("ignores property '__proto__'",
-      RemoteObject.forObject(objectIdString("withpropnamedunderscoreproto")),
+      forObject(objectIdString("withpropnamedunderscoreproto")),
       Some(previewWithProperties())),
 
     ("ignores 'length' property of an array",
@@ -114,15 +116,15 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
       Some(arrayPreviewWithProperties(PropertyPreview("0", "undefined", "undefined", None)))),
 
     ("ignores an object property with a function value",
-      RemoteObject.forObject(objectIdString("objwithfunctionvalue")),
+      forObject(objectIdString("objwithfunctionvalue")),
       Some(previewWithProperties())),
 
     ("abbreviates a Date string representation",
-      RemoteObject.forObject(objectIdString("objwithdate")),
+      forObject(objectIdString("objwithdate")),
       Some(previewWithProperties(PropertyPreview("foo", "object", "Sat Jan 28\u2026", Some("date"))))),
 
     ("abbreviates a RegExp string representation _in the middle_",
-      RemoteObject.forObject(objectIdString("objwithregexp")),
+      forObject(objectIdString("objwithregexp")),
       Some(previewWithProperties(PropertyPreview("foo", "object", "/[a-z\u2026-z]$/", Some("regexp"))))),
 
     ("ignores a null object",
@@ -145,7 +147,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     "with property count over the max count" - {
       def preview = {
         val objId = objectIdString("toomanyprops")
-        val obj = RemoteObject.forObject(objId)
+        val obj = forObject(objId)
         val props = propertyMaps.getOrElse(objId, Map.empty)
         getPreview(obj, props)
       }

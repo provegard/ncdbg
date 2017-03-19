@@ -96,15 +96,23 @@ class RemoteObjectTest extends UnitTest {
 
     "forObject" - {
       "should handle an object" in {
-        RemoteObject.forObject("an-id") should be (RemoteObject("object", None, Some("Object"), Some("Object"), None, None, Some("an-id")))
+        RemoteObject.forObject("Object", "an-id") should be (RemoteObject("object", None, Some("Object"), Some("Object"), None, None, Some("an-id")))
+      }
+
+      "should use the class name" in {
+        RemoteObject.forObject("ArrayBuffer", "an-id").className should be (Some("ArrayBuffer"))
+      }
+
+      "should use the class name as description also" in {
+        RemoteObject.forObject("ArrayBuffer", "an-id").description should be (Some("ArrayBuffer"))
       }
 
       "should reject null object ID" in {
-        assertThrows[IllegalArgumentException](RemoteObject.forObject(null.asInstanceOf[String]))
+        assertThrows[IllegalArgumentException](RemoteObject.forObject("Object", null.asInstanceOf[String]))
       }
 
       "should reject empty object ID" in {
-        assertThrows[IllegalArgumentException](RemoteObject.forObject(""))
+        assertThrows[IllegalArgumentException](RemoteObject.forObject("Object", ""))
       }
 
       "should accept an object Map" in {

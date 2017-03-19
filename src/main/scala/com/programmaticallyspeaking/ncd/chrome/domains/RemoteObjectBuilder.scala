@@ -13,8 +13,8 @@ trait RemoteObjectBuilder {
     Some(objectId)
   }
 
-  def forObject(objectId: String) = {
-    RemoteObject("object", None, Some("Object"), Some("Object"), None, None, validObjectId(objectId))
+  def forObject(className: String, objectId: String) = {
+    RemoteObject("object", None, Some(className), Some(className), None, None, validObjectId(objectId))
   }
 
   def forObject(value: Map[String, Any]) = {

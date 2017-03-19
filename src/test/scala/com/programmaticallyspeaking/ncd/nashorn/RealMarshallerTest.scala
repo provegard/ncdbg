@@ -39,6 +39,14 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
     }
   }
 
+  def evalObject(expr: String)(handler: (ObjectNode) => Unit): Unit = {
+    evaluateExpression(expr) { (_, actual) =>
+      inside(actual) {
+        case on: ObjectNode => handler(on)
+      }
+    }
+  }
+
   "Marshalling to ValueNode works for" - {
     forAll(simpleValues) { (desc, expr, expected) =>
       desc in {
@@ -153,6 +161,24 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
           val expr = s"new $className([1,2])"
           evalArray(expr) { an =>
             an.typedClassName should be (Some(className))
+          }
+        }
+      }
+    }
+
+    "object class name" - {
+      val classNameCases = Table(
+        ("desc", "expr", "className"),
+        ("plain object", "{foo:42}", "Object"),
+        ("object with type", "new ArrayBuffer()", "ArrayBuffer"),
+        ("Java object", "new java.util.ArrayList()", "java.util.ArrayList"),
+        ("JSObject object", s"createInstance('${classOf[ObjectLikeJSObject].getName}')", "Object")
+      )
+
+      forAll(classNameCases) { (desc, expr, className) =>
+        s"gets a class name for $desc" in {
+          evalObject(expr) { obj =>
+            obj.className should be (className)
           }
         }
       }

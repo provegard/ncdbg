@@ -652,7 +652,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             // since we store object nodes in a map.
             val locals = localValues.map(e => e._1 -> marshaller.marshal(e._2))
             val localNode = if (locals.nonEmpty) {
-              val node = ObjectNode(ObjectId("$$locals-" + stackframeId))
+              val node = ObjectNode("Object", ObjectId("$$locals-" + stackframeId))
               mappingRegistry.register(null, node, locals)
               Some(node)
             } else None

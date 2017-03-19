@@ -41,6 +41,8 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     ("all", ExceptionPauseType.All)
   )
 
+  def objectWithId(id: String) = ObjectNode("Object", ObjectId(id))
+
   "Debugger" - {
     "enable" - {
       "should emit a ScriptParsed event for a script" in {
@@ -261,9 +263,9 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       forAll(scopeTests) { (scopeType, expected) =>
         s"translates scope of type ${scopeType.getClass.getSimpleName} correctly" in {
-          val thisObj = ObjectNode(ObjectId("$$this"))
+          val thisObj = objectWithId("$$this")
           val scopeObjectId = ObjectId("$$scope")
-          val scopeObj = ObjectNode(scopeObjectId)
+          val scopeObj = ObjectNode("Object", scopeObjectId)
           val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), Breakpoint("bp1", "a", 10), "fun")
           val ev = simulateHitBreakpoint(Seq(stackFrame))
           val params = getEventParams(ev)
@@ -278,8 +280,8 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "with a scope object" - {
-        val thisObj = ObjectNode(ObjectId("$$this"))
-        val scopeObj = ObjectNode(ObjectId("$$scope"))
+        val thisObj = objectWithId("$$this")
+        val scopeObj = objectWithId("$$scope")
         val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), Breakpoint("bp1", "a", 10), "fun")
 
         "should result in a Debugger.paused event" in {
@@ -314,7 +316,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "without scopes" - {
-        val thisObj = ObjectNode(ObjectId("$$this"))
+        val thisObj = objectWithId("$$this")
         val stackFrame = createStackFrame("sf1", thisObj, None, Breakpoint("bp1", "a", 10), "fun")
 
         "should not have a scopes in the event params" in {
@@ -418,7 +420,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "should support by-value return" in {
-        val obj = ObjectNode(ObjectId("x"))
+        val obj = objectWithId("x")
         setProperties(obj, Map("foo" -> "bar"))
         testEvalHandling(obj, returnByValue = Some(true)) { resp =>
           resp.result should be (RemoteObject.forObject(Map("foo" -> "bar")))
@@ -426,7 +428,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "should generate a preview if requested" in {
-        val obj = ObjectNode(ObjectId("x"))
+        val obj = objectWithId("x")
         setProperties(obj, Map.empty)
         testEvalHandling(obj, generatePreview = Some(true)) { resp =>
           resp.result.preview should be ('defined)
@@ -434,7 +436,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
 
       "should request own object properties and not only accessors when generating a preview" in {
-        val obj = ObjectNode(ObjectId("x"))
+        val obj = objectWithId("x")
         setProperties(obj, Map.empty)
         testEvalHandling(obj, generatePreview = Some(true)) { resp =>
           verify(currentScriptHost).getObjectProperties(ObjectId("x"), true, false)
