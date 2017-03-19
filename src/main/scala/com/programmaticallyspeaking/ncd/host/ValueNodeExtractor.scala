@@ -62,8 +62,8 @@ class ValueNodeExtractor(objectInteraction: ObjectInteraction) {
         case _ =>
       }
       array
-    case ObjectNode(oid) if observedObjectIds.contains(oid) => s"<Error: cycle detected for object '${oid.id}'>"
-    case ObjectNode(oid) => propertyMap(oid, observedObjectIds)
+    case ObjectNode(_, oid) if observedObjectIds.contains(oid) => s"<Error: cycle detected for object '${oid.id}'>"
+    case ObjectNode(_, oid) => propertyMap(oid, observedObjectIds)
     case EmptyNode => null
     case DateNode(stringRep, _) => stringRep
     case FunctionNode(name, _, _) => s"<function $name() {}>"
