@@ -1,8 +1,8 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{CallArgument, ExceptionDetails, GetPropertiesResult}
+import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{CallArgument, ExceptionDetails, GetPropertiesResult, RemoteObject}
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
+import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
@@ -14,6 +14,14 @@ import scala.util.{Success, Try}
 class RuntimeTest extends UnitTest with DomainActorTesting {
 
   def objectWithId(id: String) = ObjectNode("Object", ObjectId(id))
+
+  def evaluateOnStackFrameArgs: EvaluateOnStackFrameArgs = {
+    val sidCaptor = ArgumentCaptor.forClass(classOf[String])
+    val exprCaptor = ArgumentCaptor.forClass(classOf[String])
+    val mapCaptor = ArgumentCaptor.forClass(classOf[Map[String, ObjectId]])
+    verify(currentScriptHost).evaluateOnStackFrame(sidCaptor.capture(), exprCaptor.capture(), mapCaptor.capture())
+    EvaluateOnStackFrameArgs(sidCaptor.getValue, exprCaptor.getValue, mapCaptor.getValue)
+  }
 
   "Runtime" - {
     "enable" - {
@@ -125,14 +133,6 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         fun(response)
       }
 
-      def evaluateOnStackFrameArgs: EvaluateOnStackFrameArgs = {
-        val sidCaptor = ArgumentCaptor.forClass(classOf[String])
-        val exprCaptor = ArgumentCaptor.forClass(classOf[String])
-        val mapCaptor = ArgumentCaptor.forClass(classOf[Map[String, ObjectId]])
-        verify(currentScriptHost).evaluateOnStackFrame(sidCaptor.capture(), exprCaptor.capture(), mapCaptor.capture())
-        EvaluateOnStackFrameArgs(sidCaptor.getValue, exprCaptor.getValue, mapCaptor.getValue)
-      }
-
       def testCallArgs(args: Seq[CallArgument])(fun: (EvaluateOnStackFrameArgs) => Unit) = {
         val obj = objectWithId("x")
         testCall(obj, """{"id":"x"}""", args) { _ =>
@@ -217,6 +217,55 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         requestAndReceive(runtime, "1", Domain.enable)
         val response = requestAndReceiveResponse(runtime, "2", Runtime.releaseObject("x"))
         response should be (Accepted)
+      }
+    }
+
+    "evaluate" - {
+      def testEvaluate(expr: String, retVal: Option[Try[ValueNode]] = None, silent: Option[Boolean] = None,
+                   returnByValue: Option[Boolean] = None, generatePreview: Option[Boolean] = None)(fun: (Any) => Unit) = {
+
+        val actualRetVal = retVal.getOrElse(Success(SimpleValue("ok")))
+        when(currentScriptHost.evaluateOnStackFrame(any[String], any[String], any[Map[String, ObjectId]])).thenReturn(actualRetVal)
+
+        val runtime = newActorInstance[Runtime]
+        requestAndReceive(runtime, "1", Domain.enable)
+        val response = requestAndReceiveResponse(runtime, "2", Runtime.evaluate(expr, None, None, silent, returnByValue,
+          generatePreview))
+        fun(response)
+      }
+
+      def errorValue(msg: String) = ErrorValue(ExceptionData("Exception", msg, 1, 0, "", None), true, ObjectId("err"))
+
+      "should perform ScriptHost evaluation with a wrapped function using null (global) as 'this'" in {
+        testEvaluate("42") { _ =>
+          val expr = "(function(){return (42);}).call(null);"
+          evaluateOnStackFrameArgs should be(EvaluateOnStackFrameArgs("$top", expr, Map.empty))
+        }
+      }
+
+      "should generate a preview if requested" in {
+        val retVal = objectWithId("y")
+        testEvaluate("42", generatePreview = Some(true), retVal = Some(Success(retVal))) {
+          case Runtime.EvaluateResult(result, _) =>
+            result.preview should be('defined)
+          case other => fail("Unexpected response: " + other)
+        }
+      }
+
+      "should report exception by default" in {
+        testEvaluate("42", retVal = Some(Success(errorValue("oops")))) {
+          case Runtime.EvaluateResult(_, exceptionDetails) =>
+            exceptionDetails should be ('defined)
+          case other => fail("Unexpected response: " + other)
+        }
+      }
+
+      "should not report an exception in silent mode" in {
+        testEvaluate("42", retVal = Some(Success(errorValue("oops"))), silent = Some(true)) {
+          case Runtime.EvaluateResult(result, None) =>
+            result should be (RemoteObject.undefinedValue)
+          case other => fail("Unexpected response: " + other)
+        }
       }
     }
   }

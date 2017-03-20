@@ -33,7 +33,8 @@ object Runtime {
 
   case class releaseObjectGroup(objectGroup: String)
 
-  case class evaluate(expression: String, objectGroup: Option[String], contextId: Option[ExecutionContextId], returnByValue: Option[Boolean])
+  case class evaluate(expression: String, objectGroup: Option[String], contextId: Option[ExecutionContextId], silent: Option[Boolean],
+                      returnByValue: Option[Boolean], generatePreview: Option[Boolean])
 
   case class compileScript(expression: String, sourceURL: String, persistScript: Boolean, executionContextId: Option[ExecutionContextId])
 
@@ -83,7 +84,7 @@ object Runtime {
 
   case class ExecutionContextDescription(id: ExecutionContextId, origin: String, name: String, auxData: AnyRef)
 
-  case class EvaluateResult(result: RemoteObject)
+  case class EvaluateResult(result: RemoteObject, exceptionDetails: Option[ExceptionDetails])
   case class RunScriptResult(result: RemoteObject)
   case class CallFunctionOnResult(result: RemoteObject, exceptionDetails: Option[ExceptionDetails])
 
@@ -138,8 +139,19 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport with R
     case Runtime.releaseObjectGroup(grp) =>
       log.debug(s"Request to release object group '$grp'")
 
-    case Runtime.evaluate(expr, _, _, _) =>
-      EvaluateResult(RemoteObject.forString("TODO: Implement Runtime.evaluate"))
+    case Runtime.evaluate(expr, _, _, maybeSilent, maybeReturnByValue, maybeGeneratePreview) =>
+      // Runtime.evaluate evaluates on the global object. Calling with null as 'this' results in exactly that.
+      val script = s"(function(){return ($expr);}).call(null);"
+
+      // TODO: Debugger.evaluateOnCallFrame + Runtime.callFunctionOn, duplicate code
+      val actualReturnByValue = maybeReturnByValue.getOrElse(false)
+      val reportException = !maybeSilent.getOrElse(false)
+      val generatePreview = maybeGeneratePreview.getOrElse(false)
+
+      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
+
+      val evalResult = evaluate(scriptHost, "$top", script, Map.empty, reportException)
+      EvaluateResult(evalResult.result, evalResult.exceptionDetails)
 
     case Runtime.compileScript(expr, url, persist, _) =>
       log.debug(s"Request to compile script '$expr' with URL $url and persist = $persist")
