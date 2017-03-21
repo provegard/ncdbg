@@ -3,10 +3,34 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 import java.io.File
 
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
-import com.programmaticallyspeaking.ncd.host.{ErrorValue, ObjectId, ScriptHost, ValueNode}
+import com.programmaticallyspeaking.ncd.host.{ErrorValue, ObjectId, ScriptHost}
+import com.programmaticallyspeaking.ncd.infra.ObjectMapping
 import org.slf4s.Logging
 
 import scala.util.{Failure, Success}
+
+object ScriptEvaluateSupport {
+  /**
+    * Serialize arguments to JSON so that they can be embedded in a script.
+    */
+  def serializeArgumentValues(arguments: Seq[Runtime.CallArgument], useNamedObject: (ObjectId) => String): Seq[String] = {
+    arguments.map { arg =>
+      (arg.value, arg.unserializableValue, arg.objectId) match {
+        case (Some(value), None, None) =>
+          ObjectMapping.toJson(value)
+        case (None, Some(unserializableValue), None) => unserializableValue
+        case (None, None, Some(strObjectId)) =>
+          // Obtain a name for the object with the given ID
+          val objectId = ObjectId.fromString(strObjectId)
+          useNamedObject(objectId)
+        case (None, None, None) => "undefined"
+        case _ =>
+          // TODO: How can we differ between null and undefined?
+          "null"
+      }
+    }
+  }
+}
 
 trait ScriptEvaluateSupport { self: Logging =>
 

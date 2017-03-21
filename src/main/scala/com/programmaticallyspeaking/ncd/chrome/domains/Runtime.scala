@@ -182,7 +182,7 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport with R
 
       val targetName = useNamedObject(ObjectId.fromString(strObjectId))
 
-      val argsArrayString = serializeArgumentValues(arguments, useNamedObject).mkString("[", ",", "]")
+      val argsArrayString = ScriptEvaluateSupport.serializeArgumentValues(arguments, useNamedObject).mkString("[", ",", "]")
       val expression = s"($functionDeclaration).apply($targetName,$argsArrayString)"
 
       // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
@@ -194,26 +194,5 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport with R
 
     case Runtime.releaseObject(objectId) =>
       log.debug(s"Request to release object with ID $objectId")
-  }
-
-  /**
-    * Serialize arguments to JSON so that they can be embedded in a script.
-    */
-  private def serializeArgumentValues(arguments: Seq[CallArgument], useNamedObject: (ObjectId) => String): Seq[String] = {
-    arguments.map { arg =>
-      (arg.value, arg.unserializableValue, arg.objectId) match {
-        case (Some(value), None, None) =>
-          ObjectMapping.toJson(value)
-        case (None, Some(unserializableValue), None) => unserializableValue
-        case (None, None, Some(strObjectId)) =>
-          // Obtain a name for the object with the given ID
-          val objectId = ObjectId.fromString(strObjectId)
-          useNamedObject(objectId)
-        case (None, None, None) => "undefined"
-        case _ =>
-          // TODO: How can we differ between null and undefined?
-          "null"
-      }
-    }
   }
 }

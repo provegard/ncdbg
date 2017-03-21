@@ -2,9 +2,11 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 import com.programmaticallyspeaking.ncd.host.{Scope => HostScope, _}
+import com.programmaticallyspeaking.ncd.infra.IdGenerator
 import org.slf4s.Logging
 
 import scala.collection.mutable
+import scala.util.{Failure, Success, Try}
 
 object Debugger {
   type CallFrameId = String
@@ -23,6 +25,8 @@ object Debugger {
                                      hasSourceURL: Boolean)
 
   case class setBreakpointsActive(active: Boolean)
+
+  case class setVariableValue(scopeNumber: Int, variableName: String, newValue: Runtime.CallArgument, callFrameId: CallFrameId)
 
   /** Defines pause on exceptions state. Can be set to stop on all exceptions, uncaught exceptions or no exceptions.
     * Initial pause on exceptions state is none.
@@ -96,6 +100,8 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
     * Value = contents hash
     */
   private val emittedScripts = mutable.Map[String, String]()
+
+  private var lastCallFrameList: Option[Seq[CallFrame]] = None
 
   private def emitScriptParsedEvent(script: Script) = {
     val hash = script.contentsHash()
@@ -185,6 +191,55 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
       val locations = scriptHost.getBreakpointLineNumbers(start.scriptId, start.lineNumber + 1, maybeEnd.map(_.lineNumber + 1))
         .map(line1Based => Location(start.scriptId, line1Based - 1, 0))
       GetPossibleBreakpointsResult(locations)
+
+    case Debugger.setVariableValue(scopeNum, varName, newValue, callFrameId) =>
+      // TODO: Use Option-to-Either here!
+      val inputs = for {
+        callFrames <- lastCallFrameList
+        callFrame <- callFrames.find(_.callFrameId == callFrameId)
+        scope <- callFrame.scopeChain.lift(scopeNum)
+        scopeObjectId <- scope.`object`.objectId
+      } yield (scope, scopeObjectId)
+
+      inputs match {
+        case Some((scope, strObjectId)) =>
+
+          // TODO: Big-time copy-paste from Runtime.callFunctionOn
+          implicit val remoteObjectConverter = createRemoteObjectConverter(false, false)
+
+          val objectIdNameGenerator = new IdGenerator("__obj_")
+
+          var namedObjects = Map[String, ObjectId]()
+          def useNamedObject(objectId: ObjectId): String = {
+            val name = objectIdNameGenerator.next
+            namedObjects += name -> objectId
+            name
+          }
+
+          val scopeName = useNamedObject(ObjectId.fromString(strObjectId))
+          val arguments = Seq(newValue)
+
+          val functionDeclaration =
+            """function (target,varName,varValue) {
+              |  target[varName] = varValue;
+              |}
+            """.stripMargin
+
+          val argString = ScriptEvaluateSupport.serializeArgumentValues(arguments, useNamedObject).head
+          val expression = s"($functionDeclaration).call(null,$scopeName,'$varName',$argString)"
+
+          log.info(s"Debugger.setVariableValue: $expression")
+
+          // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
+          val evalResult = evaluate(scriptHost, "$top", expression, namedObjects, true)
+
+          log.info("" + evalResult)
+
+        case _ =>
+          //TODO: Proper failure!
+          ???
+      }
+
   }
 
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
@@ -206,7 +261,7 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
   private def pauseBasedOnBreakpoint(hitBreakpoint: HitBreakpoint): Unit = {
     val converter = RemoteObjectConverter.byReference
     def toRemoteObject(value: ValueNode) = converter.toRemoteObject(value)
-    def callFrames = hitBreakpoint.stackFrames.map { sf =>
+    val callFrames = hitBreakpoint.stackFrames.map { sf =>
       val scopes = sf.scopeChain.map(s => Scope(scopeType(s), toRemoteObject(s.value)))
       val thisObj = toRemoteObject(sf.thisObj)
       // Reuse stack frame ID as call frame ID so that mapping is easier when we talk to the debugger
@@ -215,6 +270,7 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
 
     hitBreakpoint.stackFrames.headOption match {
       case Some(sf) =>
+        lastCallFrameList = Some(callFrames)
         val params = PausedEventParams(callFrames, "other", Seq(sf.breakpoint.breakpointId))
         emitEvent("Debugger.paused", params)
 
@@ -222,4 +278,5 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
         log.warn("Unexpected! Got a HitBreakpoint without stack frames!")
     }
   }
+
 }
