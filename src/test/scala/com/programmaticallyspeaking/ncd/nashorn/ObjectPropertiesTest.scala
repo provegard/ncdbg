@@ -118,6 +118,21 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
         }
       }
     }
+
+    "Object modification" - {
+      "should be visible after first property evaluation (i.e. not hidden by the cache)" in {
+        evaluateExpression("{'a':'b'}") {
+          case (host, c: ComplexNode) =>
+            // Prime the cache, then evaluate
+            val ignored = expand(host, c)
+            host.evaluateOnStackFrame("$top", "$foo['a']='c'", Map("$foo" -> c.objectId))
+
+            expand(host, c) should be (Map("a" -> "c"))
+
+          case (_, other) => fail("Unknown: " + other)
+        }
+      }
+    }
   }
 
 }

@@ -1003,6 +1003,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
                 }
             }
 
+            // Evaluating code may modify any existing object, which means that we cannot keep our object properties
+            // cache. There's no point trying to be smart here and only remove entries for the named objects, since the
+            // code may call a function that modifies an object that we don't know about here.
+            pd.objectPropertiesCache.clear()
+
             sf.eval(expression, namedValues)
           case _ =>
             log.warn(s"No stack frame found with ID $stackFrameId. Available IDs: " + pd.stackFrames.map(_.id).mkString(", "))
