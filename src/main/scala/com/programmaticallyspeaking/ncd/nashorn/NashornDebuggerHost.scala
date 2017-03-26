@@ -58,11 +58,6 @@ object NashornDebuggerHost {
 
   type CodeEvaluator = (String, Map[String, AnyRef]) => ValueNode
 
-  def optionToEither[A](opt: Option[A], msg: => String): Either[String, A] = opt match {
-    case Some(a) => Right(a)
-    case None => Left(msg)
-  }
-
   private def scriptSourceField(refType: ReferenceType): Field = {
     // Generated script classes has a field named 'source'
     Option(refType.fieldByName("source"))
@@ -132,6 +127,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   import ExecutionContext.Implicits._
   import scala.collection.JavaConverters._
+  import com.programmaticallyspeaking.ncd.infra.BetterOption._
 
   private val scriptByPath = mutable.Map[String, Script]()
 
@@ -177,9 +173,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   private def enableBreakingAt(typeName: String, methodName: String, statementName: String): Unit = {
     val methodLoc = for {
-      theType <- optionToEither(foundWantedTypes.get(typeName), s"no $typeName type found")
-      theMethod <- optionToEither(theType.methodsByName(methodName).asScala.headOption, s"$typeName.$methodName method not found")
-      location <- optionToEither(theMethod.allLineLocations().asScala.headOption, s"no line location found in $typeName.$methodName")
+      theType <- foundWantedTypes.get(typeName).toEither(s"no $typeName type found")
+      theMethod <- theType.methodsByName(methodName).asScala.headOption.toEither(s"$typeName.$methodName method not found")
+      location <- theMethod.allLineLocations().asScala.headOption.toEither(s"no line location found in $typeName.$methodName")
     } yield location
 
     methodLoc match {
