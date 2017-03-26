@@ -213,16 +213,9 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
           val namedObjects = new NamedObjects
 
           val scopeName = namedObjects.useNamedObject(ObjectId.fromString(strObjectId))
-          val arguments = Seq(newValue)
+          val newValueName = ScriptEvaluateSupport.serializeArgumentValues(Seq(newValue), namedObjects).head
 
-          val functionDeclaration =
-            """function (target,varName,varValue) {
-              |  target[varName] = varValue;
-              |}
-            """.stripMargin
-
-          val argString = ScriptEvaluateSupport.serializeArgumentValues(arguments, namedObjects).head
-          val expression = s"($functionDeclaration).call(null,$scopeName,'$varName',$argString)"
+          val expression = s"$scopeName['$varName']=$newValueName;"
 
           // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
           evaluate(scriptHost, "$top", expression, namedObjects.result, true)
