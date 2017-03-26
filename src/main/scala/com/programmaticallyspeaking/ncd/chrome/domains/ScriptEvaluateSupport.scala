@@ -13,7 +13,7 @@ object ScriptEvaluateSupport {
   /**
     * Serialize arguments to JSON so that they can be embedded in a script.
     */
-  def serializeArgumentValues(arguments: Seq[Runtime.CallArgument], useNamedObject: (ObjectId) => String): Seq[String] = {
+  def serializeArgumentValues(arguments: Seq[Runtime.CallArgument], namedObjects: NamedObjects): Seq[String] = {
     arguments.map { arg =>
       (arg.value, arg.unserializableValue, arg.objectId) match {
         case (Some(value), None, None) =>
@@ -22,7 +22,7 @@ object ScriptEvaluateSupport {
         case (None, None, Some(strObjectId)) =>
           // Obtain a name for the object with the given ID
           val objectId = ObjectId.fromString(strObjectId)
-          useNamedObject(objectId)
+          namedObjects.useNamedObject(objectId)
         case (None, None, None) => "undefined"
         case _ =>
           // TODO: How can we differ between null and undefined?

@@ -208,20 +208,11 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
 
       scopeObjectId match {
         case Right(strObjectId) =>
-
-          // TODO: Big-time copy-paste from Runtime.callFunctionOn
           implicit val remoteObjectConverter = createRemoteObjectConverter(false, false)
 
-          val objectIdNameGenerator = new IdGenerator("__obj_")
+          val namedObjects = new NamedObjects
 
-          var namedObjects = Map[String, ObjectId]()
-          def useNamedObject(objectId: ObjectId): String = {
-            val name = objectIdNameGenerator.next
-            namedObjects += name -> objectId
-            name
-          }
-
-          val scopeName = useNamedObject(ObjectId.fromString(strObjectId))
+          val scopeName = namedObjects.useNamedObject(ObjectId.fromString(strObjectId))
           val arguments = Seq(newValue)
 
           val functionDeclaration =
@@ -230,11 +221,11 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
               |}
             """.stripMargin
 
-          val argString = ScriptEvaluateSupport.serializeArgumentValues(arguments, useNamedObject).head
+          val argString = ScriptEvaluateSupport.serializeArgumentValues(arguments, namedObjects).head
           val expression = s"($functionDeclaration).call(null,$scopeName,'$varName',$argString)"
 
           // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
-          evaluate(scriptHost, "$top", expression, namedObjects, true)
+          evaluate(scriptHost, "$top", expression, namedObjects.result, true)
 
           () // don't return anything
 

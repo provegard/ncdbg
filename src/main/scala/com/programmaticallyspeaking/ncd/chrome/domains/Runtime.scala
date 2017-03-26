@@ -171,22 +171,15 @@ class Runtime extends DomainActor with Logging with ScriptEvaluateSupport with R
 
       implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
 
-      val objectIdNameGenerator = new IdGenerator("__obj_")
+      val namedObjects = new NamedObjects
 
-      var namedObjects = Map[String, ObjectId]()
-      def useNamedObject(objectId: ObjectId): String = {
-        val name = objectIdNameGenerator.next
-        namedObjects += name -> objectId
-        name
-      }
+      val targetName = namedObjects.useNamedObject(ObjectId.fromString(strObjectId))
 
-      val targetName = useNamedObject(ObjectId.fromString(strObjectId))
-
-      val argsArrayString = ScriptEvaluateSupport.serializeArgumentValues(arguments, useNamedObject).mkString("[", ",", "]")
+      val argsArrayString = ScriptEvaluateSupport.serializeArgumentValues(arguments, namedObjects).mkString("[", ",", "]")
       val expression = s"($functionDeclaration).apply($targetName,$argsArrayString)"
 
       // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
-      val evalResult = evaluate(scriptHost, "$top", expression, namedObjects, reportException)
+      val evalResult = evaluate(scriptHost, "$top", expression, namedObjects.result, reportException)
       CallFunctionOnResult(evalResult.result, evalResult.exceptionDetails)
 
     case Runtime.runIfWaitingForDebugger =>
