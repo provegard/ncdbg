@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2017-03-27)
 
 * Don't leak the code evaluation marker (issue #19)
 * Remember variables defined in the console (issue #20)
