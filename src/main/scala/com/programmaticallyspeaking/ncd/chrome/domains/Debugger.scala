@@ -90,6 +90,7 @@ object Debugger {
 
 class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
   import Debugger._
+  import com.programmaticallyspeaking.ncd.infra.BetterOption._
 
   override def postStop(): Unit = try {
     // Tell the ScriptHost to reset, so that we don't leave it paused
@@ -145,18 +146,22 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
 
 
     case Debugger.resume =>
+      lastCallFrameList = None
       scriptHost.resume()
 
     case Debugger.removeBreakpoint(id) =>
       scriptHost.removeBreakpointById(id)
 
     case Debugger.stepInto =>
+      lastCallFrameList = None
       scriptHost.step(StepInto)
 
     case Debugger.stepOver =>
+      lastCallFrameList = None
       scriptHost.step(StepOver)
 
     case Debugger.stepOut =>
+      lastCallFrameList = None
       scriptHost.step(StepOut)
 
     case Debugger.setPauseOnExceptions(state) =>
@@ -193,16 +198,16 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
       GetPossibleBreakpointsResult(locations)
 
     case Debugger.setVariableValue(scopeNum, varName, newValue, callFrameId) =>
-      // TODO: Use Option-to-Either here!
-      val inputs = for {
-        callFrames <- lastCallFrameList
+      val scopeObjectId = for {
+        callFrames <- lastCallFrameList.toEither("Debugger hasn't stopped on a breakpoint")
         callFrame <- callFrames.find(_.callFrameId == callFrameId)
-        scope <- callFrame.scopeChain.lift(scopeNum)
-        scopeObjectId <- scope.`object`.objectId
+          .toEither(s"No call frame with ID $callFrameId found (available: ${callFrames.map(_.callFrameId).mkString(", ")})")
+        scope <- callFrame.scopeChain.lift(scopeNum).toEither(s"Scope no. $scopeNum not found (count: ${callFrame.scopeChain.size})")
+        scopeObjectId <- scope.`object`.objectId.toEither(s"Missing scope object ID")
       } yield scopeObjectId
 
-      inputs match {
-        case Some(strObjectId) =>
+      scopeObjectId match {
+        case Right(strObjectId) =>
 
           // TODO: Big-time copy-paste from Runtime.callFunctionOn
           implicit val remoteObjectConverter = createRemoteObjectConverter(false, false)
@@ -233,10 +238,8 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
 
           () // don't return anything
 
-        case None =>
-          val scopes: Iterable[String] = lastCallFrameList.toSeq.flatMap(_.flatMap(_.scopeChain.flatMap(_.`object`.objectId)))
-          val scopesStr = scopes.mkString(", ")
-          throw new IllegalArgumentException(s"Didn't find scope $scopeNum in call frame $callFrameId (available: $scopesStr)")
+        case Left(problem) =>
+          throw new IllegalArgumentException(problem)
       }
 
   }
