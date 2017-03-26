@@ -200,8 +200,8 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorT
     subscriptions.enqueue(eventSubject.subscribe(observer))
   }
 
-  protected def observeAndRunScriptAsync[R](script: String, observer: Observer[ScriptEvent])(handler: (NashornScriptHost) => Future[R]): Unit = {
-    addObserver(observer)
+  protected def observeAndRunScriptAsync[R](script: String, observer: Observer[ScriptEvent] = null)(handler: (NashornScriptHost) => Future[R]): Unit = {
+    Option(observer).foreach(addObserver)
 
     val f = vmRunningPromise.future.flatMap { host =>
       reportProgress("VM running, sending script")
