@@ -199,10 +199,10 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
         callFrame <- callFrames.find(_.callFrameId == callFrameId)
         scope <- callFrame.scopeChain.lift(scopeNum)
         scopeObjectId <- scope.`object`.objectId
-      } yield (scope, scopeObjectId)
+      } yield scopeObjectId
 
       inputs match {
-        case Some((scope, strObjectId)) =>
+        case Some(strObjectId) =>
 
           // TODO: Big-time copy-paste from Runtime.callFunctionOn
           implicit val remoteObjectConverter = createRemoteObjectConverter(false, false)
@@ -228,16 +228,15 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
           val argString = ScriptEvaluateSupport.serializeArgumentValues(arguments, useNamedObject).head
           val expression = s"($functionDeclaration).call(null,$scopeName,'$varName',$argString)"
 
-          log.info(s"Debugger.setVariableValue: $expression")
-
           // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
-          val evalResult = evaluate(scriptHost, "$top", expression, namedObjects, true)
+          evaluate(scriptHost, "$top", expression, namedObjects, true)
 
-          log.info("" + evalResult)
+          () // don't return anything
 
-        case _ =>
-          //TODO: Proper failure!
-          ???
+        case None =>
+          val scopes: Iterable[String] = lastCallFrameList.toSeq.flatMap(_.flatMap(_.scopeChain.flatMap(_.`object`.objectId)))
+          val scopesStr = scopes.mkString(", ")
+          throw new IllegalArgumentException(s"Didn't find scope $scopeNum in call frame $callFrameId (available: $scopesStr)")
       }
 
   }
@@ -270,7 +269,9 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
 
     hitBreakpoint.stackFrames.headOption match {
       case Some(sf) =>
+        // Call frames are saved to be used with setVariableValue.
         lastCallFrameList = Some(callFrames)
+        
         val params = PausedEventParams(callFrames, "other", Seq(sf.breakpoint.breakpointId))
         emitEvent("Debugger.paused", params)
 
