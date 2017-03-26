@@ -108,6 +108,8 @@ trait FreeActorTesting extends BeforeAndAfterEach with BeforeAndAfterAll with Ac
 
   final override protected def afterAll(): Unit =  try afterAllTests() finally system.terminate()
 
+  def newActorInstance[A <: Actor : ClassTag]: ActorRef =
+    system.actorOf(Props[A]())
 }
 
 // TODO: Why can't we have a trait Mocking that does `import Mocking._` where Mocking is this object??
