@@ -9,6 +9,7 @@
 * Marshal typed arrays properly (issue #24)
 * Support `Debugger.setVariableValue` and `Runtime.evaluate` (issue #25)
 * Remove dependency on Akka HTTP, use [tinyws](https://github.com/provegard/tinyws) instead.
+* Clear object properties cache on code evaluation (issue #26)
 
 ## 0.2.0 (2017-02-26)
 
