@@ -3,7 +3,7 @@ package com.programmaticallyspeaking.ncd.e2e
 import akka.actor.ActorRef
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, EvaluateOnCallFrameResult}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
-import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, DomainActorRequests, Runtime => RuntimeD}
+import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, Runtime => RuntimeD}
 import com.programmaticallyspeaking.ncd.testing.FreeActorTesting
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 
