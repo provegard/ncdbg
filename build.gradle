@@ -76,3 +76,22 @@ dependencies {
 
     compile group: 'org.rogach', name: 'scallop_2.12', version: '2.1.0'
 }
+
+// Exclude tools.jar from the distribution since we want to use the one from the user's JDK.
+distZip {
+    excludes += ['**/tools.jar']
+}
+
+// Excluding tools.jar doesn't remove it from the start script, where it's assumed to be in the local lib folder.
+// Do some text replacement to change its location to lib under JAVA_HOME instead.
+startScripts {
+    doLast {
+        def windowsScriptFile = file getWindowsScript()
+        def unixScriptFile    = file getUnixScript()
+        windowsScriptFile.text = windowsScriptFile.text.replace('%APP_HOME%\\lib\\tools.jar', '%JAVA_HOME%\\lib\\tools.jar')
+        // If JAVA_HOME is a Windows path (e.g. under MinGW), we need to remove the colon (since that's the class path
+        // separator) and prefix with a slash to make Java understand that it's a path. This has been tested in
+        // Windows with Git Bash (MINGW64) and in Linux.
+        unixScriptFile.text  = unixScriptFile.text.replace('$APP_HOME/lib/tools.jar', '/${JAVA_HOME/:/}/lib/tools.jar')
+    }
+}
