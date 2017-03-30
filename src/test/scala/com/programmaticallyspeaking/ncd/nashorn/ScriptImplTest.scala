@@ -13,14 +13,22 @@ class ScriptImplTest extends UnitTest with TableDrivenPropertyChecks {
     ("a Windows path", "c:\\path\\script.js", "file://c/path/script.js")
   )
 
-  "ScriptImpl.filePathToUrl" - {
-    forAll(cases) { (desc, path, expectedUri) =>
+  "ScriptImpl" - {
+    "filePathToUrl" - {
+      forAll(cases) { (desc, path, expectedUri) =>
 
-      s"should return an URL for $desc" in {
-        val actual = ScriptImpl.filePathToUrl(path)
-        actual should be (expectedUri)
+        s"should return an URL for $desc" in {
+          val actual = ScriptImpl.filePathToUrl(path)
+          actual should be(expectedUri)
+        }
+      }
+    }
+
+    "fromSource" - {
+      "should do URL conversion" in {
+        var script = ScriptImpl.fromSource("file:/some/script.js", "return null;", "a1")
+        script.uri should be ("file://some/script.js")
       }
     }
   }
-
 }

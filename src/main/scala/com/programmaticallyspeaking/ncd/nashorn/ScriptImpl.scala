@@ -56,6 +56,6 @@ object ScriptImpl {
 
   def fromSource(path: String, source: String, id: String): Script = {
     val bytes = source.getBytes(UTF8)
-    new ScriptImpl(new URI(path).toString, bytes, id)
+    new ScriptImpl(filePathToUrl(path).toString, bytes, id)
   }
 }
