@@ -790,9 +790,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     if (path == "<eval>") {
       // For evaluated scripts, convert the type name into something that resembles a file URI.
       val typeName = location.declaringType().name()
-      return "file:/" + typeName.replace('.', '/').replace('\\', '/').replaceAll("[$^]", "_")
-    }
-    if (path.startsWith("file:/")) {
+      "file:/eval/" + typeName
+        .replace("jdk.nashorn.internal.scripts.", "")
+        .replace('.', '/')
+        .replace('\\', '/')
+        .replaceAll("[$^_]", "")
+        .replaceFirst("/eval/?$", "")
+    } else if (path.startsWith("file:/")) {
       new File(new URI(path)).getAbsolutePath
     } else {
       // May be a relative path, maybe Windows slashes

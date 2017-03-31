@@ -44,28 +44,27 @@ trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with FairAmoun
 }
 
 class ScriptAddedTest extends ScriptAddedTestFixture {
+  def scriptWith(src: String) =
+    s"""(function () {
+       |  $src
+       |})();
+     """.stripMargin
 
   "An added script should result in a ScriptAdded event" in {
-
-    val script =
-      """(function () {
-        |  return 5 + 5;
-        |})();
-      """.stripMargin
-
-    testAddScript(script) { scripts =>
+    testAddScript(scriptWith("return 5 + 5;")) { scripts =>
       atLeast(1, scripts.map(_.contents)) should include ("5 + 5")
     }
   }
 
-  "Recompilation of eval script should be merged with the original" in {
+  "An evaluated script should not have an URL that ends with a single underscore" in {
+    val script = scriptWith("return 6 + 6;")
+    whenReady(testAddScriptWithWait(script, 500.millis)) { scripts =>
+      no(scripts.map(_.uri)) should endWith ("/_")
+    }
+  }
 
-    val script =
-      """(function () {
-        |  var f = function (x) { return x + x; };
-        |  return f(5);
-        |})();
-      """.stripMargin
+  "Recompilation of eval script should be merged with the original" in {
+    val script = scriptWith("var f = function (x) { return x + x; }; return f(5);")
 
     whenReady(testAddScriptWithWait(script, 500.millis)) { scripts =>
       val relevantScripts = scripts.filter(s => s.contents.contains("x + x"))
@@ -75,11 +74,7 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
 
   "A loaded script should result in a ScriptAdded event" in {
     val tempFile = File.createTempFile("script-to-load", ".js")
-    val scriptInFile =
-      """(function () {
-        |  return 'hello from loaded script';
-        |})();
-      """.stripMargin
+    val scriptInFile = scriptWith("return 'hello from loaded script';")
     Files.write(tempFile.toPath, scriptInFile.getBytes("utf-8"))
     val filePathAsUri = tempFile.toURI.toString
 
