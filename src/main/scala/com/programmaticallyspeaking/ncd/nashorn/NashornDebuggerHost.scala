@@ -277,13 +277,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           val scriptPath = scriptPathFromLocation(firstLocation)
 
           val triedScript: Try[Either[String, Script]] = Try {
-            if (firstLocation.sourceName() == "<eval>" || scriptTypesWaitingForSource.contains(refType)) {
-              scriptFromEval(refType, scriptPath, attemptsLeft)
-            } else {
-              // Create and add the Script object. Note that we may hit the same script multiple times, e.g. if the
-              // script contains inner functions, which are compiled into separate classes.
-              Right(getOrAddScript(scriptPath))
-            }
+            // Note that we no longer try to use the script path for reading the source. If the script contains a
+            // sourceURL annotation, Nashorn will use that at script path, so we might end up reading CoffeeScript
+            // source instead of the real source.
+            scriptFromEval(refType, scriptPath, attemptsLeft)
           }
 
           handleScriptResult(triedScript, refType, scriptPath, locations, attemptsLeft)
@@ -802,10 +799,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       new URL(new URL("file:///"), path.replace('\\', '/')).toString
     }
   }
-
-
-  private def getOrAddScript(path: String): Script =
-    scriptByPath.getOrElseUpdate(path, ScriptImpl.fromFile(path, scriptIdGenerator.next))
 
   private def getOrAddEvalScript(artificialPath: String, source: String): Script = {
     val isRecompilation = artificialPath.contains("Recompilation")

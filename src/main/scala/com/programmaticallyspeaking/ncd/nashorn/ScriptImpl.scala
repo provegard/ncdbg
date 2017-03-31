@@ -47,13 +47,6 @@ object ScriptImpl {
     "file://" + parts.mkString("/")
   }
 
-  def fromFile(path: String, id: String): Script = {
-    val file = new File(path)
-    // Files.readAllBytes doesn't do this, it seems. Weird!
-    if (!file.exists) throw new FileNotFoundException(path)
-    new ScriptImpl(filePathToUrl(path), Files.readAllBytes(file.toPath), id)
-  }
-
   def fromSource(path: String, source: String, id: String): Script = {
     val bytes = source.getBytes(UTF8)
     new ScriptImpl(filePathToUrl(path).toString, bytes, id)
