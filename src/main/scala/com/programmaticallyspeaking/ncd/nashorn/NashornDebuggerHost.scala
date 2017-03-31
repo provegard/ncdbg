@@ -796,6 +796,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         .replace('\\', '/')
         .replaceAll("[$^_]", "")
         .replaceFirst("/eval/?$", "")
+    } else if (path.length > 2 && path(1) == ':') {
+      // Assume Windows path
+      path
     } else if (path.startsWith("file:/")) {
       new File(new URI(path)).getAbsolutePath
     } else {
