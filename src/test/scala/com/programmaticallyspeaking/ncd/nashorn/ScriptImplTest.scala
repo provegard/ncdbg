@@ -8,7 +8,7 @@ class ScriptImplTest extends UnitTest {
     "fromSource" - {
       "should do URL conversion" in {
         var script = ScriptImpl.fromSource("/some/script.js", "return null;", "a1")
-        script.uri.toString should be ("file:///some/script.js")
+        script.url.toString should be ("file:///some/script.js")
       }
     }
   }

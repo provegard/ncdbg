@@ -131,7 +131,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   private val scriptByPath = mutable.Map[String, Script]()
 
-  private val breakableLocationsByScriptUri = mutable.Map[String, ListBuffer[BreakableLocation]]()
+  private val breakableLocationsByScriptUrl = mutable.Map[String, ListBuffer[BreakableLocation]]()
   private val enabledBreakpoints = mutable.Map[String, BreakableLocation]()
 
   private val scriptIdGenerator = new IdGenerator("nds")
@@ -168,7 +168,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private val exceptionRequests = ListBuffer[ExceptionRequest]()
 
   private def addBreakableLocations(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
-    breakableLocationsByScriptUri.getOrElseUpdate(script.uri.toString, ListBuffer.empty) ++= breakableLocations
+    breakableLocationsByScriptUrl.getOrElseUpdate(script.url.toString, ListBuffer.empty) ++= breakableLocations
   }
 
   private def enableBreakingAt(typeName: String, methodName: String, statementName: String): Unit = {
@@ -222,18 +222,18 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def registerScript(script: Script, scriptPath: String, locations: Seq[Location]): Unit = {
-    val isKnownScript = breakableLocationsByScriptUri.contains(script.uri.toString)
+    val isKnownScript = breakableLocationsByScriptUrl.contains(script.url.toString)
 
     val erm = virtualMachine.eventRequestManager()
     val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
     addBreakableLocations(script, breakableLocations)
 
     if (isKnownScript) {
-      log.debug(s"Reusing script with URI '${script.uri}' for script path '$scriptPath'")
+      log.debug(s"Reusing script with URI '${script.url}' for script path '$scriptPath'")
     } else {
       // Reason for logging double at different levels: info typically goes to the console, debug to the log file.
-      log.debug(s"Adding script at path '$scriptPath' with ID '${script.id}' and URI '${script.uri}'")
-      log.info(s"Adding script with URI '${script.uri}'")
+      log.debug(s"Adding script at path '$scriptPath' with ID '${script.id}' and URI '${script.url}'")
+      log.info(s"Adding script with URI '${script.url}'")
       emitEvent(ScriptAdded(script))
     }
   }
@@ -321,7 +321,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
     referenceTypes.asScala.foreach(considerReferenceType(_: ReferenceType, InitialScriptResolveAttempts))
 
-    val breakableLocationCount = breakableLocationsByScriptUri.foldLeft(0)((sum, e) => sum + e._2.size)
+    val breakableLocationCount = breakableLocationsByScriptUrl.foldLeft(0)((sum, e) => sum + e._2.size)
     log.debug(s"$typeCount types checked, ${scriptByPath.size} scripts added, $breakableLocationCount breakable locations identified")
 
     enableBreakingAtDebuggerStatement()
@@ -767,7 +767,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         scriptById(breakpoint.scriptId).foreach {
           case s: ScriptImpl =>
             val line = s.lines(breakpoint.lineNumberBase1 - 1)
-            log.info(s"Pausing at ${s.uri}:${breakpoint.lineNumberBase1}: $line")
+            log.info(s"Pausing at ${s.url}:${breakpoint.lineNumberBase1}: $line")
           case _ =>
         }
 
@@ -853,11 +853,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def findBreakableLocation(location: Location): Option[BreakableLocation] = {
-    scriptByPath.get(scriptPathFromLocation(location)).flatMap(s => findBreakableLocation(s.uri.toString, location.lineNumber()))
+    scriptByPath.get(scriptPathFromLocation(location)).flatMap(s => findBreakableLocation(s.url.toString, location.lineNumber()))
   }
 
   private def findBreakableLocation(scriptUri: String, lineNumber: Int): Option[BreakableLocation] = {
-    breakableLocationsByScriptUri.get(scriptUri).flatMap { breakableLocations =>
+    breakableLocationsByScriptUrl.get(scriptUri).flatMap { breakableLocations =>
       // TODO: Is it good to filter with >= ? The idea is to create a breakpoint even if the user clicks on a line that
       // TODO: isn't "breakable".
       val candidates = breakableLocations.filter(_.lineNumber >= lineNumber).sortWith((b1, b2) => b1.lineNumber < b2.lineNumber)
@@ -916,14 +916,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     // sort of call site method. Therefore we do this one a bit differently.
     log.debug("Performing expensive step-into by one-off-enabling all breakpoints.")
     // Do a one-off enabling of non-enabled breakpoints
-    breakableLocationsByScriptUri.flatMap(_._2).withFilter(!_.isEnabled).foreach(enableBreakpointOnce)
+    breakableLocationsByScriptUrl.flatMap(_._2).withFilter(!_.isEnabled).foreach(enableBreakpointOnce)
   }
 
   private def setTemporaryBreakpointsInStackFrame(stackFrame: StackFrame): Int = stackFrame match {
     case sf: StackFrameImpl =>
       // Set one-off breakpoints in all locations of the method of this stack frame
-      val scriptUri = sf.breakableLocation.script.uri
-      val allBreakableLocations = breakableLocationsByScriptUri(scriptUri.toString)
+      val scriptUri = sf.breakableLocation.script.url
+      val allBreakableLocations = breakableLocationsByScriptUrl(scriptUri.toString)
       val sfMethod = sf.breakableLocation.location.method()
       val sfLineNumber = sf.breakableLocation.location.lineNumber()
       val relevantBreakableLocations = allBreakableLocations.filter(bl => bl.location.method() == sfMethod && bl.location.lineNumber() > sfLineNumber)
@@ -1209,7 +1209,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   override def getBreakpointLineNumbers(scriptId: String, fromLineNumberBase1: Int, toLineNumberBase1: Option[Int]): Seq[Int] = {
-    scriptById(scriptId).flatMap(script => breakableLocationsByScriptUri.get(script.uri.toString)) match {
+    scriptById(scriptId).flatMap(script => breakableLocationsByScriptUrl.get(script.url.toString)) match {
       case Some(locations) =>
         val end = toLineNumberBase1.getOrElse(Int.MaxValue)
         locations.filter(loc => loc.lineNumber >= fromLineNumberBase1 && loc.lineNumber < end).map(_.lineNumber)

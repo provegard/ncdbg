@@ -48,7 +48,7 @@ object Debugger {
 
   object ScriptParsedEventParams {
     def apply(script: Script): ScriptParsedEventParams = new ScriptParsedEventParams(script.id,
-      script.uri.toString,
+      script.url.toString,
       0, // offset
       0, // offset
       Math.max(script.lineCount - 1, 0), // offset

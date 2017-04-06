@@ -47,7 +47,7 @@ class MultiThreadingTest extends MultiThreadingTestFixture {
           case Some(l) => l
           case None => fail(s"No line numbers for script ${script.id}")
         }
-        host.setBreakpoint(script.uri.toString, lineNumber)
+        host.setBreakpoint(script.url.toString, lineNumber)
         whenReady(hitBreakpointPromise.future) { _ =>
           // Ugly, but wait for a while to see if the counter increases over 1 (which it shouldn't).
           Thread.sleep(200)

@@ -4,7 +4,7 @@ import com.programmaticallyspeaking.ncd.infra.ScriptURL
 
 trait Script {
   val id: String
-  val uri: ScriptURL //TODO: Rename to url also
+  val url: ScriptURL
 
   val lineCount: Int
   val lastLineLength: Int

@@ -59,14 +59,14 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
   "An evaluated script should not have an URL that ends with a single underscore" in {
     val script = scriptWith("return 6 + 6;")
     whenReady(testAddScriptWithWait(script, 500.millis)) { scripts =>
-      no(scripts.map(_.uri.toString)) should endWith ("/_")
+      no(scripts.map(_.url.toString)) should endWith ("/_")
     }
   }
 
   "An evaluated script should have a special eval URL" in {
     val script = scriptWith("return 7 + 7;")
     whenReady(testAddScriptWithWait(script, 500.millis)) { scripts =>
-      atLeast(1, scripts.map(_.uri.toString)) should startWith ("eval:/")
+      atLeast(1, scripts.map(_.url.toString)) should startWith ("eval:/")
     }
   }
 

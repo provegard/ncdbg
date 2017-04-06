@@ -11,7 +11,7 @@ import com.programmaticallyspeaking.ncd.infra.{Hasher, ScriptURL}
 class ScriptImpl(path: String, scriptData: Array[Byte], val id: String) extends Script {
   import ScriptImpl._
 
-  val uri: ScriptURL = ScriptURL.fromPath(path)
+  val url: ScriptURL = ScriptURL.fromPath(path)
 
   val contents = new String(scriptData, UTF8)
 
