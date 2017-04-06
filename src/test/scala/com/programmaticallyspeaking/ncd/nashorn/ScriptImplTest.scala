@@ -1,33 +1,14 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.testing.UnitTest
-import org.scalatest.prop.TableDrivenPropertyChecks
 
-class ScriptImplTest extends UnitTest with TableDrivenPropertyChecks {
-
-  val cases = Table(
-    ("desc", "path", "expectedUrl"),
-    ("a file:// path", "file://some/script.js", "file://some/script.js"),
-    ("a file:/ path", "file:/some/script.js", "file://some/script.js"),
-    ("a file:/ path with a Windows drive letter", "file://c:/path/script.js", "file://c/path/script.js"),
-    ("a Windows path", "c:\\path\\script.js", "file://c/path/script.js")
-  )
+class ScriptImplTest extends UnitTest {
 
   "ScriptImpl" - {
-    "filePathToUrl" - {
-      forAll(cases) { (desc, path, expectedUri) =>
-
-        s"should return an URL for $desc" in {
-          val actual = ScriptImpl.filePathToUrl(path)
-          actual should be(expectedUri)
-        }
-      }
-    }
-
     "fromSource" - {
       "should do URL conversion" in {
-        var script = ScriptImpl.fromSource("file:/some/script.js", "return null;", "a1")
-        script.uri should be ("file://some/script.js")
+        var script = ScriptImpl.fromSource("/some/script.js", "return null;", "a1")
+        script.uri.toString should be ("file:///some/script.js")
       }
     }
   }

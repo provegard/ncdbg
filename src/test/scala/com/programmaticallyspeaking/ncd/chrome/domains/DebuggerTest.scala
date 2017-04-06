@@ -6,6 +6,7 @@ import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{Location, Pause
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor, PropertyDescriptorType}
+import com.programmaticallyspeaking.ncd.infra.ScriptURL
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
@@ -23,7 +24,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
   def script(theId: String, hash: String = "xyz"): Script = new Script {
     override def contentsHash(): String = hash
-    override val uri: String = theId
+    override val uri: ScriptURL = ScriptURL.fromPath("/tmp/" + theId)
     override val lineCount: Int = 5
     override val lastLineLength: Int = 10
     override val contents: String = "abc"

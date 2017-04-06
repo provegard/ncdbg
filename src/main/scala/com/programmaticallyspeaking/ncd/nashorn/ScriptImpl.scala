@@ -2,14 +2,16 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import java.io.{File, FileNotFoundException}
 import java.net.URI
-import java.nio.charset.Charset
+import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.Files
 
 import com.programmaticallyspeaking.ncd.host.Script
-import com.programmaticallyspeaking.ncd.infra.Hasher
+import com.programmaticallyspeaking.ncd.infra.{Hasher, ScriptURL}
 
-class ScriptImpl(val uri: String, scriptData: Array[Byte], val id: String) extends Script {
+class ScriptImpl(path: String, scriptData: Array[Byte], val id: String) extends Script {
   import ScriptImpl._
+
+  val uri: ScriptURL = ScriptURL.fromPath(path)
 
   val contents = new String(scriptData, UTF8)
 
@@ -34,21 +36,21 @@ class ScriptImpl(val uri: String, scriptData: Array[Byte], val id: String) exten
 
 object ScriptImpl {
 
-  val UTF8 = Charset.forName("utf8")
+  private val UTF8 = StandardCharsets.UTF_8
 
-  def filePathToUrl(path: String): String = {
-    if (path.startsWith("file:/")) return filePathToUrl(path.substring(6))
-    val parts: Seq[String] = path.split("[/\\\\]").filter(_ != "").toList match {
-      case head :: tail if head.length >= 2 && head(1) == ':' =>
-        Seq(head(0).toString) ++ tail
-      case head :: tail => Seq(head) ++ tail
-      case Nil => Seq.empty
-    }
-    "file://" + parts.mkString("/")
-  }
+//  def filePathToUrl(path: String): String = {
+//    if (path.startsWith("file:/")) return filePathToUrl(path.substring(6))
+//    val parts: Seq[String] = path.split("[/\\\\]").filter(_ != "").toList match {
+//      case head :: tail if head.length >= 2 && head(1) == ':' =>
+//        Seq(head(0).toString) ++ tail
+//      case head :: tail => Seq(head) ++ tail
+//      case Nil => Seq.empty
+//    }
+//    "file://" + parts.mkString("/")
+//  }
 
   def fromSource(path: String, source: String, id: String): Script = {
     val bytes = source.getBytes(UTF8)
-    new ScriptImpl(filePathToUrl(path).toString, bytes, id)
+    new ScriptImpl(path, bytes, id)
   }
 }

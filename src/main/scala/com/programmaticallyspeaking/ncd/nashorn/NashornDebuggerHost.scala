@@ -168,7 +168,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private val exceptionRequests = ListBuffer[ExceptionRequest]()
 
   private def addBreakableLocations(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
-    breakableLocationsByScriptUri.getOrElseUpdate(script.uri, ListBuffer.empty) ++= breakableLocations
+    breakableLocationsByScriptUri.getOrElseUpdate(script.uri.toString, ListBuffer.empty) ++= breakableLocations
   }
 
   private def enableBreakingAt(typeName: String, methodName: String, statementName: String): Unit = {
@@ -222,7 +222,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def registerScript(script: Script, scriptPath: String, locations: Seq[Location]): Unit = {
-    val isKnownScript = breakableLocationsByScriptUri.contains(script.uri)
+    val isKnownScript = breakableLocationsByScriptUri.contains(script.uri.toString)
 
     val erm = virtualMachine.eventRequestManager()
     val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
@@ -790,20 +790,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     if (path == "<eval>") {
       // For evaluated scripts, convert the type name into something that resembles a file URI.
       val typeName = location.declaringType().name()
-      "file:/eval/" + typeName
+      "eval:/" + typeName
         .replace("jdk.nashorn.internal.scripts.", "")
         .replace('.', '/')
         .replace('\\', '/')
         .replaceAll("[$^_]", "")
         .replaceFirst("/eval/?$", "")
-    } else if (path.length > 2 && path(1) == ':') {
-      // Assume Windows path
-      path
-    } else if (path.startsWith("file:/")) {
-      new File(new URI(path)).getAbsolutePath
     } else {
-      // May be a relative path, maybe Windows slashes
-      new URL(new URL("file:///"), path.replace('\\', '/')).toString
+      path // keep it simple
     }
   }
 
@@ -859,7 +853,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def findBreakableLocation(location: Location): Option[BreakableLocation] = {
-    scriptByPath.get(scriptPathFromLocation(location)).flatMap(s => findBreakableLocation(s.uri, location.lineNumber()))
+    scriptByPath.get(scriptPathFromLocation(location)).flatMap(s => findBreakableLocation(s.uri.toString, location.lineNumber()))
   }
 
   private def findBreakableLocation(scriptUri: String, lineNumber: Int): Option[BreakableLocation] = {
@@ -929,7 +923,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     case sf: StackFrameImpl =>
       // Set one-off breakpoints in all locations of the method of this stack frame
       val scriptUri = sf.breakableLocation.script.uri
-      val allBreakableLocations = breakableLocationsByScriptUri(scriptUri)
+      val allBreakableLocations = breakableLocationsByScriptUri(scriptUri.toString)
       val sfMethod = sf.breakableLocation.location.method()
       val sfLineNumber = sf.breakableLocation.location.lineNumber()
       val relevantBreakableLocations = allBreakableLocations.filter(bl => bl.location.method() == sfMethod && bl.location.lineNumber() > sfLineNumber)
@@ -1215,7 +1209,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   override def getBreakpointLineNumbers(scriptId: String, fromLineNumberBase1: Int, toLineNumberBase1: Option[Int]): Seq[Int] = {
-    scriptById(scriptId).flatMap(script => breakableLocationsByScriptUri.get(script.uri)) match {
+    scriptById(scriptId).flatMap(script => breakableLocationsByScriptUri.get(script.uri.toString)) match {
       case Some(locations) =>
         val end = toLineNumberBase1.getOrElse(Int.MaxValue)
         locations.filter(loc => loc.lineNumber >= fromLineNumberBase1 && loc.lineNumber < end).map(_.lineNumber)
