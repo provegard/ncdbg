@@ -1,30 +1,25 @@
 package com.programmaticallyspeaking.ncd.infra
 
-import java.net.URI
-
 import com.programmaticallyspeaking.ncd.testing.UnitTest
+import org.scalatest.prop.TableDrivenPropertyChecks
 
-class ScriptURLTest extends UnitTest {
+class ScriptURLTest extends UnitTest with TableDrivenPropertyChecks {
 
+  val fromPathCases =
+    Table(
+      ("desc", "input", "output"),
+      ("Windows path", "c:\\temp\\test.txt","file:///c:/temp/test.txt"),
+      ("Unix path", "/tmp/test.txt", "file:///tmp/test.txt"),
+      ("Windows path on Unix form", "/c:/tmp/test.txt", "file:///c:/tmp/test.txt"),
+      ("URL-like non-file path", "eval:/foo/bar", "eval:///foo/bar"),
+      ("URL-like file path", "file:/foo/bar", "file:///foo/bar")
+    )
   "fromPath" - {
-    "handles a Windows path" in {
-      val sut = ScriptURL.fromPath("c:\\temp\\test.txt")
-      sut.toString should be ("file:///c:/temp/test.txt")
-    }
-
-    "handles a Unix path" in {
-      val sut = ScriptURL.fromPath("/tmp/test.txt")
-      sut.toString should be ("file:///tmp/test.txt")
-    }
-
-    "handles an URL-like non-file path" in {
-      val sut = ScriptURL.fromPath("eval:/foo/bar")
-      sut.toString should be ("eval:///foo/bar")
-    }
-
-    "handles an URL-like file path" in {
-      val sut = ScriptURL.fromPath("file:/foo/bar")
-      sut.toString should be ("file:///foo/bar")
+    forAll(fromPathCases) { (desc, input, output) =>
+      s"handles $desc" in {
+        val sut = ScriptURL.fromPath(input)
+        sut.toString should be (output)
+      }
     }
   }
 
@@ -37,6 +32,18 @@ class ScriptURLTest extends UnitTest {
       // Cannot test path accurately on both Windows and Unix, so do a round-trip.
       val sut2 = ScriptURL.fromPath(f.getAbsolutePath)
       sut2.toString should be ("file:///c:/temp/test.txt")
+    }
+  }
+
+  "isFile" - {
+    "returns true for a file URL" in {
+      val sut = ScriptURL.fromPath("/tmp/test.txt")
+      sut.isFile should be (true)
+    }
+
+    "returns false for a non-file URL" in {
+      val sut = ScriptURL.fromPath("http://localhost/test.txt")
+      sut.isFile should be (false)
     }
   }
 }

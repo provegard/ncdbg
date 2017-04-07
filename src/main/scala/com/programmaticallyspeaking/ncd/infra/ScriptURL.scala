@@ -7,6 +7,8 @@ final class ScriptURL private[infra](private val uri: URI) {
 
   def toFile: File = new File(uri)
 
+  def isFile: Boolean = uri.getScheme == "file"
+
   override def equals(other: Any): Boolean = other match {
     case that: ScriptURL => uri == that.uri
     case _ => false
