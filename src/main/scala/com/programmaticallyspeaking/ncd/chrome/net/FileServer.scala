@@ -53,7 +53,10 @@ trait FilePublisher {
 
 class FileServer(host: String, port: Int) extends Logging {
 
-  private val baseURL: String = s"http://$host:$port/files"
+  /**
+    * The base URL for files, not including a trailing slash.
+    */
+  val baseURL: String = s"http://$host:$port/files"
 
   private var endpoint: Endpoint = _
   private val fileWhitelist = ConcurrentHashMap.newKeySet[File]()

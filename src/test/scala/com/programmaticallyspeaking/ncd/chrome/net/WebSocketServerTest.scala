@@ -20,7 +20,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
 import scala.util.{Failure, Random, Success, Try}
 
-class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSugar with ScalaFutures with FreeActorTesting {
+class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSugar with ScalaFutures with FreeActorTesting with ServerStarter[WebSocketServer] {
 
   lazy val domainFactory = new CapturingDomainFactory()
 
@@ -34,24 +34,13 @@ class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSu
     TypedActor(system).typedActorOf(TypedProps(classOf[ScriptHost], scriptHost), "scriptHost")
   }
 
-  private def startServer(port: Int): Unit = {
+  override def startServer(port: Int): WebSocketServer = {
     server.start("localhost", port)
-  }
-
-  private def startServerAndReturnPort(): Int = {
-    val r = new Random()
-    for (i <- 1 to 20) {
-      val port = 50000 + r.nextInt(5000)
-      Try(startServer(port)) match {
-        case Success(_) => return port
-        case Failure(_) =>
-      }
-    }
-    throw new RuntimeException("Failed to start the server")
+    server
   }
 
   override def beforeTest(): Unit = try super.beforeTest() finally {
-    serverPort = startServerAndReturnPort()
+    serverPort = startServer()._2
     wsClient = new Client
     if (!wsClient.connectBlocking()) throw new RuntimeException("Unable to connect to server")
   }

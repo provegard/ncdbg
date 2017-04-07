@@ -1,8 +1,15 @@
 package com.programmaticallyspeaking.ncd.chrome.net
 
-import java.io.File
+import java.io.{BufferedReader, File, InputStreamReader}
+import java.net.URL
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.util.Scanner
 
 import com.programmaticallyspeaking.ncd.testing.UnitTest
+import org.scalatest.BeforeAndAfterEach
+
+import scala.util.{Success, Try}
 
 class FileServerTest extends UnitTest {
 
@@ -21,9 +28,59 @@ class FileServerTest extends UnitTest {
         val url = publisher.publish(new File("/tmp/foo.txt"))
         url.toString should not include ("files//")
       }
+    }
+  }
+}
 
+class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with BeforeAndAfterEach {
+
+  var server: FileServer = _
+
+  "FileServer" - {
+    "and an existing file" - {
+      val file = createTextFile("success")
+
+      "doesn't serve the file before it has been published" in {
+        fetch(urlForFile(file)) should be ('failure)
+      }
+
+      "serves a file after it has been published" in {
+        val url = server.publisher.publish(file)
+        fetch(url.toString) should be (Success("success"))
+      }
     }
   }
 
-  //TODO: Test actual serving of files
+  def fetch(url: String): Try[String] = Try {
+    val conn = new URL(url).openConnection()
+    val in = new BufferedReader(new InputStreamReader(conn.getInputStream, StandardCharsets.UTF_8))
+    val s = new Scanner(in).useDelimiter("\\A")
+    if (s.hasNext) s.next else ""
+  }
+
+  def urlForFile(f: File): String = {
+    val pathPart = f.toURI.toString.replace("file:", "")
+    server.baseURL + pathPart
+  }
+
+  def createTextFile(data: String): File = {
+    val file = File.createTempFile("test", ".txt")
+    file.deleteOnExit()
+    Files.write(file.toPath, data.getBytes(StandardCharsets.UTF_8))
+    file
+  }
+
+  override protected def beforeEach(): Unit = try {
+    server = startServer()._1
+  } finally super.beforeEach()
+
+  override protected def afterEach(): Unit = try super.afterEach() finally {
+    server.stop()
+  }
+
+  override def startServer(port: Int): FileServer = {
+    val server = new FileServer("localhost", port)
+    server.start()
+    server
+  }
 }
