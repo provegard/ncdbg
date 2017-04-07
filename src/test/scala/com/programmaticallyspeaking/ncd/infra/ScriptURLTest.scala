@@ -1,5 +1,7 @@
 package com.programmaticallyspeaking.ncd.infra
 
+import java.net.URL
+
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.scalatest.prop.TableDrivenPropertyChecks
 
@@ -20,6 +22,40 @@ class ScriptURLTest extends UnitTest with TableDrivenPropertyChecks {
         val sut = ScriptURL.fromPath(input)
         sut.toString should be (output)
       }
+    }
+  }
+
+  "fromURL" - {
+    "accepts an URL" in {
+      val url = new URL("http://localhost/test.txt")
+      val sut = ScriptURL.fromURL(url)
+      sut.toString should be ("http://localhost/test.txt")
+    }
+  }
+
+  "resolve" - {
+    "should resolve a relative path" in {
+      val sut = ScriptURL.fromPath("c:\\temp\\test.txt")
+      val sut2 = sut.resolve("bar.txt")
+      sut2 should be (ScriptURL.fromPath("c:\\temp\\bar.txt"))
+    }
+
+    "should resolve an absolute Windows path" in {
+      val sut = ScriptURL.fromPath("c:\\temp\\test.txt")
+      val sut2 = sut.resolve("c:\\files\\data.txt")
+      sut2 should be (ScriptURL.fromPath("c:\\files\\data.txt"))
+    }
+
+    "should resolve an absolute Unix path" in {
+      val sut = ScriptURL.fromPath("/tmp/test.txt")
+      val sut2 = sut.resolve("/files/data.txt")
+      sut2 should be (ScriptURL.fromPath("/files/data.txt"))
+    }
+
+    "should resolve a relative URL" in {
+      val sut = ScriptURL.fromURL(new URL("http://localhost/test.txt"))
+      val sut2 = sut.resolve("bar.txt")
+      sut2 should be (ScriptURL.fromURL(new URL("http://localhost/bar.txt")))
     }
   }
 
