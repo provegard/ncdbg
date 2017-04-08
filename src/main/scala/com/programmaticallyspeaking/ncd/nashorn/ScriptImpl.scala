@@ -32,22 +32,32 @@ class ScriptImpl(path: String, scriptData: Array[Byte], val id: String) extends 
     }
     cachedHash
   }
+
+  private val sourceMapUrlBegin = "//# sourceMappingURL="
+  private val sourceUrlBegin = "//# sourceURL="
+
+  private var _sourceMapUrl: Option[ScriptURL] = None
+  private var _sourceUrl: Option[ScriptURL] = None
+
+  lines.foreach { line =>
+    if (line.startsWith(sourceMapUrlBegin)) {
+      _sourceMapUrl = Some(line.substring(sourceMapUrlBegin.length)).map(url.resolve)
+    } else if (line.startsWith(sourceUrlBegin)) {
+      _sourceUrl = Some(line.substring(sourceUrlBegin.length)).map(url.resolve)
+    }
+  }
+
+  override def sourceMapUrl(): Option[ScriptURL] = _sourceMapUrl
+  override def sourceUrl(): Option[ScriptURL] = _sourceUrl
+
+  override def sourceLine(lineNumber1Based: Int): Option[String] = {
+    lines.lift(lineNumber1Based - 1)
+  }
 }
 
 object ScriptImpl {
 
   private val UTF8 = StandardCharsets.UTF_8
-
-//  def filePathToUrl(path: String): String = {
-//    if (path.startsWith("file:/")) return filePathToUrl(path.substring(6))
-//    val parts: Seq[String] = path.split("[/\\\\]").filter(_ != "").toList match {
-//      case head :: tail if head.length >= 2 && head(1) == ':' =>
-//        Seq(head(0).toString) ++ tail
-//      case head :: tail => Seq(head) ++ tail
-//      case Nil => Seq.empty
-//    }
-//    "file://" + parts.mkString("/")
-//  }
 
   def fromSource(path: String, source: String, id: String): Script = {
     val bytes = source.getBytes(UTF8)
