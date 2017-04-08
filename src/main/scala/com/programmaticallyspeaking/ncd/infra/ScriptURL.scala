@@ -26,31 +26,48 @@ final class ScriptURL private[infra](private val uri: URI) {
     if (looksLikeRelativePath(pathLike))
       new ScriptURL(uri.resolve(pathLike))
     else
-      ScriptURL.fromPath(pathLike)
+      ScriptURL.create(pathLike)
   }
 }
 
 object ScriptURL {
-  private[ScriptURL] def looksLikeURL(x: String) =
-    x.length > 0 && x(0) != '/' && x.contains(":/")
   private[ScriptURL] def looksLikeRelativePath(x: String) =
     x.length > 0 && x(0) != '/' && !x.lift(1).contains(':')
 
-  def fromURL(url: URL): ScriptURL = new ScriptURL(url.toURI)
+  private def isAbsoluteUnixOrWindowsFilePath(x: String) =
+    x.startsWith("/") || (x.lift(1).contains(':') && x.indexOf('\\') > 1)
 
-  def fromPath(path: String): ScriptURL = {
-    val uri = if (looksLikeURL(path)) {
+  def create(url: URL): ScriptURL = new ScriptURL(url.toURI)
+
+  def create(something: String): ScriptURL = {
+    val uri = if (isAbsoluteUnixOrWindowsFilePath(something)) {
+      val withUnixSlashes = something.replace("\\", "/")
+      val uriPart = if (withUnixSlashes.startsWith("/")) withUnixSlashes else "/" + withUnixSlashes
+      new URI("file", "", uriPart, null)
+    } else if (something.startsWith("file:") || something.startsWith("eval:")) {
       // Assume this is something resembling an URL already, e.g. file:/foo/bar,
       // but we don't know how many slashes there are.
-      var (scheme, rest) = path.span(_ != ':')
+      var (scheme, rest) = something.span(_ != ':')
       rest = rest.substring(1) // skip the leading :
       val slashCount = rest.prefixLength(_ == '/')
       new URI(scheme, "", "/" + rest.substring(slashCount), null)
     } else {
-      val withUnixSlashes = path.replace("\\", "/")
-      val uriPart = if (withUnixSlashes.startsWith("/")) withUnixSlashes else "/" + withUnixSlashes
-      new URI("file", "", uriPart, null)
+      val u = new URI(something)
+      require(u.isAbsolute, "relative path/URI not supported")
+      u
     }
+//    val uri = if (looksLikeURL(something)) {
+//      // Assume this is something resembling an URL already, e.g. file:/foo/bar,
+//      // but we don't know how many slashes there are.
+//      var (scheme, rest) = something.span(_ != ':')
+//      rest = rest.substring(1) // skip the leading :
+//      val slashCount = rest.prefixLength(_ == '/')
+//      new URI(scheme, "", "/" + rest.substring(slashCount), null)
+//    } else {
+//      val withUnixSlashes = something.replace("\\", "/")
+//      val uriPart = if (withUnixSlashes.startsWith("/")) withUnixSlashes else "/" + withUnixSlashes
+//      new URI("file", "", uriPart, null)
+//    }
     new ScriptURL(uri)
   }
 }

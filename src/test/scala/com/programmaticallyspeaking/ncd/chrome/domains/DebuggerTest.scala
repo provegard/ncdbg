@@ -24,7 +24,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
   def script(theId: String, hash: String = "xyz"): Script = new Script {
     override def contentsHash(): String = hash
-    override val url: ScriptURL = ScriptURL.fromPath("/tmp/" + theId)
+    override val url: ScriptURL = ScriptURL.create("/tmp/" + theId)
     override val lineCount: Int = 5
     override val lastLineLength: Int = 10
     override val contents: String = "abc"
