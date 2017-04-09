@@ -12,7 +12,7 @@ class StepTest extends StepTestFixture {
           |x = x + 1;
         """.stripMargin
       stepInScript(script, Seq(StepOver)) { bp =>
-        bp.lineNumberBase1 should be (3)
+        bp.location.lineNumber1Based should be (3)
       }
     }
 
@@ -25,7 +25,7 @@ class StepTest extends StepTestFixture {
           |fun.toString();
         """.stripMargin
       stepInScript(script, Seq(StepOut)) { bp =>
-        bp.lineNumberBase1 should be (5)
+        bp.location.lineNumber1Based should be (5)
       }
     }
 
@@ -39,7 +39,7 @@ class StepTest extends StepTestFixture {
           |fun();
         """.stripMargin
       stepInScript(script, Seq(StepOver, StepInto)) { bp =>
-        bp.lineNumberBase1 should be (2)
+        bp.location.lineNumber1Based should be (2)
       }
     }
 
@@ -52,7 +52,7 @@ class StepTest extends StepTestFixture {
           |fun.toString();
         """.stripMargin
       stepInScript(script, Seq(StepOver)) { bp =>
-        bp.lineNumberBase1 should be (5)
+        bp.location.lineNumber1Based should be (5)
       }
     }
 
@@ -66,7 +66,7 @@ class StepTest extends StepTestFixture {
           |fun.toString();
         """.stripMargin
       stepInScript(script, Seq(StepOver, StepOver)) { bp =>
-        bp.lineNumberBase1 should be (6)
+        bp.location.lineNumber1Based should be (6)
       }
     }
   }

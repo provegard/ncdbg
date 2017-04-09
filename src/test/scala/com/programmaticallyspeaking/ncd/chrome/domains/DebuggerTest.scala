@@ -1,13 +1,21 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
+import java.io.{File, FileNotFoundException}
+import java.net.URL
+import java.nio.charset.Charset
+
 import akka.actor.{ActorRef, PoisonPill}
 import akka.testkit.TestProbe
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{Location, PausedEventParams, ScriptParsedEventParams}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
+import com.programmaticallyspeaking.ncd.chrome.net.FilePublisher
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.infra.ScriptURL
-import com.programmaticallyspeaking.ncd.testing.UnitTest
+import com.programmaticallyspeaking.ncd.infra.FileReader
+import com.programmaticallyspeaking.ncd.ioc.Container
+import com.programmaticallyspeaking.ncd.nashorn.ScriptImpl
+import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, UnitTest}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.Inside
@@ -15,12 +23,16 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.collection.mutable
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
+
+
 
 class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eventually with TableDrivenPropertyChecks {
   import org.mockito.Mockito._
   import org.mockito.ArgumentMatchers._
   import com.programmaticallyspeaking.ncd.testing.MockingUtils._
+
+  implicit val container = new Container(Seq(FakeFilePublisher))
 
   def script(theId: String, hash: String = "xyz"): Script = new Script {
     override def contentsHash(): String = hash
@@ -39,6 +51,9 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
   private val objectProperties = mutable.Map[ObjectId, Map[String, Any]]()
 
   def setProperties(c: ComplexNode, props: Map[String, Any]): Unit = objectProperties += (c.objectId -> props)
+
+  def location(ln: Int) = ScriptLocation(ln, 1)
+  def location(ln: Int, cn: Int) = ScriptLocation(ln, cn)
 
   val setPauseOnExceptionsCases = Table(
     ("state", "expected"),
@@ -179,22 +194,24 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     }
 
     "getPossibleBreakpoints" - {
+
       def setup: ActorRef = {
-        when(currentScriptHost.getBreakpointLineNumbers(any[String], any[Int], any[Option[Int]])).thenReturn(Seq(1, 2, 3))
+        when(currentScriptHost.getBreakpointLocations(any[String], any[ScriptLocation], any[Option[ScriptLocation]]))
+          .thenReturn(Seq(location(1), location(2), location(3)))
 
         val debugger = newActorInstance[Debugger]
         debugger ! Messages.Request("1", Domain.enable)
         debugger
       }
 
-      "should invoke ScriptHost, converting Chrome line numbers (0-based) to Nashorn line numbers (1-based)" in {
+      "should invoke ScriptHost, converting Chrome line/column numbers (0-based) to Nashorn line/column numbers (1-based)" in {
         val debugger = setup
-        val start = Location("a", 1, 0)
-        val end = Location("a", 5, 0)
+        val start = Location("a", 1, 2)
+        val end = Location("a", 5, 3)
 
         requestAndReceiveResponse(debugger, "2", Debugger.getPossibleBreakpoints(start, Some(end)))
 
-        verify(currentScriptHost).getBreakpointLineNumbers("a", 2, Some(6))
+        verify(currentScriptHost).getBreakpointLocations("a", location(2, 3), Some(location(6, 4)))
       }
 
       "should map resulting line numbers back to Chrome space" in {
@@ -272,7 +289,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
           val thisObj = objectWithId("$$this")
           val scopeObjectId = ObjectId("$$scope")
           val scopeObj = ObjectNode("Object", scopeObjectId)
-          val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), Breakpoint("bp1", "a", 10), "fun")
+          val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), Breakpoint("bp1", "a", location(10)), "fun")
           val ev = simulateHitBreakpoint(Seq(stackFrame))
           val params = getEventParams(ev)
 
@@ -288,7 +305,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       "with a scope object" - {
         val thisObj = objectWithId("$$this")
         val scopeObj = objectWithId("$$scope")
-        val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), Breakpoint("bp1", "a", 10), "fun")
+        val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), Breakpoint("bp1", "a", location(10)), "fun")
 
         "should result in a Debugger.paused event" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
@@ -323,7 +340,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       "without scopes" - {
         val thisObj = objectWithId("$$this")
-        val stackFrame = createStackFrame("sf1", thisObj, None, Breakpoint("bp1", "a", 10), "fun")
+        val stackFrame = createStackFrame("sf1", thisObj, None, Breakpoint("bp1", "a", location(10)), "fun")
 
         "should not have a scopes in the event params" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
@@ -471,14 +488,14 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
   override def createScriptHost(): ScriptHost = {
     val host = super.createScriptHost()
 
-    when(host.setBreakpoint(any[String], any[Int])).thenAnswerWith({
-      case (uri: String) :: (lineNumber : Integer) :: Nil =>
-        val id = "bp_" + lineNumber
+    when(host.setBreakpoint(any[String], any[ScriptLocation])).thenAnswerWith({
+      case (uri: String) :: (scriptLoc : ScriptLocation) :: Nil =>
+        val id = "bp_" + scriptLoc.lineNumber1Based
         // Arbitrary test stuff. High line numbers don't exist!
-        if (lineNumber > 100) None
+        if (scriptLoc.lineNumber1Based > 100) None
         else {
           activeBreakpoints += id
-          Some(Breakpoint(id, uri + "_id", lineNumber))
+          Some(Breakpoint(id, uri + "_id", scriptLoc))
         }
     })
     when(host.removeBreakpointById(any[String])).thenAnswerWith({
@@ -507,5 +524,92 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     override val scopeChain = scope.toSeq
     override val id: String = Aid
     override val functionDetails: FunctionDetails = FunctionDetails(functionName)
+  }
+}
+
+class DebuggerObjectTest extends UnitTest {
+
+  def originalScript(source: String, path: String, id: String) = ScriptImpl.fromSource(path, source, id)
+
+  def fakeFileReader(contents: Map[File, String]) = new FileReader {
+    override def read(file: File, charset: Charset): Try[String] = {
+      contents.get(file) match {
+        case Some(src) => Success(src)
+        case None => Failure(new FileNotFoundException(file.getAbsolutePath))
+      }
+    }
+  }
+
+  "scriptWithPublishedFiles" - {
+    "with a script compiled with source map support" - {
+      val coffee = "->"
+      val js =
+        """// Generated by CoffeeScript 1.12.4
+          |(function() {
+          |  (function() {});
+          |
+          |}).call(this);
+          |
+          |//# sourceMappingURL=file.js.map
+        """.stripMargin
+      val map =
+        """{
+          |  "version": 3,
+          |  "file": "file.js",
+          |  "sourceRoot": "",
+          |  "sources": [
+          |    "file.coffee"
+          |  ],
+          |  "names": [],
+          |  "mappings": ";AAAA;EAAA,CAAA,SAAA,GAAA,CAAA;AAAA"
+          |}
+        """.stripMargin
+      val coffeeFile = new File("/c:/path/to/file.coffee")
+      val mapFile = new File("/c:/path/to/file.js.map")
+      val jsFile = new File("/c:/path/to/file.js")
+      implicit val reader = fakeFileReader(Map(
+        coffeeFile -> coffee,
+        mapFile -> map,
+        jsFile -> js
+      ))
+
+      val publisher = new FakePublisher
+      val script = originalScript(js, "/c:/path/to/file.js", "a")
+      def newScript = Debugger.scriptWithPublishedFiles(script, publisher)
+
+      "publishes the map file" in {
+        newScript
+        publisher.published should contain (mapFile)
+      }
+
+      "publishes the coffee file" in {
+        newScript
+        publisher.published should contain (coffeeFile)
+      }
+
+      "doesn't publish the JS file since it's not necessary (the source is present)" in {
+        newScript
+        publisher.published should not contain (jsFile)
+      }
+
+      "rewrites the source mapping URL" in {
+        newScript.sourceMapUrl().map(_.toString) should be (publisher.urlFor(mapFile))
+      }
+    }
+
+  }
+
+  class FakePublisher extends FilePublisher {
+
+    val _published = mutable.Map[File, URL]()
+
+    def published = _published.keys.toSeq
+    def urlFor(f: File): Option[String] = _published.get(f).map(_.toString)
+
+    override def publish(file: File): URL = {
+      val url = new URL("http", "localhost", 8080, file.toURI.toURL.toString.replace("file:", ""))
+      _published(file) = url
+      url
+    }
   }
 }

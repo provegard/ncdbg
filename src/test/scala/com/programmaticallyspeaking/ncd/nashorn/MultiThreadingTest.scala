@@ -3,7 +3,7 @@ import java.io.{BufferedReader, InputStreamReader}
 import java.util.concurrent.atomic.AtomicInteger
 import javax.script.Compilable
 
-import com.programmaticallyspeaking.ncd.host.{HitBreakpoint, Script, ScriptAdded, ScriptEvent}
+import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.{FreeActorTesting, UnitTest}
 import jdk.nashorn.api.scripting.NashornScriptEngineFactory
@@ -21,6 +21,7 @@ trait MultiThreadingTestFixture extends UnitTest with Logging with FreeActorTest
 }
 
 class MultiThreadingTest extends MultiThreadingTestFixture {
+  def location(ln: Int) = ScriptLocation(ln, 1)
 
   "Breakpoint requests from other threads should be ignore in a paused state" in {
     val scriptAddedPromise = Promise[Script]()
@@ -43,7 +44,7 @@ class MultiThreadingTest extends MultiThreadingTestFixture {
 
     whenReady(ready) { host =>
       whenReady(scriptAddedPromise.future) { script =>
-        val lineNumber = host.getBreakpointLineNumbers(script.id, 1, None).headOption match {
+        val lineNumber = host.getBreakpointLocations(script.id, location(1), None).headOption match {
           case Some(l) => l
           case None => fail(s"No line numbers for script ${script.id}")
         }

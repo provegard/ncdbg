@@ -764,11 +764,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       case Some(breakpoint) =>
         pausedData = Some(new PausedData(thread, stackFrames))
 
-        scriptById(breakpoint.scriptId).foreach {
-          case s: ScriptImpl =>
-            val line = s.lines(breakpoint.lineNumberBase1 - 1)
-            log.info(s"Pausing at ${s.url}:${breakpoint.lineNumberBase1}: $line")
-          case _ =>
+        scriptById(breakpoint.scriptId).foreach { s =>
+          val line = s.sourceLine(breakpoint.location.lineNumber1Based)
+          log.info(s"Pausing at ${s.url}:${breakpoint.location.lineNumber1Based}: $line")
         }
 
         val hitBreakpoint = HitBreakpoint(stackFrames)
@@ -837,13 +835,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  override def setBreakpoint(scriptUri: String, lineNumberBase1: Int): Option[Breakpoint] = {
-    findBreakableLocation(scriptUri, lineNumberBase1).map { br =>
-      if (br.lineNumber != lineNumberBase1) {
-        log.info(s"Client asked for a breakpoint at line $lineNumberBase1 in $scriptUri, setting it at line ${br.lineNumber}.")
-      } else {
-        log.info(s"Setting a breakpoint at line ${br.lineNumber} in $scriptUri")
-      }
+  override def setBreakpoint(scriptUri: String, scriptLocation: ScriptLocation): Option[Breakpoint] = {
+    // TODO: Take column number into account here???
+    val lineNumberBase1 = scriptLocation.lineNumber1Based
+    findBreakableLocation(scriptUri, scriptLocation).map { br =>
+      log.info(s"Setting a breakpoint at line ${br.scriptLocation.lineNumber1Based} in $scriptUri")
 
       br.enable()
       enabledBreakpoints += (br.id -> br)
@@ -853,16 +849,22 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def findBreakableLocation(location: Location): Option[BreakableLocation] = {
-    scriptByPath.get(scriptPathFromLocation(location)).flatMap(s => findBreakableLocation(s.url.toString, location.lineNumber()))
+    scriptByPath.get(scriptPathFromLocation(location)).flatMap { script =>
+      val sl = BreakableLocation.scriptLocationFromScriptAndLocation(script, location)
+      findBreakableLocation(script.url.toString, sl)
+    }
   }
 
-  private def findBreakableLocation(scriptUri: String, lineNumber: Int): Option[BreakableLocation] = {
-    breakableLocationsByScriptUrl.get(scriptUri).flatMap { breakableLocations =>
-      // TODO: Is it good to filter with >= ? The idea is to create a breakpoint even if the user clicks on a line that
-      // TODO: isn't "breakable".
-      val candidates = breakableLocations.filter(_.lineNumber >= lineNumber).sortWith((b1, b2) => b1.lineNumber < b2.lineNumber)
-      candidates.headOption
+  private def findBreakableLocation(scriptUrl: String, scriptLocation: ScriptLocation): Option[BreakableLocation] = {
+    breakableLocationsByScriptUrl.get(scriptUrl).flatMap { breakableLocations =>
+      breakableLocations.find(_.scriptLocation == scriptLocation)
     }
+//    breakableLocationsByScriptUri.get(scriptUri).flatMap { breakableLocations =>
+//      // TODO: Is it good to filter with >= ? The idea is to create a breakpoint even if the user clicks on a line that
+//      // TODO: isn't "breakable".
+//      val candidates = breakableLocations.filter(_.scriptLocation.lineNumber1Based >= lineNumber).sortWith((b1, b2) => b1.scriptLocation.lineNumber1Based < b2.scriptLocation.lineNumber1Based)
+//      candidates.headOption
+//    }
   }
 
   private def resumeWhenPaused(): Unit = pausedData match {
@@ -1208,17 +1210,25 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       throw new IllegalStateException("Property extraction can only be done in a paused state.")
   }
 
-  override def getBreakpointLineNumbers(scriptId: String, fromLineNumberBase1: Int, toLineNumberBase1: Option[Int]): Seq[Int] = {
+  override def getBreakpointLocations(scriptId: String, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation] = {
     scriptById(scriptId).flatMap(script => breakableLocationsByScriptUrl.get(script.url.toString)) match {
       case Some(locations) =>
-        val end = toLineNumberBase1.getOrElse(Int.MaxValue)
-        locations.filter(loc => loc.lineNumber >= fromLineNumberBase1 && loc.lineNumber < end).map(_.lineNumber)
+        val endLine = to.map(_.lineNumber1Based).getOrElse(Int.MaxValue)
+        locations.filter { loc =>
+          val locLine = loc.scriptLocation.lineNumber1Based
+          val locCol = loc.scriptLocation.columnNumber1Based
+          if (locLine == from.lineNumber1Based)
+            loc.scriptLocation.columnNumber1Based >= from.columnNumber1Based
+          else if (to.map(_.lineNumber1Based).contains(locLine)) // line end is inclusive, but column end on that line is exclusive
+            to.exists(_.columnNumber1Based > locCol) // exclusive end
+          else
+            locLine > from.lineNumber1Based && locLine < endLine
+        }.map(_.scriptLocation)
 
       case None => throw new IllegalArgumentException("Unknown script ID: " + scriptId)
     }
   }
 
-//  class StackFrameImpl(val thisObj: ValueNode, val scopeObj: Option[ValueNode], val locals: ObjectNode,
   class StackFrameImpl(val id: String, val thisObj: ValueNode, val scopeChain: Seq[Scope],
                        val breakableLocation: BreakableLocation,
                        val eval: CodeEvaluator,

@@ -4,8 +4,9 @@ import java.net.ConnectException
 
 import akka.actor.ActorSystem
 import com.programmaticallyspeaking.ncd.chrome.domains.DefaultDomainFactory
-import com.programmaticallyspeaking.ncd.chrome.net.WebSocketServer
+import com.programmaticallyspeaking.ncd.chrome.net.{FilePublisher, FileServer, WebSocketServer}
 import com.programmaticallyspeaking.ncd.host.ScriptEvent
+import com.programmaticallyspeaking.ncd.ioc.Container
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.nashorn.{NashornDebugger, NashornDebuggerConnector, NashornScriptHost}
 import org.slf4s.Logging
@@ -26,23 +27,28 @@ object Boot extends App with Logging {
   debuggerReady.andThen {
     case Success(host) =>
       startListening(host)
-      startHttpServer()
+      val publisher = startFileServer()
+
+      val container = new SpecificContainer(publisher)
+
+      startHttpServer(container)
     case Failure(t) =>
       t match {
         case _: ConnectException =>
           log.error("Failed to connect to the debug target.")
           log.error("Please make sure that the debug target is started with debug VM arguments, for example:")
           log.error("  -Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=7777")
-        case other =>
+        case _ =>
           log.error("Failed to start the debugger", t)
       }
       system.terminate()
       die(1)
   }
 
-  private def die(code: Int): Unit = {
+  private def die(code: Int): Nothing = {
     system.terminate()
     System.exit(code)
+    ???
   }
 
   private def startListening(host: NashornScriptHost) = {
@@ -61,8 +67,8 @@ object Boot extends App with Logging {
     })
   }
 
-  private def startHttpServer(): Unit = {
-    val server = new WebSocketServer(new DefaultDomainFactory())
+  private def startHttpServer(container: Container): Unit = {
+    val server = new WebSocketServer(new DefaultDomainFactory(container))
     try {
       val listenAddr = conf.listen()
       server.start(listenAddr.host, listenAddr.port)
@@ -75,4 +81,20 @@ object Boot extends App with Logging {
         die(2)
     }
   }
+
+  def startFileServer(): FilePublisher = {
+    val listenAddr = conf.listen()
+    val server = new FileServer(listenAddr.host, listenAddr.port + 1)  // TODO
+    try {
+      server.start()
+      log.info(s"File server listening on ${listenAddr.host}:${listenAddr.port + 1}")
+      server.publisher
+    } catch {
+      case NonFatal(t) =>
+        log.error("Binding failed", t)
+        die(2)
+    }
+  }
+
+  class SpecificContainer(filePublisher: FilePublisher) extends Container(Seq(filePublisher))
 }

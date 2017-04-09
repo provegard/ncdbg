@@ -3,11 +3,13 @@ package com.programmaticallyspeaking.ncd.chrome.net
 import akka.actor.Actor.Receive
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props, Terminated}
 import com.programmaticallyspeaking.ncd.chrome.domains.{DefaultDomainFactory, DomainFactory}
+import com.programmaticallyspeaking.ncd.ioc.Container
 
 import scala.collection.concurrent.TrieMap
 
 class CapturingDomainFactory(dflt: Option[DomainFactory] = None)(implicit factory: ActorRefFactory) extends DomainFactory {
-  private val defaultFactory = dflt.getOrElse(new DefaultDomainFactory())
+  val emptyContainer = new Container(Seq.empty)
+  private val defaultFactory = dflt.getOrElse(new DefaultDomainFactory(emptyContainer))
 
   private var actorMustNotExist = false
   private val actors = TrieMap[String, ActorRef]()

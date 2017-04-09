@@ -1,8 +1,22 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{Breakpoint, Script}
+import com.programmaticallyspeaking.ncd.host.{Breakpoint, Script, ScriptLocation}
 import com.sun.jdi.Location
 import com.sun.jdi.request.{BreakpointRequest, EventRequest, EventRequestManager}
+
+object BreakableLocation {
+  // TODO: Move elsewhere
+  def scriptLocationFromScriptAndLocation(script: Script, location: Location): ScriptLocation = {
+    val lineNo = location.lineNumber()
+    var colNo = script.sourceLine(lineNo) match {
+      case Some(line) =>
+        // Use index of first non-whitespace
+        1 + line.takeWhile(_.isWhitespace).length
+      case None => 1 // assume first column
+    }
+    ScriptLocation(lineNo, colNo)
+  }
+}
 
 /**
   * Represents a location in a script that the debugger can break at.
@@ -13,7 +27,9 @@ import com.sun.jdi.request.{BreakpointRequest, EventRequest, EventRequestManager
   * @param location the location
   */
 class BreakableLocation(val id: String, val script: Script, eventRequestManager: EventRequestManager, val location: Location) {
-  val lineNumber = location.lineNumber
+
+  val scriptLocation: ScriptLocation = BreakableLocation.scriptLocationFromScriptAndLocation(script, location)
+
   private var breakpointRequest: BreakpointRequest = _
   private var enabledOnce: Boolean = false
 
@@ -49,5 +65,5 @@ class BreakableLocation(val id: String, val script: Script, eventRequestManager:
     breakpointRequest = null
   }
 
-  def toBreakpoint = Breakpoint(id, script.id, location.lineNumber())
+  def toBreakpoint = Breakpoint(id, script.id, scriptLocation)
 }

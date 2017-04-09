@@ -113,7 +113,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
            """.stripMargin
 
         waitForBreakpoint(script, _.pauseOnExceptions(ExceptionPauseType.Caught)) { (_, breakpoint) =>
-          breakpoint.stackFrames.headOption.map(_.breakpoint.lineNumberBase1) should be(Some(2))
+          breakpoint.stackFrames.headOption.map(_.breakpoint.location.lineNumber1Based) should be(Some(2))
         }
       }
     }
@@ -125,7 +125,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
           """.stripMargin
 
       waitForBreakpoint(script, _.pauseOnExceptions(ExceptionPauseType.Caught)) { (_, breakpoint) =>
-        breakpoint.stackFrames.headOption.map(_.breakpoint.lineNumberBase1) should be(Some(1))
+        breakpoint.stackFrames.headOption.map(_.breakpoint.location.lineNumber1Based) should be(Some(1))
       }
     }
   }

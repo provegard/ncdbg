@@ -1,6 +1,7 @@
 package com.programmaticallyspeaking.ncd.testing
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Inbox, PoisonPill, Props, Terminated}
+import com.programmaticallyspeaking.ncd.ioc.Container
 import com.typesafe.config.ConfigFactory
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.{Answer, OngoingStubbing}
@@ -55,6 +56,12 @@ trait ActorOperations {
     }
   }
 
+  def newActorInstance[A <: Actor : ClassTag](implicit container: Container = Container.empty): ActorRef = {
+    val clazz = implicitly[ClassTag[A]].runtimeClass
+    def creator(clazz: Class[_], args: Seq[Any]) = Props(clazz, args: _*)
+    system.actorOf(container.newInstance(clazz, creator))
+  }
+
 }
 
 trait ActorTesting extends BeforeAndAfterEach with OneInstancePerTest with ActorOperations { self: UnitTest =>
@@ -76,9 +83,6 @@ trait ActorTesting extends BeforeAndAfterEach with OneInstancePerTest with Actor
   }
 
   def afterTest(): Unit = {}
-
-  def newActorInstance[A <: Actor : ClassTag]: ActorRef =
-    system.actorOf(Props[A]())
 }
 
 /**
@@ -107,9 +111,6 @@ trait FreeActorTesting extends BeforeAndAfterEach with BeforeAndAfterAll with Ac
   final override protected def beforeAll(): Unit = beforeAllTests()
 
   final override protected def afterAll(): Unit =  try afterAllTests() finally system.terminate()
-
-  def newActorInstance[A <: Actor : ClassTag]: ActorRef =
-    system.actorOf(Props[A]())
 }
 
 // TODO: Why can't we have a trait Mocking that does `import Mocking._` where Mocking is this object??

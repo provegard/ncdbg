@@ -1,14 +1,19 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
+import java.io.File
+import java.net.URI
+import java.nio.charset.StandardCharsets
+
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
+import com.programmaticallyspeaking.ncd.chrome.net.FilePublisher
 import com.programmaticallyspeaking.ncd.host.{Scope => HostScope, _}
-import com.programmaticallyspeaking.ncd.infra.IdGenerator
+import com.programmaticallyspeaking.ncd.infra.{FileReader, FileSystemFileReader, ScriptURL, SourceMap}
 import org.slf4s.Logging
 
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try}
+import scala.util.{Failure, Success}
 
-object Debugger {
+object Debugger extends Logging {
   type CallFrameId = String
 
   case object stepOver
@@ -22,7 +27,7 @@ object Debugger {
   case class EvaluateOnCallFrameResult(result: Runtime.RemoteObject, exceptionDetails: Option[Runtime.ExceptionDetails] = None)
 
   case class ScriptParsedEventParams(scriptId: String, url: String, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int, executionContextId: Int, hash: String,
-                                     hasSourceURL: Boolean)
+                                     hasSourceURL: Boolean, sourceMapURL: Option[String])
 
   case class setBreakpointsActive(active: Boolean)
 
@@ -55,8 +60,8 @@ object Debugger {
       endColumn = script.lastLineLength, // NOT an offset: "Length of the last line of the script" according to the docs
       Runtime.StaticExecutionContextId,
       script.contentsHash(),
-      true // we have an URL for all scripts
-    )
+      script.sourceUrl().isDefined,
+      script.sourceMapUrl().map(_.toString))
   }
 
   case class getScriptSource(scriptId: String)
@@ -86,11 +91,47 @@ object Debugger {
   case class PausedEventParams(callFrames: Seq[CallFrame], reason: String, hitBreakpoints: Seq[String])
 
   private[Debugger] case class EmitScriptParsed(script: Script)
+
+  def scriptWithPublishedFiles(script: Script, filePublisher: FilePublisher)(implicit fileReader: FileReader): Script = {
+    script.sourceMapUrl() match {
+      case Some(url) if url.isFile =>
+        val sourceMapFile = url.toFile
+
+        // Publish the map file
+        val externalUrl = filePublisher.publish(sourceMapFile)
+
+        // Read the map file to find the source file(s)
+        fileReader.read(sourceMapFile, StandardCharsets.UTF_8).map(SourceMap.fromJson) match {
+          case Success(sourceMap) =>
+
+            // Publish all sources, but we're not interested in their URLs.
+            // TODO: Should they be relative to the map rather?
+            sourceMap.sources.map(script.url.resolve).filter(_.isFile).foreach(u => filePublisher.publish(u.toFile))
+
+            new ProxyScript(script) {
+              override def sourceMapUrl(): Option[ScriptURL] = Some(ScriptURL.create(externalUrl))
+            }
+
+          case Failure(t) =>
+            log.error(s"Failed to read source map file $sourceMapFile", t)
+            script
+        }
+      case _ => script
+    }
+  }
+
+  private def uriToFile(uri: String): File = {
+    // Assume uri begins with file:// (TODO: Create a value type for it!)
+    val fileURI = new URI(uri.replace("file://", "file:/"))
+    new File(fileURI)
+  }
 }
 
-class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
+class Debugger(filePublisher: FilePublisher) extends DomainActor with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
   import Debugger._
   import com.programmaticallyspeaking.ncd.infra.BetterOption._
+
+  private implicit val fileReader = new FileSystemFileReader
 
   override def postStop(): Unit = try {
     // Tell the ScriptHost to reset, so that we don't leave it paused
@@ -110,7 +151,8 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
       log.trace(s"Won't re-emit scriptParsed event for script with ID '${script.id}' and same hash ($hash) as before.")
     } else {
       emittedScripts += script.id -> hash
-      emitEvent("Debugger.scriptParsed", ScriptParsedEventParams(script))
+      val modifiedScript = scriptWithPublishedFiles(script, filePublisher)
+      emitEvent("Debugger.scriptParsed", ScriptParsedEventParams(modifiedScript))
     }
   }
 
@@ -134,13 +176,16 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
           throw new IllegalArgumentException("Unknown script ID: " + scriptId)
       }
 
-    case Debugger.setBreakpointByUrl(lineNumberBase0, url, _, _) =>
+    case Debugger.setBreakpointByUrl(lineNumberBase0, url, columnNumberBase0, _) =>
       val lineNumberBase1 = lineNumberBase0 + 1
-      scriptHost.setBreakpoint(url, lineNumberBase1) match {
+      scriptHost.setBreakpoint(url, ScriptLocation(lineNumberBase0 + 1, columnNumberBase0 + 1)) match {
         case Some(bp) =>
-          SetBreakpointByUrlResult(bp.breakpointId, Seq(Location(bp.scriptId, bp.lineNumberBase1 - 1, 0)))
+          // Echo the column number. Java/JDI doesn't care about column numbers (at least Location doesn't contain one),
+          // but it seems to be important for proper source map support.
+          SetBreakpointByUrlResult(bp.breakpointId, Seq(Location(bp.scriptId, bp.location.lineNumber1Based - 1, bp.location.columnNumber1Based - 1)))
         case None =>
           log.warn(s"Cannot identify breakpoint at $url:$lineNumberBase1")
+          //TODO: Huh, should this be an error instead??
           SetBreakpointByUrlResult(null, Seq.empty)
       }
 
@@ -193,8 +238,10 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
 
     case Debugger.getPossibleBreakpoints(start, maybeEnd) =>
       // TODO: Unit test if works
-      val locations = scriptHost.getBreakpointLineNumbers(start.scriptId, start.lineNumber + 1, maybeEnd.map(_.lineNumber + 1))
-        .map(line1Based => Location(start.scriptId, line1Based - 1, 0))
+      val locations = scriptHost.getBreakpointLocations(start.scriptId, ScriptLocation(start.lineNumber + 1, start.columnNumber + 1),
+        maybeEnd.map(e => ScriptLocation(e.lineNumber + 1, e.columnNumber + 1)))
+        .map(loc => Location(start.scriptId, loc.lineNumber1Based - 1, loc.columnNumber1Based - 1))
+      //TODO: line numbers??
       GetPossibleBreakpointsResult(locations)
 
     case Debugger.setVariableValue(scopeNum, varName, newValue, callFrameId) =>
@@ -251,7 +298,7 @@ class Debugger extends DomainActor with Logging with ScriptEvaluateSupport with 
       val scopes = sf.scopeChain.map(s => Scope(scopeType(s), toRemoteObject(s.value)))
       val thisObj = toRemoteObject(sf.thisObj)
       // Reuse stack frame ID as call frame ID so that mapping is easier when we talk to the debugger
-      CallFrame(sf.id, Location(sf.breakpoint.scriptId, sf.breakpoint.lineNumberBase1 - 1, 0), scopes, thisObj, sf.functionDetails.name)
+      CallFrame(sf.id, Location(sf.breakpoint.scriptId, sf.breakpoint.location.lineNumber1Based - 1, sf.breakpoint.location.columnNumber1Based - 1), scopes, thisObj, sf.functionDetails.name)
     }
 
     hitBreakpoint.stackFrames.headOption match {

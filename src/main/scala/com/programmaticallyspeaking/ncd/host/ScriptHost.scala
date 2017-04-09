@@ -5,7 +5,9 @@ import com.programmaticallyspeaking.ncd.messaging.Observable
 
 import scala.util.Try
 
-case class Breakpoint(breakpointId: String, scriptId: String, lineNumberBase1: Int)
+case class ScriptLocation(lineNumber1Based: Int, columnNumber1Based: Int)
+
+case class Breakpoint(breakpointId: String, scriptId: String, location: ScriptLocation)
 
 sealed trait ScopeType
 object ScopeType {
@@ -89,12 +91,12 @@ trait ScriptHost {
     * Sets a breakpoint in the given script at the given line.
     *
     * @param scriptUri the URI of the script
-    * @param lineNumberBase1 the 1-based line number in the script where the breakpoint should be set
+    * @param location the location in the script where the breakpoint should be set
     * @return a structure describing the breakpoint that was set
     */
-  def setBreakpoint(scriptUri: String, lineNumberBase1: Int): Option[Breakpoint]
+  def setBreakpoint(scriptUri: String, location: ScriptLocation): Option[Breakpoint]
 
-  def getBreakpointLineNumbers(scriptId: String, fromLineNumberBase1: Int, toLineNumberBase1: Option[Int]): Seq[Int]
+  def getBreakpointLocations(scriptId: String, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation]
 
   def step(stepType: StepType): Done
 

@@ -59,3 +59,7 @@ class Container(references: Seq[AnyRef]) {
     }
   }
 }
+
+object Container {
+  val empty: Container = new Container(Seq.empty)
+}

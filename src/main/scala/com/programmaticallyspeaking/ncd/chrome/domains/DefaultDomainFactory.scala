@@ -2,17 +2,19 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 
 import akka.actor.{ActorRef, ActorRefFactory, Props}
 import com.programmaticallyspeaking.ncd.infra.IdGenerator
+import com.programmaticallyspeaking.ncd.ioc.Container
 
 trait DomainFactory {
   def create(domain: String): ActorRef
 }
 
-class DefaultDomainFactory(implicit factory: ActorRefFactory) extends DomainFactory {
+class DefaultDomainFactory(container: Container)(implicit factory: ActorRefFactory) extends DomainFactory {
   private val actorNameIdGenerator = new IdGenerator("domact")
 
   def create(domain: String): ActorRef = {
     val clazz = lookupActorClass(domain)
-    factory.actorOf(Props(clazz), domain + "-" + actorNameIdGenerator.next)
+    def creator(clazz: Class[_], args: Seq[Any]) = Props(clazz, args: _*)
+    factory.actorOf(container.newInstance(clazz, creator), domain + "-" + actorNameIdGenerator.next)
   }
 
   private def lookupActorClass(domain: String): Class[_] = {
