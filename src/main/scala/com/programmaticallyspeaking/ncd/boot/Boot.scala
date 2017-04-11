@@ -27,11 +27,12 @@ object Boot extends App with Logging {
   debuggerReady.andThen {
     case Success(host) =>
       startListening(host)
-      val publisher = startFileServer()
 
-      val container = new SpecificContainer(publisher)
+      val listenAddr = conf.listen()
+      val fileServer = new FileServer(listenAddr.host, listenAddr.port)
+      val container = new SpecificContainer(fileServer.publisher)
 
-      startHttpServer(container)
+      startHttpServer(container, fileServer)
     case Failure(t) =>
       t match {
         case _: ConnectException =>
@@ -67,28 +68,14 @@ object Boot extends App with Logging {
     })
   }
 
-  private def startHttpServer(container: Container): Unit = {
-    val server = new WebSocketServer(new DefaultDomainFactory(container))
+  private def startHttpServer(container: Container, fileServer: FileServer): Unit = {
+    val server = new WebSocketServer(new DefaultDomainFactory(container), Some(fileServer))
     try {
       val listenAddr = conf.listen()
       server.start(listenAddr.host, listenAddr.port)
       log.info(s"Server is listening on ${listenAddr.host}:${listenAddr.port}")
       val url = s"chrome-devtools://devtools/bundled/inspector.html?experiments=true&v8only=true&ws=${listenAddr.host}:${listenAddr.port}/dbg"
       log.info("Open this URL in Chrome: " + url)
-    } catch {
-      case NonFatal(t) =>
-        log.error("Binding failed", t)
-        die(2)
-    }
-  }
-
-  def startFileServer(): FilePublisher = {
-    val listenAddr = conf.listen()
-    val server = new FileServer(listenAddr.host, listenAddr.port + 1)  // TODO
-    try {
-      server.start()
-      log.info(s"File server listening on ${listenAddr.host}:${listenAddr.port + 1}")
-      server.publisher
     } catch {
       case NonFatal(t) =>
         log.error("Binding failed", t)

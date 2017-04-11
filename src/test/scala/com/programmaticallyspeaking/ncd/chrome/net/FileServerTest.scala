@@ -6,8 +6,10 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.Scanner
 
+import akka.actor.{ActorRef, ActorSystem}
+import com.programmaticallyspeaking.ncd.chrome.domains.DomainFactory
 import com.programmaticallyspeaking.ncd.testing.UnitTest
-import org.scalatest.BeforeAndAfterEach
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import scala.util.{Success, Try}
 
@@ -32,30 +34,42 @@ class FileServerTest extends UnitTest {
   }
 }
 
-class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with BeforeAndAfterEach {
-
+class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with BeforeAndAfterEach with BeforeAndAfterAll {
+  import scala.collection.JavaConverters._
+  implicit val system = ActorSystem(getClass.getSimpleName)
   var server: FileServer = _
+  var wrapperServer: WebSocketServer = _
 
   "FileServer" - {
     "and an existing file" - {
       val file = createTextFile("success")
 
       "doesn't serve the file before it has been published" in {
-        fetch(urlForFile(file)) should be ('failure)
+        fetchData(urlForFile(file)) should be ('failure)
       }
 
       "serves a file after it has been published" in {
         val url = server.publisher.publish(file)
-        fetch(url.toString) should be (Success("success"))
+        fetchData(url.toString) should be (Success("success"))
+      }
+
+      "uses the appropriate content type" in {
+        val url = server.publisher.publish(file)
+        fetchHeaders(url.toString).map(_.get("Content-Type")) should be (Success(Some(List("text/plain"))))
       }
     }
   }
 
-  def fetch(url: String): Try[String] = Try {
+  def fetchData(url: String): Try[String] = Try {
     val conn = new URL(url).openConnection()
     val in = new BufferedReader(new InputStreamReader(conn.getInputStream, StandardCharsets.UTF_8))
     val s = new Scanner(in).useDelimiter("\\A")
     if (s.hasNext) s.next else ""
+  }
+
+  def fetchHeaders(url: String): Try[Map[String, List[String]]] = Try {
+    val conn = new URL(url).openConnection()
+    conn.getHeaderFields.asScala.map(e => e._1 -> e._2.asScala.toList).toMap
   }
 
   def urlForFile(f: File): String = {
@@ -70,17 +84,29 @@ class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with B
     file
   }
 
+
+  override protected def afterAll(): Unit = {
+    system.terminate()
+    super.afterAll()
+  }
+
   override protected def beforeEach(): Unit = try {
     server = startServer()._1
   } finally super.beforeEach()
 
   override protected def afterEach(): Unit = try super.afterEach() finally {
-    server.stop()
+    wrapperServer.stop()
   }
 
   override def startServer(port: Int): FileServer = {
     val server = new FileServer("localhost", port)
-    server.start()
+    // Ugh, this is ugly!!
+    wrapperServer = new WebSocketServer(new FakeDomainFactory, Some(server))
+    wrapperServer.start("localhost", port)
     server
+  }
+
+  class FakeDomainFactory extends DomainFactory {
+    override def create(domain: String): ActorRef = throw new UnsupportedOperationException("Fake domain factory")
   }
 }

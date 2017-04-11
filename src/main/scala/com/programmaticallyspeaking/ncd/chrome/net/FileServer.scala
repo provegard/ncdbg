@@ -2,44 +2,13 @@ package com.programmaticallyspeaking.ncd.chrome.net
 
 import java.io._
 import java.net.{URI, URL}
+import java.nio.channels.Channels
 import java.util.concurrent.ConcurrentHashMap
-import javax.activation.{DataSource, FileDataSource}
-import javax.annotation.Resource
-import javax.xml.ws.{WebServiceContext, _}
-import javax.xml.ws.http._
+import javax.activation.FileTypeMap
+import javax.xml.ws._
 
+import com.programmaticallyspeaking.tinyws.Server
 import org.slf4s.Logging
-
-object FileHandler {
-  val PathInfoKey = "javax.xml.ws.http.request.pathinfo"
-}
-
-@WebServiceProvider
-@ServiceMode(value=Service.Mode.MESSAGE)
-class FileHandler(fileFilter: (File) => Boolean) extends Provider[DataSource] with Logging {
-  import FileHandler._
-  @Resource val ctx: WebServiceContext = null
-
-  def invoke(msg: DataSource) = {
-    // Is there an exception that allows us to return 400 or 404?? FNF and IllArg result in 500
-    contextValue(PathInfoKey) match {
-      case Some(path: String) =>
-        log.info(s"Request for file with path $path")
-        val thePath = if (path.startsWith("/")) path else "/" + path
-        val fileURI = new URI("file:" + thePath)
-        val file = new File(fileURI)
-        if (fileFilter(file)) new FileDataSource(file) else {
-          log.warn(s"File at $path is not whitelisted")
-          throw new FileNotFoundException(path)
-        }
-
-      case _ => throw new IllegalArgumentException("Missing path")
-    }
-  }
-
-  private def contextValue(key: String): Option[AnyRef] =
-    Option(ctx).flatMap(c => Option(c.getMessageContext.get(key)))
-}
 
 trait FilePublisher {
   /**
@@ -51,12 +20,22 @@ trait FilePublisher {
   def publish(file: File): URL
 }
 
-class FileServer(host: String, port: Int) extends Logging {
-
+/**
+  * A file server implemented as a fallback handler for tinyws, which means that an instance of this class cannot
+  * be "started" or "stopped". Name and host arguments are only used for creating the base URL for serving files.
+  *
+  * @param host the name of host that the server runs on
+  * @param port the port that the server listens to
+  */
+class FileServer(host: String, port: Int) extends Logging with Server.FallbackHandler {
+  import scala.collection.JavaConverters._
   /**
     * The base URL for files, not including a trailing slash.
     */
   val baseURL: String = s"http://$host:$port/files"
+
+  private val baseURI = new URI(baseURL)
+  private val fileTypeMap = FileTypeMap.getDefaultFileTypeMap
 
   private var endpoint: Endpoint = _
   private val fileWhitelist = ConcurrentHashMap.newKeySet[File]()
@@ -72,13 +51,42 @@ class FileServer(host: String, port: Int) extends Logging {
     new URL(result)
   }
 
-  def start(): Unit = {
-    endpoint = Endpoint.create(HTTPBinding.HTTP_BINDING, new FileHandler(isOkToServe))
-    endpoint.publish(baseURL)
+  override def handle(connection: Server.Connection): Unit = {
+    val path = baseURI.relativize(connection.uri()).getPath
+    val method = connection.method()
+    if (method == "GET" || method == "HEAD") {
+      log.info(s"Request ($method) for file with path $path")
+      val thePath = if (path.startsWith("/")) path else "/" + path
+      val fileURI = new URI("file:" + thePath)
+      val file = new File(fileURI)
+      try serveFile(connection, file) catch {
+        case _: FileNotFoundException =>
+          log.warn(s"File at $path is not whitelisted")
+          connection.sendResponse(404, "Not Found", null)
+      }
+    } else {
+      connection.sendResponse(405, "Method Not Allowed", Map("Allow" -> "GET,HEAD").asJava)
+    }
+    connection.outputStream().close()
   }
 
-  def stop(): Unit = {
-    Option(endpoint).foreach(_.stop())
-    endpoint = null
+  private def serveFile(connection: Server.Connection, file: File): Unit = {
+    if (isOkToServe(file)) {
+      val ct = fileTypeMap.getContentType(file)
+      val headers = Map("Content-Length" -> file.length().toString, "Content-Type" -> ct)
+      connection.sendResponse(200, "OK", headers.asJava)
+      if (connection.method() == "GET") {
+        var fis: FileInputStream = null
+        try {
+          fis = new FileInputStream(file)
+          val outChannel = Channels.newChannel(connection.outputStream())
+          fis.getChannel.transferTo(0, file.length(), outChannel)
+        } finally {
+          fis.close()
+        }
+      }
+    } else {
+      throw new FileNotFoundException(file.getAbsolutePath)
+    }
   }
 }

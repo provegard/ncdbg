@@ -12,7 +12,7 @@ import com.programmaticallyspeaking.tinyws.Server
 import com.programmaticallyspeaking.tinyws.Server.{LogLevel, WebSocketClient}
 import org.slf4s.Logging
 
-class WebSocketServer(domainFactory: DomainFactory)(implicit system: ActorSystem) extends Logging {
+class WebSocketServer(domainFactory: DomainFactory, fileServer: Option[FileServer])(implicit system: ActorSystem) extends Logging {
 
   private val chromeServerFactory = new ChromeServerFactory(domainFactory)
   private val executor = Executors.newCachedThreadPool()
@@ -22,6 +22,7 @@ class WebSocketServer(domainFactory: DomainFactory)(implicit system: ActorSystem
     val addr = InetAddress.getByName(host)
     server = new Server(executor, Server.Options.withPort(port).andAddress(addr).andLogger(new TinyWSLogger))
     server.addHandlerFactory("/dbg", () => new Handler)
+    fileServer.foreach(server.setFallbackHandler)
     server.start()
   }
 

@@ -24,7 +24,7 @@ class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSu
 
   lazy val domainFactory = new CapturingDomainFactory()
 
-  val server = new WebSocketServer(domainFactory)
+  val server = new WebSocketServer(domainFactory, None)
   var serverPort: Int = 0
   var wsClient: Client = _
 
