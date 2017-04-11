@@ -30,7 +30,7 @@ object Boot extends App with Logging {
 
       val listenAddr = conf.listen()
       val fileServer = new FileServer(listenAddr.host, listenAddr.port)
-      val container = new SpecificContainer(fileServer.publisher)
+      val container = new BootContainer(fileServer.publisher)
 
       startHttpServer(container, fileServer)
     case Failure(t) =>
@@ -83,5 +83,5 @@ object Boot extends App with Logging {
     }
   }
 
-  class SpecificContainer(filePublisher: FilePublisher) extends Container(Seq(filePublisher))
+  class BootContainer(filePublisher: FilePublisher) extends Container(Seq(filePublisher))
 }
