@@ -75,7 +75,8 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
 
     whenReady(testAddScriptWithWait(script, 500.millis)) { scripts =>
       val relevantScripts = scripts.filter(s => s.contents.contains("x + x"))
-      relevantScripts.size should be (1)
+
+      relevantScripts.map(_.url.toString).distinct should have size 1
     }
   }
 
