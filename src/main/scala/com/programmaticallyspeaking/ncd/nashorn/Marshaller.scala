@@ -22,6 +22,8 @@ object Marshaller {
   implicit def valueNode2MarshallerResult(valueNode: ValueNode): MarshallerResult = MarshallerResult(valueNode, Map.empty)
 
   def isUndefined(value: Value): Boolean = value != null && "jdk.nashorn.internal.runtime.Undefined".equals(value.`type`().name())
+
+  val ConsStringClassName = "jdk.nashorn.internal.runtime.ConsString"
 }
 
 object MappingRegistry {
@@ -68,6 +70,13 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     ObjectId(id)
   }
 
+  private def isConsString(str: ObjectReference) = str.`type`().name == ConsStringClassName
+
+  private def toStringOf(obj: ObjectReference) = {
+    val invoker = new DynamicInvoker(thread, obj)
+    marshalInPrivate(invoker.applyDynamic("toString")())
+  }
+
   private def marshalInPrivate(value: Value): MarshallerResult = value match {
     case primitive: PrimitiveValue => SimpleValue(marshalPrimitive(primitive))
     case s: StringReference => SimpleValue(s.value())
@@ -79,6 +88,8 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case ExceptionValue((vn, maybeJavaStack)) =>
       val extra = maybeJavaStack.map(st => "javaStack" -> SimpleValue(st)).toMap + ("message" -> SimpleValue(vn.data.message))
       MarshallerResult(vn, extra)
+    case str: ObjectReference if isConsString(str) =>
+      toStringOf(str)
     case obj: ObjectReference =>
       // Scala/Java object perhaps?
       ObjectNode(obj.`type`().name(), objectId(obj))

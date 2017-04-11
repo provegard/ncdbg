@@ -19,6 +19,7 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
     ("desc", "expression", "expected"),
     ("string", "'hello world'", SimpleValue("hello world")),
     ("concatenated string", "'hello ' + 'world'", SimpleValue("hello world")),
+    ("concatenated string via argument", "(function (arg) { return 'hello ' + arg;  }).call(null, 'world')", SimpleValue("hello world")),
     ("integer value", "42", SimpleValue(42)),
     ("floating-point value", "42.5", SimpleValue(42.5d)),
     ("actual Java float", "java.lang.Float.valueOf(42.5)", SimpleValue(42.5f)),
