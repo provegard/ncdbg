@@ -271,21 +271,29 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       // This is a compiled Nashorn script class.
       log.debug(s"Script reference type: ${refType.name} ($attemptsLeft attempts left)")
 
-      val locations = refType.allLineLocations().asScala
-      locations.headOption match {
-        case Some(firstLocation) =>
-          val scriptPath = scriptPathFromLocation(firstLocation)
+      Try(refType.allLineLocations().asScala) match {
+        case Success(locations) =>
+          locations.headOption match {
+            case Some(firstLocation) =>
+              val scriptPath = scriptPathFromLocation(firstLocation)
 
-          val triedScript: Try[Either[String, Script]] = Try {
-            // Note that we no longer try to use the script path for reading the source. If the script contains a
-            // sourceURL annotation, Nashorn will use that at script path, so we might end up reading CoffeeScript
-            // source instead of the real source.
-            scriptFromEval(refType, scriptPath, attemptsLeft)
+              val triedScript: Try[Either[String, Script]] = Try {
+                // Note that we no longer try to use the script path for reading the source. If the script contains a
+                // sourceURL annotation, Nashorn will use that at script path, so we might end up reading CoffeeScript
+                // source instead of the real source.
+                scriptFromEval(refType, scriptPath, attemptsLeft)
+              }
+
+              handleScriptResult(triedScript, refType, scriptPath, locations, attemptsLeft)
+            case None =>
+              log.info(s"Ignoring script type '${refType.name} because it has no line locations.")
+              None
           }
-
-          handleScriptResult(triedScript, refType, scriptPath, locations, attemptsLeft)
-        case None =>
-          log.info(s"Ignoring script type '${refType.name} because it has no line locations.")
+        case Failure(t: AbsentInformationException) =>
+          log.warn(s"No line locations for ${refType.name}")
+          None
+        case Failure(t) =>
+          log.warn(s"Failed to get line locations for ${refType.name}", t)
           None
       }
     } else None
