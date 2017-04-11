@@ -53,6 +53,11 @@ class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with B
         fetchData(url.toString) should be (Success("success"))
       }
 
+      "doesn't serve a file outside the base URL" in {
+        val url = server.publisher.publish(file).toString.replace("/files", "")
+        fetchData(url) should be ('failure)
+      }
+
       "uses the appropriate content type" in {
         val url = server.publisher.publish(file)
         fetchHeaders(url.toString).map(_.get("Content-Type")) should be (Success(Some(List("text/plain"))))

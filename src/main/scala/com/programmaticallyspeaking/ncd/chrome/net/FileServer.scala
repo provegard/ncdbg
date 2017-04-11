@@ -10,6 +10,8 @@ import javax.xml.ws._
 import com.programmaticallyspeaking.tinyws.Server
 import org.slf4s.Logging
 
+import scala.util.control.NonFatal
+
 trait FilePublisher {
   /**
     * Publishes a file and returns the URL under which it has been published.
@@ -52,22 +54,40 @@ class FileServer(host: String, port: Int) extends Logging with Server.FallbackHa
   }
 
   override def handle(connection: Server.Connection): Unit = {
-    val path = baseURI.relativize(connection.uri()).getPath
-    val method = connection.method()
-    if (method == "GET" || method == "HEAD") {
-      log.info(s"Request ($method) for file with path $path")
-      val thePath = if (path.startsWith("/")) path else "/" + path
-      val fileURI = new URI("file:" + thePath)
-      val file = new File(fileURI)
-      try serveFile(connection, file) catch {
-        case _: FileNotFoundException =>
-          log.warn(s"File at $path is not whitelisted")
-          connection.sendResponse(404, "Not Found", null)
-      }
-    } else {
-      connection.sendResponse(405, "Method Not Allowed", Map("Allow" -> "GET,HEAD").asJava)
+    try serveFile(connection) catch {
+      case _: FileNotFoundException =>
+        connection.sendResponse(404, "Not Found", null)
+      case ex: UnsupportedOperationException =>
+        connection.sendResponse(405, "Method Not Allowed", Map("Allow" -> ex.getMessage).asJava)
+      case NonFatal(t) =>
+        log.error("File server error", t)
+        connection.sendResponse(500, "Internal Server Error", null)
     }
     connection.outputStream().close()
+  }
+
+  private def serveFile(connection: Server.Connection): Unit = {
+    // The requested path must start with our base path (+ a slash)
+    if (connection.uri().getPath.startsWith(baseURI.getPath + "/")) {
+      val path = baseURI.relativize(connection.uri()).getPath
+      val method = connection.method()
+      if (method == "GET" || method == "HEAD") {
+        log.info(s"Request ($method) for file with path $path")
+        val thePath = if (path.startsWith("/")) path else "/" + path
+        val fileURI = new URI("file:" + thePath)
+        val file = new File(fileURI)
+        try serveFile(connection, file) catch {
+          case ex: FileNotFoundException =>
+            log.warn(s"File at $path is not whitelisted")
+            throw ex
+        }
+      } else {
+        throw new UnsupportedOperationException("GET,HEAD")
+      }
+    } else {
+      log.warn(s"File request outside base URL ($baseURL): ${connection.uri()}")
+      throw new FileNotFoundException()
+    }
   }
 
   private def serveFile(connection: Server.Connection, file: File): Unit = {
