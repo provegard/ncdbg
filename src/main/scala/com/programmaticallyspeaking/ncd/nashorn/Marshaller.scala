@@ -225,8 +225,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     ErrorValue(exData, isThrown = false, objectId(mirror.scriptObject))
   }
 
-  private def marshalLater(v: Value) = new LazyMarshalledValue(v)
-
   class LazyMarshalledValue(v: Value) extends LazyNode {
     override def resolve(): ValueNode = marshal(v)
   }
