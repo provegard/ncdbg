@@ -1,5 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn.mirrors
 
+import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror.getObjectSignature
 import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, Marshaller}
 import com.sun.jdi._
 
@@ -55,6 +56,20 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
     assert(className == "Function", "asFunction can only be called for a function")
     new ScriptFunctionMirror(scriptObject)
   }
+
+  def asArray = {
+    assert(isArray, "asArray can only be called for an array")
+    new ScriptArrayMirror(scriptObject)
+  }
+}
+
+class ScriptArrayMirror(scriptObject: ObjectReference)(implicit marshaller: Marshaller) extends ScriptObjectMirror(scriptObject) {
+  import Mirrors._
+  import ScriptObjectMirror._
+
+  def length: Int = invoker.getLength().asNumber(0).intValue()
+
+  def at(index: Int): Value = invoker.applyDynamic(getIntSignature)(index)
 }
 
 class ScriptFunctionMirror(scriptObject: ObjectReference)(implicit marshaller: Marshaller) extends ScriptObjectMirror(scriptObject) {
@@ -67,4 +82,5 @@ class ScriptFunctionMirror(scriptObject: ObjectReference)(implicit marshaller: M
 object ScriptObjectMirror {
   val putObjectObjectBoolSignature = "put(Ljava/lang/Object;Ljava/lang/Object;Z)Ljava/lang/Object;"
   val getObjectSignature = "get(Ljava/lang/Object;)Ljava/lang/Object;"
+  val getIntSignature = "get(I)Ljava/lang/Object;"
 }

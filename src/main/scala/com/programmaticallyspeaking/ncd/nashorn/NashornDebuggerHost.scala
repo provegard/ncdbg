@@ -120,6 +120,10 @@ object NashornDebuggerHost {
     * this marker.
     */
   val EvaluatedCodeMarker = "__af4caa215e04411083cfde689d88b8e6__"
+
+  // Prefix for synthetic properties added to artificial scope JS objects. The prefix is chosen so that it can never
+  // clash with the name of a real local variable.
+  val hiddenPrefix = "||"
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis: ((NashornScriptHost) => Unit) => Unit) extends NashornScriptHost with Logging {
@@ -143,6 +147,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private var isInitialized = false
 
   private val objectPairById = mutable.Map[ObjectId, (Option[Value], ComplexNode, Map[String, ValueNode])]()
+
+  /**
+    * Keeps track of the stack frame location for a given locals object that we have created to host local variable
+    * values. This allows us to update local variables for the correct stack frame (based on its location). We cannot
+    * store stack frame, because stack frames are invalidates on thread resume, i.e. on code evaluation.
+    */
+  private val locationForLocals = mutable.Map[ObjectId, Location]()
 
   private val mappingRegistry: MappingRegistry = (value: Value, valueNode: ComplexNode, extra: Map[String, ValueNode]) => {
     objectPairById += valueNode.objectId -> (Option(value), valueNode, extra)
@@ -490,7 +501,27 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
     // Just using "{}" returns undefined - don't know why - but "Object.create" works well.
     // Use the passed scope object as prototype object so that scope variables will be seen as well.
-    val anObject = DebuggerSupport_eval_custom(marshaller.thread, scopeObject, null, "Object.create(this)").asInstanceOf[ObjectReference]
+    var scopeObjFactory =
+      s"""var obj = Object.create(this);
+         |obj['${hiddenPrefix}changes']=[];
+         |obj['${hiddenPrefix}resetChanges']=function(){ obj['${hiddenPrefix}changes'].length=0; };
+       """.stripMargin
+
+    // Add an accessor property for each free variable. This allows us to track changes to the variables, which is
+    // necessary to be able to update local variables later on.
+    freeVariables.foreach {
+      case (name, _) =>
+        scopeObjFactory +=
+          s"""Object.defineProperty(obj,'$name',{
+             |  get:function() { return this['$hiddenPrefix$name']; },
+             |  set:function(v) { this['${hiddenPrefix}changes'].push('$name',v); this['$hiddenPrefix$name']=v; },
+             |  enumerable:true
+             |});
+           """.stripMargin
+    }
+    scopeObjFactory += "obj"
+
+    val anObject = DebuggerSupport_eval_custom(marshaller.thread, scopeObject, null, scopeObjFactory).asInstanceOf[ObjectReference]
     val mirror = new ScriptObjectMirror(anObject)
     freeVariables.foreach {
       case (name, value) =>
@@ -498,7 +529,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           case prim: PrimitiveValue => boxed(marshaller.thread, prim)
           case other => other
         }
-        mirror.put(name, valueToPut, isStrict = false)
+        mirror.put(hiddenPrefix + name, valueToPut, isStrict = false)
     }
 
     anObject
@@ -649,21 +680,26 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
             val thisObj = marshaller.marshal(originalThis)
 
-            // Create an artificial object node to hold the locals. Note that the object ID must be unique per stack
-            // since we store object nodes in a map.
-            val locals = localValues.map(e => e._1 -> marshaller.marshal(e._2))
-            val localNode = if (locals.nonEmpty) {
-              val node = ObjectNode("Object", ObjectId("$$locals-" + stackframeId))
-              mappingRegistry.register(null, node, locals)
-              Some(node)
-            } else None
-
-            val scopeChain = createScopeChain(marshaller, originalScope, originalThis, thisObj, localNode)
-
             // If needed, create a scope object to hold the local variables as "free" variables - so that evaluated
             // code can refer to them.
             // If we don't have :scope, use :this - it's used as a parent object for the created scope object.
             val localScope = scopeWithFreeVariables(originalScope.getOrElse(originalThis), localValues)
+
+            // Create an artificial object node to hold the locals. Note that the object ID must be unique per stack
+            // since we store object nodes in a map.
+            val locals = localValues.map(e => e._1 -> marshaller.marshal(e._2))
+            val localNode = if (locals.nonEmpty) {
+              val objectId = ObjectId("$$locals-" + stackframeId)
+              val node = ObjectNode("Object", objectId)
+              mappingRegistry.register(localScope, node, locals)
+
+              // Track location (of the stack frame), so that we can update locals later on
+              locationForLocals += objectId -> location
+
+              Some(node)
+            } else None
+
+            val scopeChain = createScopeChain(marshaller, originalScope, originalThis, thisObj, localNode)
 
             def evaluateCodeOnFrame: CodeEvaluator = {
               case (code, namedValues) =>
@@ -718,6 +754,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
     // Start with a fresh object registry
     objectPairById.clear()
+
+    locationForLocals.clear()
 
     // Get all Values FIRST, before marshalling. This is because marshalling requires us to call methods, which
     // will temporarily resume threads, which causes the stack frames to become invalid.
@@ -996,14 +1034,17 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       case Some(pd) =>
         findStackFrame(pd, stackFrameId) match {
           case Some(sf: StackFrameImpl) =>
+            implicit val marshaller = new Marshaller(pd.thread, mappingRegistry)
 
             // Get the Value instances corresponding to the named objects
-            val namedValues = namedObjects.map {
+            val namedValues = namedObjects.flatMap {
               case (name, objectId) =>
                 objectPairById.get(objectId) match {
                   // TODO: Should we handle extras here?
-                  case Some((maybeValue, _, _)) if maybeValue.isDefined => name -> maybeValue.get
-                  case _ => throw new IllegalArgumentException(s"No object with ID '$objectId' was found.")
+                  case Some((maybeValue, _, _)) if maybeValue.isDefined => Seq(name -> maybeValue.get)
+                  case Some(_) => Seq.empty
+                  case _ =>
+                    throw new IllegalArgumentException(s"No object with ID '$objectId' was found.")
                 }
             }
 
@@ -1012,15 +1053,96 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             // code may call a function that modifies an object that we don't know about here.
             pd.objectPropertiesCache.clear()
 
-            sf.eval(expression, namedValues)
+            // By resetting change tracking before evaluating the expression, we can track changes made to any
+            // named objects.
+            resetChangeTracking(sf, namedValues)
+
+            val result = sf.eval(expression, namedValues)
+
+            // Update locals that changed, if needed. It's not sufficient for the synthetic locals object to have
+            // been updated, since generated Java code will access the local variables directly.
+            updateChangedLocals(sf, namedValues, namedObjects)
+
+            result
           case _ =>
             log.warn(s"No stack frame found with ID $stackFrameId. Available IDs: " + pd.stackFrames.map(_.id).mkString(", "))
             throw new IllegalArgumentException(s"Failed to find a stack frame with ID $stackFrameId")
         }
       case None =>
+        log.warn(s"Evaluation of '$expression' for stack frame $stackFrameId cannot be done in a non-paused state.")
         throw new IllegalStateException("Code evaluation can only be done in a paused state.")
     }
   }
+
+  private def resetChangeTracking(sf: StackFrameImpl, namedValues: Map[String, AnyRef]): Unit = {
+    val objectNames = namedValues.keys.mkString(",")
+    val js =
+      s"""[$objectNames].forEach(function (obj) {
+         |  if(typeof obj['${hiddenPrefix}resetChanges']==='function') obj['${hiddenPrefix}resetChanges']();
+         |});
+       """.stripMargin
+    sf.eval(js, namedValues) match {
+      case ErrorValue(data, _, _) =>
+        throw new RuntimeException("Failed to reset change tracking: " + data.message)
+      case _ =>
+    }
+  }
+
+  private def updateChangedLocals(sf: StackFrameImpl, namedValues: Map[String, AnyRef], namedObjects: Map[String, ObjectId])(implicit marshaller: Marshaller): Unit = {
+    def jdiStackFrameForObject(id: ObjectId) = locationForLocals.get(id).flatMap(jdiStackFrameFromLocation(marshaller.thread))
+
+    // Note: namedValues is created from namedObjects, so we access namedObjects directly (not via get)
+    namedValues.map(e => (e._1, e._2, namedObjects(e._1))).foreach {
+      case (key, value, objectId) =>
+        // Read the changes tracked by the property setters, if any.
+        val changes = sf.eval(s"$key['${hiddenPrefix}changes']", Map(key -> value))
+        arrayValuesFrom(changes) match {
+          case Right(values) =>
+
+            // Get the stack frame. We cannot do that earlier due to marshalling, which causes the thread to resume.
+            jdiStackFrameForObject(objectId) match {
+              case Some(jdiStackFrame) =>
+
+                values.grouped(2).collect { case (str: StringReference) :: v :: Nil => str.value() -> v }.foreach {
+                  case (name, newValue) =>
+                    // We have almost everything we need. Find the LocalVariable and set its value.
+                    Try(Option(jdiStackFrame.visibleVariableByName(name))).map(_.foreach(jdiStackFrame.setValue(_, newValue))) match {
+                      case Success(_) =>
+                        log.debug(s"Updated the value of $name for $objectId to $newValue in ${jdiStackFrame.location()}")
+                      case Failure(t) =>
+                        log.error(s"Failed to update the value of $name for $objectId to $newValue", t)
+                    }
+
+                }
+
+              case None =>
+                log.warn(s"Failed to find the stack frame hosting $objectId")
+            }
+          case Left(reason) =>
+            log.warn(s"Failed to read changes from $key: $reason")
+        }
+    }
+  }
+
+  private def arrayValuesFrom(vn: ValueNode)(implicit marshaller: Marshaller): Either[String, List[Value]] = {
+    vn match {
+      case an: ArrayNode =>
+        objectPairById.get(an.objectId).flatMap(_._1) match {
+          case Some(objRef: ObjectReference) if marshaller.isScriptObject(objRef) =>
+            val mirror = new ScriptObjectMirror(objRef)
+            if (mirror.isArray) {
+              val arrMirror = mirror.asArray
+              Right((0 until arrMirror.length).map(arrMirror.at).toList)
+            } else Left("Unexpected script object type: " + mirror.className)
+          case Some(other) => Left("Not a script object (should be NativeArray): " + other)
+          case None => Left("Unknown object ID: " + an.objectId)
+        }
+      case other => Left("Not a marshalled array: " + other)
+    }
+  }
+
+  private def jdiStackFrameFromLocation(thread: ThreadReference)(loc: Location) =
+    thread.frames().asScala.find(_.location() == loc)
 
   private def findStackFrame(pausedData: PausedData, id: String): Option[StackFrame] = {
     if (id == "$top") return pausedData.stackFrames.headOption
@@ -1064,10 +1186,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def propertiesFromJSObject(objectId: ObjectId, jsObject: ObjectReference, isArray: Boolean)(implicit marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
+    import com.programmaticallyspeaking.ncd.infra.StringUtils._
     val key = ObjectPropertiesKey(objectId, onlyOwn = true, onlyAccessors = false)
     pausedData.get.objectPropertiesCache.getOrElseUpdate(key, {
 
-      import com.programmaticallyspeaking.ncd.infra.StringUtils._
       val mirror = new JSObjectMirror(jsObject)
 
       // For an array, keySet should return indices + "length", and then we get use getSlot.
@@ -1190,7 +1312,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           // If we have a script object, get properties from it
           val scriptObjectProps = maybeValue match {
             case Some(ref: ObjectReference) if marshaller.isScriptObject(ref) =>
-              propertiesFromScriptObject(objectId, ref, onlyOwn, onlyAccessors)
+              // Don't include hidden properties that we add in scopeWithFreeVariables
+              propertiesFromScriptObject(objectId, ref, onlyOwn, onlyAccessors).filter(e => !e._1.startsWith(hiddenPrefix))
             case Some(ref: ObjectReference) if marshaller.isJSObject(ref) =>
               propertiesFromJSObject(objectId, ref, node.isInstanceOf[ArrayNode])
             case Some(ref: ArrayReference) =>

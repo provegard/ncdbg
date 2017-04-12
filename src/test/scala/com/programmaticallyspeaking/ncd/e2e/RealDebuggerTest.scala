@@ -18,8 +18,11 @@ class RealDebuggerTest extends E2ETestFixture with FreeActorTesting with ScalaFu
   implicit val container = new Container(Seq(FakeFilePublisher))
 
   def enableDebugger: Unit = {
-    debugger = newActorInstance[Debugger]
-    sendRequestAndWait(debugger, Domain.enable)
+    // Reuse the debugger, so create & enable only once.
+    if (debugger == null) {
+      debugger = newActorInstance[Debugger]
+      sendRequestAndWait(debugger, Domain.enable)
+    }
   }
 
   def sendRequest(msg: AnyRef): Any = sendRequestAndWait(debugger, msg)
@@ -52,6 +55,35 @@ class RealDebuggerTest extends E2ETestFixture with FreeActorTesting with ScalaFu
         // In function f2, y should have value 42
         val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "y", None, None, None))
         r2 should be(EvaluateOnCallFrameResult(RemoteObject.forNumber(42)))
+      }
+    })
+  }
+
+  "should support setVariableValue when a local variable is targeted" in {
+    enableDebugger
+    val script =
+      """
+        |var f = function (username) {
+        |  debugger;
+        |  return "Hello " + username;
+        |};
+        |this.greeting = f("foo");
+        |debugger;
+      """.stripMargin
+
+    runScript(script)(callFrames => {
+      withHead(callFrames) { cf =>
+        // Get the local scope
+        cf.scopeChain.zipWithIndex.find(_._1.`type` == "local") match {
+          case Some((_, idx)) =>
+            sendRequest(Debugger.setVariableValue(idx, "username", RuntimeD.CallArgument(Some("bar"), None, None), cf.callFrameId))
+          case None => fail("No local scope")
+        }
+      }
+    }, callFrames => {
+      withHead(callFrames) { cf =>
+        val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "this.greeting", None, None, None))
+        r2 should be(EvaluateOnCallFrameResult(RemoteObject.forString("Hello bar")))
       }
     })
   }
