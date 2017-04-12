@@ -133,6 +133,16 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         }
       }
 
+      "should publish a variable (argument) as a data property with a value" in {
+        evaluateScopeObject { (host, scopeObj) =>
+          host.getObjectProperties(scopeObj.objectId, true, false).get("arg") match {
+            case Some(propDesc) =>
+              propDesc.value should be (Some(SimpleValue("test")))
+            case None => fail("No property named 'arg'")
+          }
+        }
+      }
+
       "should not leak the anonymous 'obj' object when getting all properties (not only own)" in {
         evaluateScopeObject { (host, scopeObj) =>
           host.getObjectProperties(scopeObj.objectId, false, false).keys should not contain ("obj")

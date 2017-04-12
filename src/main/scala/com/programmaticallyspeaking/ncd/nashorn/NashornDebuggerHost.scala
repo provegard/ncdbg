@@ -124,6 +124,8 @@ object NashornDebuggerHost {
   // Prefix for synthetic properties added to artificial scope JS objects. The prefix is chosen so that it can never
   // clash with the name of a real local variable.
   val hiddenPrefix = "||"
+
+  val localScopeObjectIdPrefix = "$$locals-"
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis: ((NashornScriptHost) => Unit) => Unit) extends NashornScriptHost with Logging {
@@ -689,7 +691,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             // since we store object nodes in a map.
             val locals = localValues.map(e => e._1 -> marshaller.marshal(e._2))
             val localNode = if (locals.nonEmpty) {
-              val objectId = ObjectId("$$locals-" + stackframeId)
+              val objectId = ObjectId(localScopeObjectIdPrefix + stackframeId)
               val node = ObjectNode("Object", objectId)
 
               // Note: Don't register locals as extra properties, since they will shadow the real properties on the
@@ -1307,6 +1309,29 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     })
   }
 
+  private def removeHidden(prop: (String, ObjectPropertyDescriptor)): Boolean = !prop._1.startsWith(hiddenPrefix)
+
+  private def accessorToDataForLocals(objectId: ObjectId)(prop: (String, ObjectPropertyDescriptor)): (String, ObjectPropertyDescriptor) = {
+    if (objectId.id.startsWith(localScopeObjectIdPrefix) && prop._2.descriptorType == PropertyDescriptorType.Accessor) {
+      val desc = prop._2
+      // Yeah, getting to the getter ID is ugly, but it must work since we know we have an accessor property.
+      val getterId = desc.getter.get.asInstanceOf[ComplexNode].objectId
+      evaluateOnStackFrame("$top", "fun.call(owner)", Map("fun" -> getterId, "owner" -> objectId)) match {
+        case Success(vn) =>
+          val newDescriptor = desc.copy(descriptorType = PropertyDescriptorType.Data,
+            getter = None,
+            setter = None,
+            value = Some(vn)
+          )
+          (prop._1, newDescriptor)
+
+        case Failure(t) =>
+          log.error(s"Failed to invoke the getter for ${prop._1} on $objectId", t)
+          prop
+      }
+    } else prop
+  }
+
   override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = pausedData match {
     case Some(pd) =>
       implicit val marshaller = new Marshaller(pd.thread, mappingRegistry)
@@ -1316,7 +1341,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           val scriptObjectProps = maybeValue match {
             case Some(ref: ObjectReference) if marshaller.isScriptObject(ref) =>
               // Don't include hidden properties that we add in scopeWithFreeVariables
-              propertiesFromScriptObject(objectId, ref, onlyOwn, onlyAccessors).filter(e => !e._1.startsWith(hiddenPrefix))
+              // Furthermore, for a local scope object, properties are accessors, but we want them to appear as regular
+              // properties to DevTools. The fact that they are accessors is an implementation detail.
+              propertiesFromScriptObject(objectId, ref, onlyOwn, onlyAccessors).filter(removeHidden).map(accessorToDataForLocals(objectId))
             case Some(ref: ObjectReference) if marshaller.isJSObject(ref) =>
               propertiesFromJSObject(objectId, ref, node.isInstanceOf[ArrayNode])
             case Some(ref: ArrayReference) =>
