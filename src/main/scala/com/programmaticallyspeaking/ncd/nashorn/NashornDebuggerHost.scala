@@ -502,7 +502,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     // Just using "{}" returns undefined - don't know why - but "Object.create" works well.
     // Use the passed scope object as prototype object so that scope variables will be seen as well.
     var scopeObjFactory =
-      s"""var obj = Object.create(this);
+      s"""(function() { var obj = Object.create(this);
          |obj['${hiddenPrefix}changes']=[];
          |obj['${hiddenPrefix}resetChanges']=function(){ obj['${hiddenPrefix}changes'].length=0; };
        """.stripMargin
@@ -519,7 +519,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
              |});
            """.stripMargin
     }
-    scopeObjFactory += "obj"
+    scopeObjFactory += "return obj;}).call(this)"
 
     val anObject = DebuggerSupport_eval_custom(marshaller.thread, scopeObject, null, scopeObjFactory).asInstanceOf[ObjectReference]
     val mirror = new ScriptObjectMirror(anObject)

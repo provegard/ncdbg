@@ -100,27 +100,42 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
       }
     }
 
-    "a local variable (argument) should be writable" in {
+    "a local scope" - {
       val script =
         """(function (arg) {
           |  debugger;
           |  arg.toString();
           |})("test");
         """.stripMargin
-      waitForBreakpoint(script) { (host, breakpoint) =>
-        breakpoint.stackFrames.headOption.flatMap(st => st.scopeChain.find(_.scopeType == ScopeType.Local)) match {
-          case Some(scope) =>
-            scope.value match {
-              case c: ComplexNode =>
-                host.getObjectProperties(c.objectId, true, false).get("arg") match {
-                  case Some(propDesc) =>
-                    propDesc.isWritable should be (true)
-                  case None => fail("No property named 'arg'")
-                }
-              case other => fail("Scope is not a ComplexNode: " + other)
-            }
 
-          case None => fail("no stack frames or local scope!")
+      def evaluateScopeObject(handler: (ScriptHost, ComplexNode) => Unit): Unit = {
+        waitForBreakpoint(script) { (host, breakpoint) =>
+          breakpoint.stackFrames.headOption.flatMap(st => st.scopeChain.find(_.scopeType == ScopeType.Local)) match {
+            case Some(scope) =>
+              scope.value match {
+                case c: ComplexNode =>
+                  handler(host, c)
+                case other => fail("Scope is not a ComplexNode: " + other)
+              }
+
+            case None => fail("no stack frames or local scope!")
+          }
+        }
+      }
+
+      "should make a variable (argument) writable" in {
+        evaluateScopeObject { (host, scopeObj) =>
+          host.getObjectProperties(scopeObj.objectId, true, false).get("arg") match {
+            case Some(propDesc) =>
+              propDesc.isWritable should be (true)
+            case None => fail("No property named 'arg'")
+          }
+        }
+      }
+
+      "should not leak the anonymous 'obj' object when getting all properties (not only own)" in {
+        evaluateScopeObject { (host, scopeObj) =>
+          host.getObjectProperties(scopeObj.objectId, false, false).keys should not contain ("obj")
         }
       }
     }
