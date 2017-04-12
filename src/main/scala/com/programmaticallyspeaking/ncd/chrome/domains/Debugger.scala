@@ -265,9 +265,13 @@ class Debugger(filePublisher: FilePublisher) extends DomainActor with Logging wi
           val expression = s"$scopeName['$varName']=$newValueName;"
 
           // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
-          evaluate(scriptHost, "$top", expression, namedObjects.result, true)
-
-          () // don't return anything
+          evaluate(scriptHost, "$top", expression, namedObjects.result, true).exceptionDetails match {
+            case Some(details) =>
+              val location = details.url.map(u => " (at " + Seq(u, details.lineNumber.toString, details.columnNumber.toString).mkString(":") + ")").getOrElse("")
+              throw new IllegalArgumentException(details.text + location)
+            case None =>
+              () // don't return anything
+          }
 
         case Left(problem) =>
           throw new IllegalArgumentException(problem)
