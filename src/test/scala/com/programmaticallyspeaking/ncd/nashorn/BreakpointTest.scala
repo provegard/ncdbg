@@ -1,8 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{ExceptionPauseType, ObjectNode, Scope, ScriptHost}
+import com.programmaticallyspeaking.ncd.host._
 import org.scalactic.Equality
-import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyChecks {
@@ -73,18 +72,19 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     ("value", "42")
   )
 
+  implicit val regexpEq = new Equality[Seq[String]] {
+    override def areEqual(a: Seq[String], b: Any): Boolean = b match {
+      case regexpes: Seq[_] =>
+        a.size == regexpes.size && a.zip(regexpes).forall { case (str, regexp) =>
+          regexp.toString.r.pattern.matcher(str).matches
+        }
+
+      case _ => false
+    }
+  }
+
   "when a breakpoint is hit" - {
     "the scopes should be sorted out" - {
-      implicit val regexpEq = new Equality[Seq[String]] {
-        override def areEqual(a: Seq[String], b: Any): Boolean = b match {
-          case regexpes: Seq[_] =>
-            a.size == regexpes.size && a.zip(regexpes).forall { case (str, regexp) =>
-              regexp.toString.r.pattern.matcher(str).matches
-            }
-
-          case _ => false
-        }
-      }
       forAll(scopeTests) { (desc, script, expectationRegExps) =>
         desc in {
           waitForBreakpoint(script) { (host, breakpoint) =>
@@ -96,6 +96,31 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
               case None => fail("no stack frames!")
             }
           }
+        }
+      }
+    }
+
+    "a local variable (argument) should be writable" in {
+      val script =
+        """(function (arg) {
+          |  debugger;
+          |  arg.toString();
+          |})("test");
+        """.stripMargin
+      waitForBreakpoint(script) { (host, breakpoint) =>
+        breakpoint.stackFrames.headOption.flatMap(st => st.scopeChain.find(_.scopeType == ScopeType.Local)) match {
+          case Some(scope) =>
+            scope.value match {
+              case c: ComplexNode =>
+                host.getObjectProperties(c.objectId, true, false).get("arg") match {
+                  case Some(propDesc) =>
+                    propDesc.isWritable should be (true)
+                  case None => fail("No property named 'arg'")
+                }
+              case other => fail("Scope is not a ComplexNode: " + other)
+            }
+
+          case None => fail("no stack frames or local scope!")
         }
       }
     }

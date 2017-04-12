@@ -691,7 +691,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             val localNode = if (locals.nonEmpty) {
               val objectId = ObjectId("$$locals-" + stackframeId)
               val node = ObjectNode("Object", objectId)
-              mappingRegistry.register(localScope, node, locals)
+
+              // Note: Don't register locals as extra properties, since they will shadow the real properties on the
+              // local scope object.
+              mappingRegistry.register(localScope, node, Map.empty)
 
               // Track location (of the stack frame), so that we can update locals later on
               locationForLocals += objectId -> location
