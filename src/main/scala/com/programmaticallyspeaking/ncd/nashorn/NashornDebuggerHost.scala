@@ -887,15 +887,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   override def setBreakpoint(scriptUri: String, scriptLocation: ScriptLocation): Option[Breakpoint] = {
-    // TODO: Take column number into account here???
-    val lineNumberBase1 = scriptLocation.lineNumber1Based
     findBreakableLocation(scriptUri, scriptLocation).map { br =>
       log.info(s"Setting a breakpoint at line ${br.scriptLocation.lineNumber1Based} in $scriptUri")
 
       br.enable()
       enabledBreakpoints += (br.id -> br)
       br.toBreakpoint
-
     }
   }
 
@@ -910,12 +907,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     breakableLocationsByScriptUrl.get(scriptUrl).flatMap { breakableLocations =>
       breakableLocations.find(_.scriptLocation == scriptLocation)
     }
-//    breakableLocationsByScriptUri.get(scriptUri).flatMap { breakableLocations =>
-//      // TODO: Is it good to filter with >= ? The idea is to create a breakpoint even if the user clicks on a line that
-//      // TODO: isn't "breakable".
-//      val candidates = breakableLocations.filter(_.scriptLocation.lineNumber1Based >= lineNumber).sortWith((b1, b2) => b1.scriptLocation.lineNumber1Based < b2.scriptLocation.lineNumber1Based)
-//      candidates.headOption
-//    }
   }
 
   private def resumeWhenPaused(): Unit = pausedData match {
