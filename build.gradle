@@ -29,6 +29,10 @@ test {
 
     systemProperty "SelectiveActorLogging.suppress", "true"
     systemProperty "logback.configurationFile", "logback-off.xml"
+
+    // Don't run tests in parallel. Since we listen for log events from MemoryAppender to include in the failure output,
+    // running tests in parallel results in too much noise.
+    maxParallelForks = 1
 }
 
 run {
