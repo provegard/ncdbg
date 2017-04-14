@@ -47,9 +47,7 @@ trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixtu
     }
     observeAndRunScriptAsync(wrapped, observer) { host =>
       resultPromise.future.map(node => {
-        try tester(host, node) finally {
-          host.resume()
-        }
+        tester(host, node)
       })
     }
   }

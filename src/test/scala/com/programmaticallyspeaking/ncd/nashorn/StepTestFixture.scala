@@ -43,9 +43,7 @@ class StepTestFixture extends UnitTest with NashornScriptHostTestFixture {
        """.stripMargin
     observeAndRunScriptAsync(wrapper, observer) { host =>
       breakpointPromise.future.map(breakpoint => {
-        try tester(breakpoint) finally {
-          host.resume()
-        }
+        tester(breakpoint)
       })
     }
   }

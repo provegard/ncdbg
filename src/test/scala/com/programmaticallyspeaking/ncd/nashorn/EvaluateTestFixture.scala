@@ -25,9 +25,7 @@ class EvaluateTestFixture extends UnitTest with NashornScriptHostTestFixture {
        """.stripMargin
     observeAndRunScriptAsync(wrapper, observer) { host =>
       stackframesPromise.future.map(stackframes => {
-        try tester(host, stackframes) finally {
-          host.resume()
-        }
+        tester(host, stackframes)
       })
     }
   }

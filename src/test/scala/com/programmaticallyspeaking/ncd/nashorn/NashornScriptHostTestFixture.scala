@@ -17,7 +17,7 @@ import org.slf4s.Logging
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent._
-import scala.util.{Failure, Success}
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
 /** Provides a patience configuration that has a timeout that is shorter than the default timeout in
@@ -216,6 +216,9 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorT
     try Await.result(f, resultTimeout) catch {
       case t: TimeoutException =>
         throw new TimeoutException(s"No results within ${resultTimeout.toMillis} ms. Progress:\n" + summarizeProgress())
+    } finally {
+      // getHost may throw if the host isn't set
+      Try(getHost.resume())
     }
   }
 
