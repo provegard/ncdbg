@@ -1,0 +1,11 @@
+<configuration>
+    <appender name="MEMORY" class="com.programmaticallyspeaking.ncd.testing.MemoryAppender">
+        <encoder>
+            <pattern>%d %-5level [%thread] %logger{0}: %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="TRACE">
+        <appender-ref ref="MEMORY" />
+    </root>
+</configuration>

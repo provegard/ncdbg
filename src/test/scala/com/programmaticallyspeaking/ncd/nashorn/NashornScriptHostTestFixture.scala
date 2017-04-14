@@ -5,7 +5,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import com.programmaticallyspeaking.ncd.host.ScriptEvent
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
-import com.programmaticallyspeaking.ncd.testing.{FreeActorTesting, StringUtils, UnitTest}
+import com.programmaticallyspeaking.ncd.testing.{FreeActorTesting, MemoryAppender, StringUtils, UnitTest}
 import com.sun.jdi.connect.LaunchingConnector
 import com.sun.jdi.event.VMStartEvent
 import com.sun.jdi.{Bootstrap, VirtualMachine}
@@ -87,6 +87,11 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
 
     vmRunningPromise = Promise[NashornScriptHost]()
     vmReadyPromise = Promise[Unit]()
+
+    MemoryAppender.logEvents.subscribe(Observer.from {
+      case event if event.getLoggerName == classOf[NashornDebuggerHost].getName =>
+        reportProgress(s"[NashornDebuggerHost][${event.getLevel}]: ${event.getMessage}")
+    })
 
     setupHost()
   }

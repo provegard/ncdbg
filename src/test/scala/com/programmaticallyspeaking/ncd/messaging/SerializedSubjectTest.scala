@@ -8,7 +8,7 @@ import scala.collection.mutable.ListBuffer
 class SerializedSubjectTest extends UnitTest {
 
   def createSut = new SerializedSubject[String]
-  def collectingObserver(buf: mutable.Buffer[String]): Observer[String] = Observer.from[String](s => buf += s)
+  def collectingObserver(buf: mutable.Buffer[String]): Observer[String] = Observer.from[String]{case s => buf += s}
 
   "SerializedSubject" - {
     "should emit an item" in {
