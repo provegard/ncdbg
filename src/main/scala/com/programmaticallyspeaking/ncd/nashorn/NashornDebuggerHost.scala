@@ -1093,7 +1093,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         // Read the changes tracked by the property setters, if any.
         val changes = sf.eval(s"$key['${hiddenPrefix}changes']", Map(key -> value))
         arrayValuesFrom(changes) match {
-          case Right(values) =>
+          case Right(values) if values.nonEmpty =>
 
             // Get the stack frame. We cannot do that earlier due to marshalling, which causes the thread to resume.
             jdiStackFrameForObject(objectId) match {
@@ -1114,6 +1114,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               case None =>
                 log.warn(s"Failed to find the stack frame hosting $objectId")
             }
+          case Right(_) => // empty changes, noop
           case Left(reason) =>
             log.warn(s"Failed to read changes from $key: $reason")
         }
@@ -1133,6 +1134,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           case Some(other) => Left("Not a script object (should be NativeArray): " + other)
           case None => Left("Unknown object ID: " + an.objectId)
         }
+      case SimpleValue(Undefined) => Right(List.empty)
       case other => Left("Not a marshalled array: " + other)
     }
   }
