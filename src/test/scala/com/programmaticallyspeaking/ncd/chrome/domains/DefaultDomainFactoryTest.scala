@@ -1,8 +1,9 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
 import akka.actor.ActorRef
+import com.programmaticallyspeaking.ncd.host.ScriptHost
 import com.programmaticallyspeaking.ncd.ioc.Container
-import com.programmaticallyspeaking.ncd.testing.{ActorTesting, UnitTest}
+import com.programmaticallyspeaking.ncd.testing.{ActorTesting, FakeScriptHost, UnitTest}
 
 class DefaultDomainFactoryTest extends UnitTest with ActorTesting {
   val container = new Container(Seq(Bar("success")))
@@ -40,7 +41,7 @@ object BarTestDomain {
   case object tellMe
 }
 
-class BarTestDomain(bar: Bar) extends DomainActor {
+class BarTestDomain(bar: Bar) extends DomainActor(FakeScriptHost) {
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case BarTestDomain.tellMe => bar.bar
   }

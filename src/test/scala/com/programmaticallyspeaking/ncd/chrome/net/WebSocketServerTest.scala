@@ -1,13 +1,13 @@
 package com.programmaticallyspeaking.ncd.chrome.net
 
 import java.net.URI
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, Executors}
 
-import akka.actor.{TypedActor, TypedProps}
 import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
-import com.programmaticallyspeaking.ncd.infra.ObjectMapping
+import com.programmaticallyspeaking.ncd.infra.{ExecutorProxy, ObjectMapping}
+import com.programmaticallyspeaking.ncd.ioc.Container
 import com.programmaticallyspeaking.ncd.messaging.Subject
-import com.programmaticallyspeaking.ncd.testing.{FreeActorTesting, UnitTest}
+import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, FreeActorTesting, UnitTest}
 import org.java_websocket.drafts.Draft_17
 import org.java_websocket.handshake.ServerHandshake
 import org.mockito.Mockito._
@@ -18,20 +18,22 @@ import org.scalatest.mockito.MockitoSugar
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
-import scala.util.{Failure, Random, Success, Try}
 
 class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSugar with ScalaFutures with FreeActorTesting with ServerStarter[WebSocketServer] {
 
-  lazy val domainFactory = new CapturingDomainFactory()
+  var domainFactory: CapturingDomainFactory = _
 
-  val server = new WebSocketServer(domainFactory, None)
+  var server: WebSocketServer = _
   var serverPort: Int = 0
   var wsClient: Client = _
 
   override def beforeAllTests(): Unit = try super.beforeAllTests() finally {
     val scriptHost = mock[ScriptHost]
     when(scriptHost.events).thenReturn(Subject.serialized[ScriptEvent])
-    TypedActor(system).typedActorOf(TypedProps(classOf[ScriptHost], scriptHost), "scriptHost")
+    val scriptHostForContainer = new ExecutorProxy(Executors.newSingleThreadExecutor()).createFor[ScriptHost](scriptHost)
+    implicit val container = new Container(Seq(FakeFilePublisher, scriptHostForContainer))
+    domainFactory = new CapturingDomainFactory()
+    server = new WebSocketServer(domainFactory, None)
   }
 
   override def startServer(port: Int): WebSocketServer = {

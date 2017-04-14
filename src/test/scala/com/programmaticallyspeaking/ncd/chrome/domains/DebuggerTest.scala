@@ -32,8 +32,6 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
   import org.mockito.ArgumentMatchers._
   import com.programmaticallyspeaking.ncd.testing.MockingUtils._
 
-  implicit val container = new Container(Seq(FakeFilePublisher))
-
   def script(theId: String, hash: String = "xyz"): Script = new Script {
     override def contentsHash(): String = hash
     override val url: ScriptURL = ScriptURL.create("/tmp/" + theId)

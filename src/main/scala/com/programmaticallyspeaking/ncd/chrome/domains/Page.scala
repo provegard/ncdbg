@@ -1,5 +1,7 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
+import com.programmaticallyspeaking.ncd.host.ScriptHost
+
 object Page {
   case object getResourceTree
 
@@ -25,7 +27,7 @@ object Page {
   private[Page] val FrameContent = "<html></html>"
 }
 
-class Page extends DomainActor {
+class Page(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
   import Page._
 
   override protected def handle: PartialFunction[AnyRef, Any] = {

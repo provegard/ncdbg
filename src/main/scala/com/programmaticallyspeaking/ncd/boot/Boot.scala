@@ -5,7 +5,7 @@ import java.net.ConnectException
 import akka.actor.ActorSystem
 import com.programmaticallyspeaking.ncd.chrome.domains.DefaultDomainFactory
 import com.programmaticallyspeaking.ncd.chrome.net.{FilePublisher, FileServer, WebSocketServer}
-import com.programmaticallyspeaking.ncd.host.ScriptEvent
+import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.ioc.Container
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.nashorn.{NashornDebugger, NashornDebuggerConnector, NashornScriptHost}
@@ -30,7 +30,7 @@ object Boot extends App with Logging {
 
       val listenAddr = conf.listen()
       val fileServer = new FileServer(listenAddr.host, listenAddr.port)
-      val container = new BootContainer(fileServer.publisher)
+      val container = new BootContainer(fileServer.publisher, host)
 
       startHttpServer(container, fileServer)
     case Failure(t) =>
@@ -83,5 +83,5 @@ object Boot extends App with Logging {
     }
   }
 
-  class BootContainer(filePublisher: FilePublisher) extends Container(Seq(filePublisher))
+  class BootContainer(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Container(Seq(filePublisher, scriptHost))
 }

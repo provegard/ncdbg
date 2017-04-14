@@ -1,11 +1,11 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
 import akka.actor.{Actor, ActorRef, DeadLetter, Props}
-import com.programmaticallyspeaking.ncd.host.{Done, ScriptEvent}
-import com.programmaticallyspeaking.ncd.testing.UnitTest
+import com.programmaticallyspeaking.ncd.host.{Done, ScriptEvent, ScriptHost}
+import com.programmaticallyspeaking.ncd.testing.{FakeScriptHost, UnitTest}
 
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 object TestDomainActor {
   case object fail
@@ -14,8 +14,7 @@ object TestDomainActor {
   case class echoLater(msg: String)
 }
 
-class TestDomainActor extends DomainActor {
-  import ExecutionContext.Implicits.global
+class TestDomainActor(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case TestDomainActor.fail =>
       throw new Exception("I failed")
@@ -38,7 +37,7 @@ class TestDomainActor extends DomainActor {
 
 case class AScriptEvent(msg: String) extends ScriptEvent
 
-class EnableDisableDomainActor extends DomainActor {
+class EnableDisableDomainActor extends DomainActor(FakeScriptHost) {
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case Domain.enable => "enabled"
     case Domain.disable => "disabled"

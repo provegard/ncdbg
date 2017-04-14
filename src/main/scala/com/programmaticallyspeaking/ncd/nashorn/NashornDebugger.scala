@@ -1,8 +1,11 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import akka.actor.{ActorSystem, TypedActor, TypedProps}
+import java.util.concurrent.Executors
+
+import akka.actor.ActorSystem
+import com.programmaticallyspeaking.ncd.infra.ExecutorProxy
 import com.sun.jdi.event.EventQueue
-import com.sun.jdi.{VMDisconnectedException, VirtualMachine, StackFrame => _}
+import com.sun.jdi.{VMDisconnectedException, VirtualMachine}
 import org.slf4s.Logging
 
 import scala.annotation.tailrec
@@ -28,16 +31,7 @@ class NashornDebuggerConnector(hostName: String, port: Int) extends Logging {
 
 class NashornDebugger(implicit executionContext: ExecutionContext) extends Logging {
 
-//  private var typedActorWrappedHost: NashornScriptHost = _
-
-//  def start(): Future[NashornScriptHost] = {
-//    val promise = Promise[NashornScriptHost]()
-//    // TODO: Make this a daemon thread?
-//    new Thread(() => try connect(promise) catch {
-//      case ex: Exception => promise.tryFailure(ex)
-//    }).start()
-//    promise.future
-//  }
+  private val hostExecutor = Executors.newSingleThreadExecutor()
 
   private def initAndListen(host: NashornScriptHost): Unit = {
     // TODO: Do we want to react on init success/failure here? Probably...
@@ -45,35 +39,22 @@ class NashornDebugger(implicit executionContext: ExecutionContext) extends Loggi
   }
 
   def create(virtualMachine: VirtualMachine)(implicit system: ActorSystem): NashornScriptHost = {
-    var scriptHostAsActor: NashornScriptHost = null
+    var singleThreadedScriptHost: NashornScriptHost = null
 
     def asyncInvokeOnHost(invoker: (NashornScriptHost => Unit)): Unit = {
-      Future(invoker(scriptHostAsActor))
+      Future(invoker(singleThreadedScriptHost))
     }
 
     val theHost = new NashornDebuggerHost(virtualMachine, asyncInvokeOnHost)
 
-    // Create a typed actor that ensures that all NashornScriptHost access happens inside an actor
-    scriptHostAsActor = TypedActor(system).typedActorOf(TypedProps(classOf[NashornScriptHost], theHost), "scriptHost")
+    // Create a host proxy that ensures that all NashornScriptHost access happens on a single thread
+    singleThreadedScriptHost = new ExecutorProxy(hostExecutor).createFor[NashornScriptHost](theHost)
 
-    // Save for use in asyncInvokeOnHost
-//    typedActorWrappedHost = scriptHostAsActor
+    // Initialize and start listening *using the single-threaded proxy*
+    initAndListen(singleThreadedScriptHost)
 
-    // Initialize and start listening *using the TypedActor wrapper*
-    initAndListen(scriptHostAsActor)
-
-    val scriptHostActorRef = TypedActor(system).getActorRefFor(scriptHostAsActor)
-    log.debug(s"ScriptHost actor is at ${scriptHostActorRef.path.toStringWithoutAddress}")
-    scriptHostAsActor
+    singleThreadedScriptHost
   }
-
-//  private def connect(connectionPromise: Promise[NashornScriptHost]): Unit = {
-//    log.info(s"Connecting to $hostName:$port...")
-//    val vm = Connections.connect(hostName, port, 5000)
-//    val theHost = new NashornDebuggerHost(vm, asyncInvokeOnHost)
-//    log.info("Connected!")
-//    connectionPromise.success(theHost)
-//  }
 }
 
 // TODO: Daemon thread?

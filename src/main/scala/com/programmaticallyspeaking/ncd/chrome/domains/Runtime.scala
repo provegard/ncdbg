@@ -104,10 +104,11 @@ object Runtime {
   case class ConsoleAPICalledEventParams(`type`: String, args: Seq[RemoteObject], executionContextId: ExecutionContextId, timestamp: Timestamp)
 }
 
-class Runtime extends DomainActor with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
+class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
   import Runtime._
 
   private val compiledScriptIdGenerator = new IdGenerator("compscr")
+  private implicit val host = scriptHost
 
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case Runtime.getProperties(strObjectId, ownProperties, accessorPropertiesOnly, maybeGeneratePreview) =>

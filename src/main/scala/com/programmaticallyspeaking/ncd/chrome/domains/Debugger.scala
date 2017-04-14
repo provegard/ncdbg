@@ -127,11 +127,12 @@ object Debugger extends Logging {
   }
 }
 
-class Debugger(filePublisher: FilePublisher) extends DomainActor with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
+class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends DomainActor(scriptHost) with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
   import Debugger._
   import com.programmaticallyspeaking.ncd.infra.BetterOption._
 
   private implicit val fileReader = new FileSystemFileReader
+  private implicit val host = scriptHost
 
   override def postStop(): Unit = try {
     // Tell the ScriptHost to reset, so that we don't leave it paused

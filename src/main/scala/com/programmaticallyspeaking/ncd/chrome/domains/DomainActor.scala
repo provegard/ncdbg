@@ -2,32 +2,27 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 
 import java.lang.reflect.UndeclaredThrowableException
 
-import akka.actor.{Actor, ActorRef, PoisonPill, Stash, Status, TypedActor, TypedProps}
-import akka.util.Timeout
+import akka.actor.{Actor, ActorRef}
 import com.programmaticallyspeaking.ncd.host.{Done, ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
 import org.slf4s.Logging
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.{ExecutionContext, Future}
-import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 object DomainActor {
-  private[DomainActor] case class ScriptHostRef(actorRef: ActorRef)
-
   private[DomainActor] case class ProcessingResult(req: Messages.Request, result: Any)
   private[DomainActor] case class ProcessingError(req: Messages.Request, t: Throwable)
 
   private[DomainActor] case class EmittableEvent(event: Messages.Event, receiver: ActorRef)
 }
 
-abstract class DomainActor extends Actor with Logging with Stash {
+abstract class DomainActor(scriptHost: ScriptHost) extends Actor with Logging {
   import DomainActor._
   implicit val ec = ExecutionContext.global
 
-  protected implicit var scriptHost: ScriptHost = _
   private var scriptEventSubscription: Subscription = _
 
   private var isProcessingRequest = false
@@ -37,23 +32,14 @@ abstract class DomainActor extends Actor with Logging with Stash {
   val name = getClass.getSimpleName // assume the implementing class is named after the domain
 
   override def preStart(): Unit = try super.preStart() finally {
-    val scriptHostActor = context.actorSelection("/user/scriptHost")
-    implicit val timeout = Timeout(1.second)
-    scriptHostActor.resolveOne().onComplete {
-      case Success(actorRef) => self ! ScriptHostRef(actorRef)
-      case Failure(t) =>
-        log.error("Failed to obtain the ScriptHost reference.", t)
-        self ! PoisonPill // context.stop doesn't work here, NPE
-    }
+    initHost()
   }
 
   override def postStop(): Unit = try {
     Option(scriptEventSubscription).foreach(_.unsubscribe())
   } finally super.postStop()
 
-  private def setScriptHost(host: ScriptHost): Unit = {
-    scriptHost = host
-
+  private def initHost(): Unit = {
     // Subscribe to events from the host and pass them to our receive function
     scriptEventSubscription = scriptHost.events.subscribe(new Observer[ScriptEvent] {
       override def onNext(item: ScriptEvent): Unit = self ! item
@@ -78,19 +64,7 @@ abstract class DomainActor extends Actor with Logging with Stash {
   protected def customReceive: Receive = PartialFunction.empty
 
   override def receive: Receive = {
-    case ScriptHostRef(actorRef) =>
-      log.debug("Obtained a ScriptHost reference")
-      // TODO: Error handling!
-      val host = TypedActor(context).typedActorOf(TypedProps[ScriptHost], actorRef)
-      setScriptHost(host)
-
-      unstashAll()
-
-    case scriptEvent: ScriptEvent => // Ignore events when disabled
-
-    case req: Messages.Request if scriptHost == null =>
-      log.debug("Got a Request without a ScriptHost, stashing...")
-      stash() //TODO: Test
+    case _: ScriptEvent => // Ignore events when disabled
 
     case req@Messages.Request(_, Domain.enable) =>
       log.info(s"Enabling domain $name")

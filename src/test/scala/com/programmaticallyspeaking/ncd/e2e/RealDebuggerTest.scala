@@ -15,11 +15,10 @@ class RealDebuggerTest extends E2ETestFixture with FreeActorTesting with ScalaFu
   var initDoneFuture: Future[Unit] = _
   var debugger: ActorRef = _
 
-  implicit val container = new Container(Seq(FakeFilePublisher))
-
   def enableDebugger: Unit = {
     // Reuse the debugger, so create & enable only once.
     if (debugger == null) {
+      implicit val container = new Container(Seq(FakeFilePublisher, getHost))
       debugger = newActorInstance[Debugger]
       sendRequestAndWait(debugger, Domain.enable)
     }

@@ -1,14 +1,17 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import akka.actor.{ActorRef, Inbox, TypedActor, TypedProps}
-import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.messaging.Subject
-import com.programmaticallyspeaking.ncd.testing.{ActorTesting, UnitTest}
-import org.scalatest.mockito.MockitoSugar
-import org.mockito.Mockito._
-import org.mockito.ArgumentMatchers._
+import java.util.concurrent.Executors
 
-import scala.collection.mutable
+import akka.actor.{ActorRef, Inbox}
+import com.programmaticallyspeaking.ncd.host._
+import com.programmaticallyspeaking.ncd.infra.ExecutorProxy
+import com.programmaticallyspeaking.ncd.ioc.Container
+import com.programmaticallyspeaking.ncd.messaging.Subject
+import com.programmaticallyspeaking.ncd.testing.{ActorTesting, FakeFilePublisher, UnitTest}
+import org.mockito.ArgumentMatchers._
+import org.mockito.Mockito._
+import org.scalatest.mockito.MockitoSugar
+
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.TimeoutException
 import scala.concurrent.duration._
@@ -23,6 +26,8 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
   private val scripts = ListBuffer[Script]()
   private var scriptEventSubject: Subject[ScriptEvent] = _
   protected var currentScriptHost: ScriptHost = _
+
+  implicit var container: Container = _
 
   def requestAndReceive(actorRef: ActorRef, id: String, msg: AnyRef): Any = {
     val request = Messages.Request(id, msg)
@@ -103,6 +108,7 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
 
   override def beforeTest(): Unit = {
     currentScriptHost = createScriptHost()
-    TypedActor(system).typedActorOf(TypedProps(classOf[ScriptHost], currentScriptHost), "scriptHost")
+    val scriptHostForContainer = new ExecutorProxy(Executors.newSingleThreadExecutor()).createFor[ScriptHost](currentScriptHost)
+    container = new Container(Seq(FakeFilePublisher, scriptHostForContainer))
   }
 }
