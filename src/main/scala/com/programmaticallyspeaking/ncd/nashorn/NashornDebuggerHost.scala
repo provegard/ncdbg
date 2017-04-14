@@ -47,6 +47,8 @@ object NashornDebuggerHost {
 
   val ECMAException_create = "create"
 
+  // Note that NIR_ECMAException isn't here because requiring it for init will prevent init from completing
+  // since we won't see the type until it's used. Also, we never use it in foundWantedTypes lookup.
   val wantedTypes = Set(
     NIR_ScriptRuntime,
     NIR_Context,
@@ -170,6 +172,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private var pausedData: Option[PausedData] = None
 
   /**
+    * Configure what we do when we encounter one of the wanted types.
+    */
+  private val actionPerWantedType: Map[String, () => Unit] = Map(
+    NIR_ScriptRuntime -> enableBreakingAtDebuggerStatement
+  )
+
+  /**
     * By default, we don't pause when a breakpoint is hit. This is important since we add a fixed breakpoint for
     * JS 'debugger' statements, and we don't want that to pause the VM when a debugger hasn't attached yet.
     */
@@ -276,6 +285,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         case ct: ClassType =>
           log.debug(s"Found the $className type")
           foundWantedTypes += className -> ct
+
+          // Execute any function associated with the type
+          actionPerWantedType.get(className).foreach(_.apply())
+
+          // If we have all types, we're done
+          if (wantedTypes.forall(foundWantedTypes.contains)) {
+            considerInitializationToBeComplete()
+          }
+
         case other =>
           log.warn(s"Found the $className type but it's a ${other.getClass.getName} rather than a ClassType")
       }
@@ -334,27 +352,17 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   private def doInitialize(): Unit = {
     val referenceTypes = virtualMachine.allClasses()
-    val typeCount = referenceTypes.size()
 
-//    // Suspend VM while we're looking for types
-//    log.info("Suspending virtual machine to do initialization")
-//    virtualMachine.suspend()
-
+    // Go through reference types that exist so far. More may arrive later!
     referenceTypes.asScala.foreach(considerReferenceType(_: ReferenceType, InitialScriptResolveAttempts))
 
-    val breakableLocationCount = breakableLocationsByScriptUrl.foldLeft(0)((sum, e) => sum + e._2.size)
-    log.debug(s"$typeCount types checked, ${scriptByPath.size} scripts added, $breakableLocationCount breakable locations identified")
-
-    enableBreakingAtDebuggerStatement()
-
-//    virtualMachine.resume()
-//    log.info("Virtual machine resumed, listening for events...")
-
-    isInitialized = true
-
-    emitEvent(InitialInitializationComplete)
-
     Done
+  }
+
+  private def considerInitializationToBeComplete(): Unit = {
+    log.info("Host initialization is complete.")
+    isInitialized = true
+    emitEvent(InitialInitializationComplete)
   }
 
   private def emitEvent(event: ScriptEvent): Unit = {
