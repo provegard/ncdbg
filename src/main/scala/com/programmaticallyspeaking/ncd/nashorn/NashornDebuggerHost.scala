@@ -816,7 +816,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         pausedData = Some(new PausedData(thread, stackFrames))
 
         scriptById(breakpoint.scriptId).foreach { s =>
-          val line = s.sourceLine(breakpoint.location.lineNumber1Based)
+          val line = s.sourceLine(breakpoint.location.lineNumber1Based).getOrElse("<unknown line>")
           log.info(s"Pausing at ${s.url}:${breakpoint.location.lineNumber1Based}: $line")
         }
 
