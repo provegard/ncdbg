@@ -395,19 +395,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     case NashornEventSet(es) if hasDeathOrDisconnectEvent(es) =>
       signalComplete()
       Done
-    case NashornEventSet(es) if pausedData.isDefined =>
-      // Don't react on events if we're paused. Only one thread can be debugged at a time. Only log this on trace
-      // level to avoid excessive logging in a multi-threaded system.
-      val eventName = es.asScala.headOption.map(_.getClass.getSimpleName).getOrElse("<unknown>")
-      log.trace(s"Ignoring Nashorn event $eventName since we're already paused.")
-      es.resume()
-      Done
     case NashornEventSet(eventSet) =>
       var doResume = true
       eventSet.asScala.foreach { ev =>
         try {
           ev match {
-            case ev: BreakpointEvent =>
+            case ev: BreakpointEvent if pausedData.isEmpty =>
 
               attemptToResolveSourceLessReferenceTypes()
 
@@ -425,7 +418,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               } else {
                 seenClassPrepareRequests += 1
               }
-            case ev: ExceptionEvent =>
+            case ev: ExceptionEvent if pausedData.isEmpty =>
               attemptToResolveSourceLessReferenceTypes()
 
               val isECMAException = ev.exception().referenceType().name() == NIR_ECMAException
@@ -433,6 +426,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
             case _: VMStartEvent =>
               // ignore it, but don't log a warning
+
+            case other if pausedData.isDefined =>
+              // Don't react on events if we're paused. Only one thread can be debugged at a time. Only log this on
+              // trace level to avoid excessive logging in a multi-threaded system.
+              val eventName = other.getClass.getSimpleName
+              log.trace(s"Ignoring Nashorn event $eventName since we're already paused.")
 
             case other =>
               log.warn("Unknown event: " + other)
