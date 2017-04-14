@@ -43,6 +43,7 @@ object ScriptURL {
     val uri = if (isAbsoluteUnixOrWindowsFilePath(something)) {
       val withUnixSlashes = something.replace("\\", "/")
       val uriPart = if (withUnixSlashes.startsWith("/")) withUnixSlashes else "/" + withUnixSlashes
+
       new URI("file", "", uriPart, null)
     } else if (something.startsWith("file:") || something.startsWith("eval:")) {
       // Assume this is something resembling an URL already, e.g. file:/foo/bar,
@@ -56,18 +57,14 @@ object ScriptURL {
       require(u.isAbsolute, "relative path/URI not supported")
       u
     }
-//    val uri = if (looksLikeURL(something)) {
-//      // Assume this is something resembling an URL already, e.g. file:/foo/bar,
-//      // but we don't know how many slashes there are.
-//      var (scheme, rest) = something.span(_ != ':')
-//      rest = rest.substring(1) // skip the leading :
-//      val slashCount = rest.prefixLength(_ == '/')
-//      new URI(scheme, "", "/" + rest.substring(slashCount), null)
-//    } else {
-//      val withUnixSlashes = something.replace("\\", "/")
-//      val uriPart = if (withUnixSlashes.startsWith("/")) withUnixSlashes else "/" + withUnixSlashes
-//      new URI("file", "", uriPart, null)
-//    }
-    new ScriptURL(uri)
+    normalized(new ScriptURL(uri))
+  }
+
+  private def normalized(url: ScriptURL): ScriptURL = {
+    val normalized = url.uri.normalize()
+    if (url.uri.getPath != normalized.getPath) {
+      // normalization was necessary
+      create(normalized.toString)
+    } else url // no normalization necessary
   }
 }

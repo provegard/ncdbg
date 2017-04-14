@@ -11,10 +11,12 @@ class ScriptURLTest extends UnitTest with TableDrivenPropertyChecks {
     Table(
       ("desc", "input", "output"),
       ("Windows path", "c:\\temp\\test.txt","file:///c:/temp/test.txt"),
+      ("Path with ..", "c:\\temp\\subdir\\..\\test.txt","file:///c:/temp/test.txt"),
       ("Unix path", "/tmp/test.txt", "file:///tmp/test.txt"),
       ("Windows path on Unix form", "/c:/tmp/test.txt", "file:///c:/tmp/test.txt"),
       ("URL-like non-file path", "eval:/foo/bar", "eval:///foo/bar"),
       ("file URL without authority", "file:/foo/bar", "file:///foo/bar"),
+      ("file URL without authority and ..", "file:/foo/subdir/../bar", "file:///foo/bar"),
       ("file URL with authority", "file:///foo/bar", "file:///foo/bar"),
       ("data URL", "data:application/json;base64,e30=", "data:application/json;base64,e30="),
       ("HTTP URL", "http://localhost/test", "http://localhost/test")
