@@ -3,7 +3,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 import java.io.File
 import java.nio.file.Files
 
-import com.programmaticallyspeaking.ncd.host.{Script, ScriptAdded, ScriptEvent}
+import com.programmaticallyspeaking.ncd.host.{Script, ScriptAdded, ScriptEvent, ScriptLocation}
 import com.programmaticallyspeaking.ncd.infra.DelayedFuture
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import org.scalatest.concurrent.{Eventually, IntegrationPatience, ScalaFutures}
@@ -95,4 +95,36 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
       Files.delete(tempFile.toPath)
     }
   }
+
+  "given a script with multiple breakable locations on the same line" - {
+    val script =
+      """function fun() { return 42; } // 2 breakable here, one in 'program' and one in 'fun'
+        |fun(); // ensure compilation of 'fun'
+      """.stripMargin
+
+    lazy val f = testAddScriptWithWait(script, 500.millis)
+
+    "only one breakable location is reported, since Nashorn/Java doesn't store column numbers" in {
+      whenReady(f) { scripts =>
+        scripts.find(_.contents.contains("function fun")) match {
+          case Some(s) =>
+            getHost.getBreakpointLocations(s.id, ScriptLocation(1, 1), Some(ScriptLocation(2, 1))) should be(Seq(ScriptLocation(1, 1)))
+
+          case None => fail("no script")
+        }
+      }
+    }
+
+    "the column number is ignored when getting locations, since we cannot distinguish between column numbers anyway" in {
+      whenReady(f) { scripts =>
+        scripts.find(_.contents.contains("function fun")) match {
+          case Some(s) =>
+            getHost.getBreakpointLocations(s.id, ScriptLocation(1, 3), Some(ScriptLocation(2, 1))) should have size (1)
+
+          case None => fail("no script")
+        }
+      }
+    }
+  }
+
 }

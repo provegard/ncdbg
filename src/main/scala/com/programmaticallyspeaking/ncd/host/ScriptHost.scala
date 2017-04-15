@@ -5,7 +5,9 @@ import com.programmaticallyspeaking.ncd.messaging.Observable
 
 import scala.util.Try
 
-case class ScriptLocation(lineNumber1Based: Int, columnNumber1Based: Int)
+case class ScriptLocation(lineNumber1Based: Int, columnNumber1Based: Int) {
+  override def toString: String = lineNumber1Based + ":" + columnNumber1Based
+}
 
 case class Breakpoint(breakpointId: String, scriptId: String, location: ScriptLocation)
 

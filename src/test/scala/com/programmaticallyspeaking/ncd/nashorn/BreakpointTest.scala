@@ -1,8 +1,12 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host._
+import com.programmaticallyspeaking.ncd.messaging.Observer
 import org.scalactic.Equality
 import org.scalatest.prop.TableDrivenPropertyChecks
+
+import scala.collection.mutable.ListBuffer
+import scala.concurrent.Promise
 
 class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyChecks {
 
@@ -187,6 +191,56 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
 
       waitForBreakpoint(script, _.pauseOnExceptions(ExceptionPauseType.Caught)) { (_, breakpoint) =>
         breakpoint.stackFrames.headOption.map(_.breakpoint.location.lineNumber1Based) should be(Some(1))
+      }
+    }
+  }
+
+  "given a script with multiple breakable locations on the same line" - {
+    val script =
+      """function fun() {
+        |  var foo = function() { return 42; } // multiple breakable here
+        |  return foo;
+        |}
+        |fun()();  // ensure compilation of fun and foo
+        |debugger; // where we will set breakpoints
+        |fun()();  // two calls, should hit two breakpoints...
+      """.stripMargin
+    "a breakpoint set on that line will get hit twice" in {
+
+      val donePromise = Promise[Unit]()
+      var breakpointsHitSoFar = 0
+      val breakpointIds = ListBuffer[String]()
+      val observer = Observer.from[ScriptEvent] {
+        case bp: HitBreakpoint =>
+          breakpointsHitSoFar += 1
+
+          val scriptId = bp.stackFrames.head.breakpoint.scriptId
+          val breakpointId = bp.stackFrames.head.breakpoint.breakpointId
+
+          if (breakpointsHitSoFar == 1) {
+            // debugger
+            (for {
+              s <- getHost.scriptById(scriptId)
+              bp <- getHost.setBreakpoint(s.url.toString, ScriptLocation(2, 3))
+            } yield bp) match {
+              case Some(bps) => breakpointIds += bps.breakpointId
+              case None => donePromise.failure(new Exception("No script or breakpoint"))
+            }
+          } else breakpointIds += breakpointId
+
+          if (breakpointsHitSoFar == 3) {
+            // should be done!
+            if (breakpointIds.distinct.size == 1) {
+              donePromise.success(())
+            } else {
+              donePromise.failure(new Exception(s"Breakpoint ID mismatch, ${breakpointIds.mkString(", ")}"))
+            }
+          } else getHost.resume()
+
+        case _ => // ignore
+      }
+      observeAndRunScriptAsync(script, observer) { _ =>
+        donePromise.future
       }
     }
   }

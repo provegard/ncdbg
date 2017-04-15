@@ -6,7 +6,7 @@ import java.util.Collections
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
-import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
+import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator, ScriptURL}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.{JSObjectMirror, ReflectionFieldMirror, ScriptObjectMirror}
 import com.sun.jdi.event._
@@ -140,7 +140,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private val scriptByPath = mutable.Map[String, Script]()
 
   private val breakableLocationsByScriptUrl = mutable.Map[String, ListBuffer[BreakableLocation]]()
-  private val enabledBreakpoints = mutable.Map[String, BreakableLocation]()
+
+  private val enabledBreakpoints = mutable.Map[String, ActiveBreakpoint]()
+  private val oneTimeEnabledBreakableLocations = ListBuffer[BreakableLocation]()
 
   private val scriptIdGenerator = new IdGenerator("nds")
   private val breakpointIdGenerator = new IdGenerator("ndb")
@@ -247,7 +249,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     val isKnownScript = breakableLocationsByScriptUrl.contains(script.url.toString)
 
     val erm = virtualMachine.eventRequestManager()
-    val breakableLocations = locations.map(l => new BreakableLocation(breakpointIdGenerator.next, script, erm, l))
+    val breakableLocations = locations.map(l => new BreakableLocation(script, erm, l))
     addBreakableLocations(script, breakableLocations)
 
     if (isKnownScript) {
@@ -413,10 +415,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               attemptToResolveSourceLessReferenceTypes()
 
               // Disable breakpoints that were enabled once
-              enabledBreakpoints.filter(_._2.isEnabledOnce).foreach { e =>
-                e._2.disable()
-                enabledBreakpoints -= e._1
-              }
+              oneTimeEnabledBreakableLocations.foreach(_.disable())
+              oneTimeEnabledBreakableLocations.clear()
 
               doResume = handleBreakpoint(ev)
 
@@ -738,7 +738,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             }
 
             try {
-              findBreakableLocation(location).map(w => new StackFrameImpl(stackframeId, thisObj, scopeChain, w, evaluateCodeOnFrame, functionDetails(functionMethod))) match {
+              findActiveBreakpoint(location).map(ab => new StackFrameImpl(stackframeId, thisObj, scopeChain, ab, evaluateCodeOnFrame, functionDetails(functionMethod))) match {
                 case Some(sf) => StackFrameHolder(Some(sf))
                 case None =>
                   log.warn(s"Won't create a stack frame for location ($location) since we don't recognize it.")
@@ -894,25 +894,36 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   override def setBreakpoint(scriptUri: String, scriptLocation: ScriptLocation): Option[Breakpoint] = {
-    findBreakableLocation(scriptUri, scriptLocation).map { br =>
-      log.info(s"Setting a breakpoint at line ${br.scriptLocation.lineNumber1Based} in $scriptUri")
+    findBreakableLocations(scriptUri, scriptLocation).map { all =>
+      val newId = breakpointIdGenerator.next
+      log.info(s"Setting a breakpoint with ID $newId for locations ${all.mkString(", ")} in $scriptUri")
 
-      br.enable()
-      enabledBreakpoints += (br.id -> br)
-      br.toBreakpoint
+      val activeBp = ActiveBreakpoint(newId, all)
+      activeBp.enable()
+      enabledBreakpoints += (activeBp.id -> activeBp)
+      activeBp.toBreakpoint
     }
   }
 
   private def findBreakableLocation(location: Location): Option[BreakableLocation] = {
     scriptByPath.get(scriptPathFromLocation(location)).flatMap { script =>
       val sl = BreakableLocation.scriptLocationFromScriptAndLocation(script, location)
-      findBreakableLocation(script.url.toString, sl)
+      findBreakableLocations(script.url.toString, sl).flatMap(_.find(_.scriptLocation == sl))
     }
   }
 
-  private def findBreakableLocation(scriptUrl: String, scriptLocation: ScriptLocation): Option[BreakableLocation] = {
-    breakableLocationsByScriptUrl.get(scriptUrl).flatMap { breakableLocations =>
-      breakableLocations.find(_.scriptLocation == scriptLocation)
+  private def findActiveBreakpoint(location: Location): Option[ActiveBreakpoint] = {
+    findBreakableLocation(location).map { bl =>
+      enabledBreakpoints.values.find(_.contains(bl)) match {
+        case Some(ab) => ab // existing active breakpoint
+        case None => ActiveBreakpoint(breakpointIdGenerator.next, Seq(bl)) // temporary breakpoint (e.g. debugger statement)
+      }
+    }
+  }
+
+  private def findBreakableLocations(scriptUrl: String, scriptLocation: ScriptLocation): Option[Seq[BreakableLocation]] = {
+    breakableLocationsByScriptUrl.get(scriptUrl).map { breakableLocations =>
+      breakableLocations.filter(_.scriptLocation.lineNumber1Based == scriptLocation.lineNumber1Based)
     }
   }
 
@@ -947,10 +958,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   override def removeBreakpointById(id: String): Done = {
     enabledBreakpoints.get(id) match {
-      case Some(bp) =>
+      case Some(activeBp) =>
         log.info(s"Removing breakpoint with id $id")
-        bp.disable()
-        enabledBreakpoints -= bp.id
+        activeBp.disable()
+        enabledBreakpoints -= activeBp.id
       case None =>
         log.warn(s"Got request to remove an unknown breakpoint with id $id")
     }
@@ -958,8 +969,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def enableBreakpointOnce(bl: BreakableLocation): Unit = {
-    bl.enableOnce()
-    enabledBreakpoints += (bl.id -> bl)
+    if (!bl.isEnabled) {
+      bl.enable()
+      oneTimeEnabledBreakableLocations += bl
+    }
   }
 
   private def expensiveStepInto(): Unit = {
@@ -973,10 +986,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private def setTemporaryBreakpointsInStackFrame(stackFrame: StackFrame): Int = stackFrame match {
     case sf: StackFrameImpl =>
       // Set one-off breakpoints in all locations of the method of this stack frame
-      val scriptUri = sf.breakableLocation.script.url
+      val breakableLocation = sf.activeBreakpoint.firstBreakableLocation
+      val scriptUri = breakableLocation.script.url
       val allBreakableLocations = breakableLocationsByScriptUrl(scriptUri.toString)
-      val sfMethod = sf.breakableLocation.location.method()
-      val sfLineNumber = sf.breakableLocation.location.lineNumber()
+      val sfMethod = breakableLocation.location.method()
+      val sfLineNumber = breakableLocation.location.lineNumber()
       val relevantBreakableLocations = allBreakableLocations.filter(bl => bl.location.method() == sfMethod && bl.location.lineNumber() > sfLineNumber)
       relevantBreakableLocations.foreach(enableBreakpointOnce)
       relevantBreakableLocations.size
@@ -1374,27 +1388,27 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   override def getBreakpointLocations(scriptId: String, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation] = {
     scriptById(scriptId).flatMap(script => breakableLocationsByScriptUrl.get(script.url.toString)) match {
       case Some(locations) =>
-        val endLine = to.map(_.lineNumber1Based).getOrElse(Int.MaxValue)
-        locations.filter { loc =>
-          val locLine = loc.scriptLocation.lineNumber1Based
-          val locCol = loc.scriptLocation.columnNumber1Based
-          if (locLine == from.lineNumber1Based)
-            loc.scriptLocation.columnNumber1Based >= from.columnNumber1Based
-          else if (to.map(_.lineNumber1Based).contains(locLine)) // line end is inclusive, but column end on that line is exclusive
-            to.exists(_.columnNumber1Based > locCol) // exclusive end
-          else
-            locLine > from.lineNumber1Based && locLine < endLine
-        }.map(_.scriptLocation)
+        // Get hold of all script locations we know of, but since Nashorn/Java doesn't report column number, we
+        // a) ignore the column number
+        // b) may end up with multiple ones with the same line number
+        val candidates = locations.map(_.scriptLocation).filter { sloc =>
+          sloc.lineNumber1Based >= from.lineNumber1Based && to.forall(sloc.lineNumber1Based < _.lineNumber1Based)
+        }
+
+        // Filter so that we end up with one location per line, max. Since ScriptLocation is a case class and all
+        // column numbers on the same line will be the same (again, since Nashorn/Java doesn't report column numbers),
+        // it's sufficient to get the unique locations.
+        candidates.distinct
 
       case None => throw new IllegalArgumentException("Unknown script ID: " + scriptId)
     }
   }
 
   class StackFrameImpl(val id: String, val thisObj: ValueNode, val scopeChain: Seq[Scope],
-                       val breakableLocation: BreakableLocation,
+                       val activeBreakpoint: ActiveBreakpoint,
                        val eval: CodeEvaluator,
                        val functionDetails: FunctionDetails) extends StackFrame {
-    val breakpoint = breakableLocation.toBreakpoint
+    val breakpoint = activeBreakpoint.toBreakpoint
   }
 
   case class StackFrameHolder(stackFrame: Option[StackFrame], location: Option[Location] = None) {
@@ -1405,3 +1419,24 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 }
 
 object InitialInitializationComplete extends ScriptEvent
+
+/**
+  * An active breakpoint may map to one or more breakable locations, since we cannot distinguish between location
+  * column numbers.
+  *
+  * @param id the breakpoint ID
+  * @param breakableLocations the breakable locations
+  */
+case class ActiveBreakpoint(id: String, breakableLocations: Seq[BreakableLocation]) {
+  assert(breakableLocations.nonEmpty, "An active breakpoint needs at least one breakable location")
+  assert(breakableLocations.map(_.scriptLocation.columnNumber1Based).distinct.size == 1, "Unexpected different column numbers in breakable locations!")
+
+  val firstBreakableLocation = breakableLocations.head
+
+  def toBreakpoint = firstBreakableLocation.toBreakpoint(id)
+
+  def disable(): Unit = breakableLocations.foreach(_.disable())
+  def enable(): Unit = breakableLocations.foreach(_.enable())
+
+  def contains(breakableLocation: BreakableLocation) = breakableLocations.contains(breakableLocation)
+}
