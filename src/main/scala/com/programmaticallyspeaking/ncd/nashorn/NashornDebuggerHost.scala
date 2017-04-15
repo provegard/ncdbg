@@ -1,12 +1,11 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import java.io.{File, FileNotFoundException}
-import java.net.{URI, URL}
+import java.io.FileNotFoundException
 import java.util.Collections
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
-import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator, ScriptURL}
+import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.{JSObjectMirror, ReflectionFieldMirror, ScriptObjectMirror}
 import com.sun.jdi.event._
@@ -132,10 +131,10 @@ object NashornDebuggerHost {
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis: ((NashornScriptHost) => Unit) => Unit) extends NashornScriptHost with Logging {
   import NashornDebuggerHost._
+  import com.programmaticallyspeaking.ncd.infra.BetterOption._
 
   import ExecutionContext.Implicits._
   import scala.collection.JavaConverters._
-  import com.programmaticallyspeaking.ncd.infra.BetterOption._
 
   private val scriptByPath = mutable.Map[String, Script]()
 
