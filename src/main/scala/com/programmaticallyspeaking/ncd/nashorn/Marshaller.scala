@@ -156,7 +156,10 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   def isScriptObject(value: Value): Boolean = value match {
     case objRef: ObjectReference =>
       val typeName = value.`type`().name()
+      // JO classes are dynamically generated
       if (typeName.startsWith("jdk.nashorn.internal.scripts.JO")) return true
+      // JD classes as well. Saw these first with JDK 9!
+      if (typeName.startsWith("jdk.nashorn.internal.scripts.JD")) return true
       Try {
         // TODO: Cache this
         val clazz = Class.forName(typeName)
