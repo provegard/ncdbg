@@ -176,7 +176,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     * Configure what we do when we encounter one of the wanted types.
     */
   private val actionPerWantedType: Map[String, () => Unit] = Map(
-    NIR_ScriptRuntime -> enableBreakingAtDebuggerStatement
+    NIR_ScriptRuntime -> enableBreakingAtDebuggerStatement _
   )
 
   /**
