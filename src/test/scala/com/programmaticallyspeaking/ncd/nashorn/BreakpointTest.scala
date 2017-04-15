@@ -100,6 +100,17 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
       }
     }
 
+    "the (1-based) column number is reported" in {
+      val script =
+        """(function () {
+          |    debugger; // 4 spaces -> 'd' is at position 5
+          |})();
+        """.stripMargin
+      waitForBreakpoint(script) { (_, breakpoint) =>
+        breakpoint.stackFrames.headOption.map(_.breakpoint.location.columnNumber1Based) should be (Some(5))
+      }
+    }
+
     "a local scope" - {
       val script =
         """(function (arg) {
