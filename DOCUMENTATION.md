@@ -4,6 +4,10 @@
 
 * Java version 1.8.0_66 or newer, though NCDbg currently won't enforce it.
 
+### Java 9
+
+I've tested running a _debug target_ with Java 9 (JDK build 9-ea+164) and NCDbg running with Java 8 could debug it just fine. I haven't tested building and running NCDbg on Java 9 simply because I couldn't get Gradle to work with Java 9.
+
 ## The debug target
 
 The Nashorn application to debug is called the _debug target_. Start the debug target with the following VM arguments:
