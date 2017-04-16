@@ -127,6 +127,8 @@ object NashornDebuggerHost {
   val hiddenPrefix = "||"
 
   val localScopeObjectIdPrefix = "$$locals-"
+
+  case class ObjectDescriptor(native: Option[Value], marshalled: ComplexNode, extras: Map[String, ValueNode])
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis: ((NashornScriptHost) => Unit) => Unit) extends NashornScriptHost with Logging {
@@ -151,7 +153,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   private var isInitialized = false
 
-  private val objectPairById = mutable.Map[ObjectId, (Option[Value], ComplexNode, Map[String, ValueNode])]()
+  private val objectDescriptorById = mutable.Map[ObjectId, ObjectDescriptor]()
 
   /**
     * Keeps track of the stack frame location for a given locals object that we have created to host local variable
@@ -161,7 +163,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private val locationForLocals = mutable.Map[ObjectId, Location]()
 
   private val mappingRegistry: MappingRegistry = (value: Value, valueNode: ComplexNode, extra: Map[String, ValueNode]) => {
-    objectPairById += valueNode.objectId -> (Option(value), valueNode, extra)
+    objectDescriptorById += valueNode.objectId -> ObjectDescriptor(Option(value), valueNode, extra)
   }
 
   private val foundWantedTypes = mutable.Map[String, ClassType]()
@@ -764,7 +766,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     val thread = ev.thread()
 
     // Start with a fresh object registry
-    objectPairById.clear()
+    objectDescriptorById.clear()
 
     locationForLocals.clear()
 
@@ -931,7 +933,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       log.info("Resuming virtual machine")
       virtualMachine.resume()
       pausedData = None
-      objectPairById.clear() // only valid when paused
+      objectDescriptorById.clear() // only valid when paused
       emitEvent(Resumed)
     case None =>
       log.debug("Ignoring resume request when not paused (no pause data).")
@@ -1055,9 +1057,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             // Get the Value instances corresponding to the named objects
             val namedValues = namedObjects.flatMap {
               case (name, objectId) =>
-                objectPairById.get(objectId) match {
+                objectDescriptorById.get(objectId) match {
                   // TODO: Should we handle extras here?
-                  case Some((maybeValue, _, _)) if maybeValue.isDefined => Seq(name -> maybeValue.get)
+                  case Some(descriptor) if descriptor.native.isDefined => Seq(name -> descriptor.native.get)
                   case Some(_) => Seq.empty
                   case _ =>
                     throw new IllegalArgumentException(s"No object with ID '$objectId' was found.")
@@ -1144,7 +1146,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private def arrayValuesFrom(vn: ValueNode)(implicit marshaller: Marshaller): Either[String, List[Value]] = {
     vn match {
       case an: ArrayNode =>
-        objectPairById.get(an.objectId).flatMap(_._1) match {
+        objectDescriptorById.get(an.objectId).flatMap(_.native) match {
           case Some(objRef: ObjectReference) if marshaller.isScriptObject(objRef) =>
             val mirror = new ScriptObjectMirror(objRef)
             if (mirror.isArray) {
@@ -1348,8 +1350,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = pausedData match {
     case Some(pd) =>
       implicit val marshaller = new Marshaller(pd.thread, mappingRegistry)
-      objectPairById.get(objectId) match {
-        case Some((maybeValue, node, extraEntries)) =>
+      objectDescriptorById.get(objectId) match {
+        case Some(ObjectDescriptor(maybeValue, node, extraEntries)) =>
           // If we have a script object, get properties from it
           val scriptObjectProps = maybeValue match {
             case Some(ref: ObjectReference) if marshaller.isScriptObject(ref) =>
