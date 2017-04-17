@@ -7,7 +7,7 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
-import com.programmaticallyspeaking.ncd.nashorn.mirrors.{JSObjectMirror, ReflectionFieldMirror, ScriptObjectMirror}
+import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
 import com.sun.jdi.request.{EventRequest, ExceptionRequest}
 import com.sun.jdi.{StackFrame => _, _}
@@ -1238,125 +1238,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     Done
   }
 
-  private def propertiesFromJSObject(objectId: ObjectId, jsObject: ObjectReference, isArray: Boolean)(implicit marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
-    import com.programmaticallyspeaking.ncd.infra.StringUtils._
-    val key = ObjectPropertiesKey(objectId, onlyOwn = true, onlyAccessors = false)
-    pausedData.get.objectPropertiesCache.getOrElseUpdate(key, {
-
-      val mirror = new JSObjectMirror(jsObject)
-
-      // For an array, keySet should return indices + "length", and then we get use getSlot.
-      val properties = mirror.keySet()
-
-      properties.map { prop =>
-        val theValue =
-          if (isArray && isUnsignedInt(prop)) mirror.getSlot(prop.toInt) else mirror.getMember(prop)
-
-        // Note: A ValueNode shouldn't be null/undefined, so use Some(...) rather than Option(...) for the value
-        prop -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
-          isWritable = true, isOwn = true, Some(theValue), None, None)
-      }.toMap
-    })
-  }
-
-  private def propertiesFromArray(array: ArrayReference)(implicit marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
-    // Note: A ValueNode shouldn't be null/undefined, so use Some(...) rather than Option(...) for the value
-    def createProp(value: ValueNode) =
-      ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
-        isWritable = true, isOwn = true, Some(value), None, None)
-
-    // Just return index properties + length.
-    val props = (0 until array.length()).map { idx =>
-      val theValue = marshaller.marshal(array.getValue(idx))
-      idx.toString -> createProp(theValue)
-    } :+ ("length" -> createProp(SimpleValue(array.length())))
-    props.toMap
-  }
-
-  private def propertiesFromArbitraryObject(obj: ObjectReference, onlyOwn: Boolean)(implicit marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
-    val invoker = new DynamicInvoker(marshaller.thread, obj)
-    val clazz = invoker.applyDynamic("getClass")().asInstanceOf[ObjectReference]
-    val classInvoker = new DynamicInvoker(marshaller.thread, clazz)
-
-    // TODO: Handle onlyOwn == false
-    classInvoker.getDeclaredFields() match {
-      case arr: ArrayReference =>
-        arr.getValues.asScala.map { f =>
-          val mirror = new ReflectionFieldMirror(f.asInstanceOf[ObjectReference])
-          val isAccessible = mirror.isAccessible
-          if (!isAccessible) {
-            mirror.setAccessible(true)
-          }
-          try {
-            val theValue = mirror.get(obj)
-
-            // TODO: isOwn depends on input (see TODO above)
-            mirror.name -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
-              isWritable = !mirror.isFinal, isOwn = true, Some(theValue), None, None)
-          } finally {
-            if (!isAccessible) {
-              mirror.setAccessible(false)
-            }
-          }
-
-        }.toMap
-      case _ => Map.empty
-    }
-  }
-
-  private def propertiesFromScriptObject(objectId: ObjectId, scriptObject: ObjectReference, onlyOwn: Boolean, onlyAccessors: Boolean)(implicit marshaller: Marshaller): Map[String, ObjectPropertyDescriptor] = {
-    val key = ObjectPropertiesKey(objectId, onlyOwn, onlyAccessors)
-    pausedData.get.objectPropertiesCache.getOrElseUpdate(key, {
-      val thread = marshaller.thread
-      val mirror = new ScriptObjectMirror(scriptObject)
-
-      val propertyNames = if (onlyOwn) {
-        // Get own properties, pass true to get non-enumerable ones as well (because they are relevant for debugging)
-        mirror.getOwnKeys(true)
-      } else {
-        // Get all properties - this method walks the prototype chain
-        mirror.propertyIterator().toArray
-      }
-      propertyNames.map { prop =>
-        // Get either only the own descriptor or try both ways (own + proto). This is required for us to know
-        // if the descriptor represents an own property.
-        val ownDescriptor = mirror.getOwnPropertyDescriptor(prop)
-        // TODO ugly, ugly.. make nicer
-        val hasOwnDescriptor = ownDescriptor.isDefined
-
-        val protoDescriptor = if (onlyOwn || hasOwnDescriptor) None else mirror.getPropertyDescriptor(prop)
-
-        val descriptorToUse = protoDescriptor.orElse(ownDescriptor)
-          .getOrElse(throw new IllegalStateException(s"No property descriptor for ${scriptObject.`type`().name()}.$prop"))
-
-        // Read descriptor-generic information
-        val theType = descriptorToUse.getType
-        val isConfigurable = descriptorToUse.isConfigurable
-        val isEnumerable = descriptorToUse.isEnumerable
-        val isWritable = descriptorToUse.isWritable
-
-        prop -> (theType match {
-          case 0 =>
-            // Generic
-            ObjectPropertyDescriptor(PropertyDescriptorType.Generic, isConfigurable, isEnumerable, isWritable, hasOwnDescriptor,
-              None, None, None)
-          case 1 =>
-            // Data, value is ok to use
-            val theValue = descriptorToUse.getValue
-            ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable, isEnumerable, isWritable, hasOwnDescriptor,
-              Option(theValue), None, None)
-          case 2 =>
-            // Accessor, getter/setter are ok to use
-            val getter = descriptorToUse.getGetter
-            val setter = descriptorToUse.getSetter
-            ObjectPropertyDescriptor(PropertyDescriptorType.Accessor, isConfigurable, isEnumerable, isWritable, hasOwnDescriptor,
-              None, Option(getter), Option(setter))
-          case other => throw new IllegalArgumentException("Unknown property descriptor type: " + other)
-        })
-      }.filter(e => !onlyAccessors || e._2.descriptorType == PropertyDescriptorType.Accessor).toMap
-    })
-  }
-
   private def removeHidden(prop: (String, ObjectPropertyDescriptor)): Boolean = !prop._1.startsWith(hiddenPrefix)
 
   private def accessorToDataForLocals(objectId: ObjectId)(prop: (String, ObjectPropertyDescriptor)): (String, ObjectPropertyDescriptor) = {
@@ -1380,36 +1261,46 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     } else prop
   }
 
+  private def createPropertyHolder(objectId: ObjectId, objectDescriptor: ObjectDescriptor)(implicit marshaller: Marshaller): Option[PropertyHolder] = {
+    objectDescriptor.native collect {
+      case ref: ObjectReference if marshaller.isScriptObject(ref) =>
+        new ScriptObjectPropertyHolder(ref) {
+          override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+            // Don't include hidden properties that we add in scopeWithFreeVariables
+            // Furthermore, for a local scope object, properties are accessors, but we want them to appear as regular
+            // properties to DevTools. The fact that they are accessors is an implementation detail.
+            super.properties(onlyOwn, onlyAccessors).filter(removeHidden).map(accessorToDataForLocals(objectId))
+          }
+        }
+      case ref: ObjectReference if marshaller.isJSObject(ref) =>
+        new JSObjectPropertyHolder(ref, objectDescriptor.marshalled.isInstanceOf[ArrayNode])
+      case ref: ArrayReference =>
+        new ArrayPropertyHolder(ref)
+      case obj: ObjectReference =>
+        new ArbitraryObjectPropertyHolder(obj)
+    }
+  }
+
   override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = pausedData match {
     case Some(pd) =>
       implicit val marshaller = new Marshaller(pd.thread, mappingRegistry)
       objectDescriptorById.get(objectId) match {
-        case Some(ObjectDescriptor(maybeValue, node, extraEntries)) =>
-          // If we have a script object, get properties from it
-          val scriptObjectProps = maybeValue match {
-            case Some(ref: ObjectReference) if marshaller.isScriptObject(ref) =>
-              // Don't include hidden properties that we add in scopeWithFreeVariables
-              // Furthermore, for a local scope object, properties are accessors, but we want them to appear as regular
-              // properties to DevTools. The fact that they are accessors is an implementation detail.
-              propertiesFromScriptObject(objectId, ref, onlyOwn, onlyAccessors).filter(removeHidden).map(accessorToDataForLocals(objectId))
-            case Some(ref: ObjectReference) if marshaller.isJSObject(ref) =>
-              propertiesFromJSObject(objectId, ref, node.isInstanceOf[ArrayNode])
-            case Some(ref: ArrayReference) =>
-              propertiesFromArray(ref)
-            case Some(obj: ObjectReference) =>
-              propertiesFromArbitraryObject(obj, onlyOwn)
-            case _ => Map.empty
-          }
+        case Some(desc: ObjectDescriptor) =>
+          // Get object properties, via a cache.
+          val cacheKey = ObjectPropertiesKey(objectId, onlyOwn, onlyAccessors)
+          val objectProperties = pausedData.get.objectPropertiesCache.getOrElseUpdate(cacheKey, {
+            createPropertyHolder(objectId, desc).map(_.properties(onlyOwn, onlyAccessors)).getOrElse(Map.empty)
+          })
 
           // In addition, the node may contain extra entries that typically do not come from Nashorn. One example is
           // the Java stack we add if we detect a Java exception.
-          val extraProps = extraEntries.map(e => {
+          val extraProps = desc.extras.map(e => {
             e._1 -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true, isWritable = false,
               isOwn = true, Some(e._2), None, None)
           })
 
           // Combine the two maps
-          scriptObjectProps ++ extraProps
+          objectProperties ++ extraProps
 
         case None =>
           log.warn (s"Unknown object ($objectId), cannot get properties")
