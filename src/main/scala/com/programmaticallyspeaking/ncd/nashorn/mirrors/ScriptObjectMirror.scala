@@ -1,7 +1,8 @@
 package com.programmaticallyspeaking.ncd.nashorn.mirrors
 
+import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror.getObjectSignature
-import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, Marshaller}
+import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, Marshaller, PropertyHolder}
 import com.sun.jdi._
 
 import scala.language.implicitConversions
@@ -11,7 +12,7 @@ import scala.language.implicitConversions
   *
   * @param scriptObject the `ScriptObject` instance to interact with
   */
-class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller: Marshaller) {
+class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller: Marshaller) extends PropertyHolder {
   import Mirrors._
   import ScriptObjectMirror._
 
@@ -60,6 +61,53 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
   def asArray = {
     assert(isArray, "asArray can only be called for an array")
     new ScriptArrayMirror(scriptObject)
+  }
+
+  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+    val propertyNames = if (onlyOwn) {
+      // Get own properties, pass true to get non-enumerable ones as well (because they are relevant for debugging)
+      getOwnKeys(true)
+    } else {
+      // Get all properties - this method walks the prototype chain
+      propertyIterator().toArray
+    }
+    propertyNames.map { prop =>
+      // Get either only the own descriptor or try both ways (own + proto). This is required for us to know
+      // if the descriptor represents an own property.
+      val ownDescriptor = getOwnPropertyDescriptor(prop)
+      // TODO ugly, ugly.. make nicer
+      val hasOwnDescriptor = ownDescriptor.isDefined
+
+      val protoDescriptor = if (onlyOwn || hasOwnDescriptor) None else getPropertyDescriptor(prop)
+
+      val descriptorToUse = protoDescriptor.orElse(ownDescriptor)
+        .getOrElse(throw new IllegalStateException(s"No property descriptor for ${scriptObject.`type`().name()}.$prop"))
+
+      // Read descriptor-generic information
+      val theType = descriptorToUse.getType
+      val isConfigurable = descriptorToUse.isConfigurable
+      val isEnumerable = descriptorToUse.isEnumerable
+      val isWritable = descriptorToUse.isWritable
+
+      prop -> (theType match {
+        case 0 =>
+          // Generic
+          ObjectPropertyDescriptor(PropertyDescriptorType.Generic, isConfigurable, isEnumerable, isWritable, hasOwnDescriptor,
+            None, None, None)
+        case 1 =>
+          // Data, value is ok to use
+          val theValue = descriptorToUse.getValue
+          ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable, isEnumerable, isWritable, hasOwnDescriptor,
+            Option(theValue), None, None)
+        case 2 =>
+          // Accessor, getter/setter are ok to use
+          val getter = descriptorToUse.getGetter
+          val setter = descriptorToUse.getSetter
+          ObjectPropertyDescriptor(PropertyDescriptorType.Accessor, isConfigurable, isEnumerable, isWritable, hasOwnDescriptor,
+            None, Option(getter), Option(setter))
+        case other => throw new IllegalArgumentException("Unknown property descriptor type: " + other)
+      })
+    }.filter(e => !onlyAccessors || e._2.descriptorType == PropertyDescriptorType.Accessor).toMap
   }
 }
 

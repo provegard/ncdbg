@@ -1,10 +1,12 @@
 package com.programmaticallyspeaking.ncd.nashorn.mirrors
 
 import com.programmaticallyspeaking.ncd.host.ValueNode
-import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, Marshaller}
+import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
+import com.programmaticallyspeaking.ncd.infra.StringUtils.isUnsignedInt
+import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, Marshaller, PropertyHolder}
 import com.sun.jdi.ObjectReference
 
-class JSObjectMirror(val jsObject: ObjectReference)(implicit marshaller: Marshaller) {
+class JSObjectMirror(val jsObject: ObjectReference)(implicit marshaller: Marshaller) extends PropertyHolder {
   import JSObjectMirror._
   import Mirrors._
 
@@ -28,6 +30,18 @@ class JSObjectMirror(val jsObject: ObjectReference)(implicit marshaller: Marshal
   def getMember(key: String): ValueNode = invoker.applyDynamic(getMemberSignature)(key)
 
   def getSlot(index: Int): ValueNode = invoker.applyDynamic(getSlotSignature)(index)
+
+  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+    // For an array, keySet should return indices + "length", and then we get use getSlot.
+    keySet().map { prop =>
+      val theValue =
+        if (isArray && isUnsignedInt(prop)) getSlot(prop.toInt) else getMember(prop)
+
+      // Note: A ValueNode shouldn't be null/undefined, so use Some(...) rather than Option(...) for the value
+      prop -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
+        isWritable = true, isOwn = true, Some(theValue), None, None)
+    }.toMap
+  }
 }
 
 object JSObjectMirror {

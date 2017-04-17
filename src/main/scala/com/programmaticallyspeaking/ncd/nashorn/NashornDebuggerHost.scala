@@ -7,7 +7,7 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
-import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
+import com.programmaticallyspeaking.ncd.nashorn.mirrors.{JSObjectMirror, ScriptObjectMirror}
 import com.sun.jdi.event._
 import com.sun.jdi.request.{EventRequest, ExceptionRequest}
 import com.sun.jdi.{StackFrame => _, _}
@@ -1264,7 +1264,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private def createPropertyHolder(objectId: ObjectId, objectDescriptor: ObjectDescriptor)(implicit marshaller: Marshaller): Option[PropertyHolder] = {
     objectDescriptor.native collect {
       case ref: ObjectReference if marshaller.isScriptObject(ref) =>
-        new ScriptObjectPropertyHolder(ref) {
+        new ScriptObjectMirror(ref) {
           override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
             // Don't include hidden properties that we add in scopeWithFreeVariables
             // Furthermore, for a local scope object, properties are accessors, but we want them to appear as regular
@@ -1273,7 +1273,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           }
         }
       case ref: ObjectReference if marshaller.isJSObject(ref) =>
-        new JSObjectPropertyHolder(ref, objectDescriptor.marshalled.isInstanceOf[ArrayNode])
+        new JSObjectMirror(ref)
       case ref: ArrayReference =>
         new ArrayPropertyHolder(ref)
       case obj: ObjectReference =>
