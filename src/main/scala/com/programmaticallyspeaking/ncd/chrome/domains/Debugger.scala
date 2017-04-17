@@ -179,7 +179,9 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
 
     case Debugger.setBreakpointByUrl(lineNumberBase0, url, columnNumberBase0, condition) =>
       val lineNumberBase1 = lineNumberBase0 + 1
-      scriptHost.setBreakpoint(url, ScriptLocation(lineNumberBase0 + 1, columnNumberBase0 + 1), condition) match {
+      // DevTools passes "" when the breakpoint isn't conditional
+      val actualCondition = condition.filter(_ != "")
+      scriptHost.setBreakpoint(url, ScriptLocation(lineNumberBase0 + 1, columnNumberBase0 + 1), actualCondition) match {
         case Some(bp) =>
           // Echo the column number. Java/JDI doesn't care about column numbers (at least Location doesn't contain one),
           // but it seems to be important for proper source map support.

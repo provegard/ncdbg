@@ -29,7 +29,7 @@ import scala.util.{Failure, Success, Try}
 
 class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eventually with TableDrivenPropertyChecks {
   import org.mockito.Mockito._
-  import org.mockito.ArgumentMatchers._
+  import org.mockito.ArgumentMatchers.{eq => meq, _}
   import com.programmaticallyspeaking.ncd.testing.MockingUtils._
 
   def script(theId: String, hash: String = "xyz"): Script = new Script {
@@ -132,12 +132,12 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
     "setBreakpointByUrl" - {
 
-      def setBreakpointByUrl(lineNumber: Int, scriptUri: String): Debugger.SetBreakpointByUrlResult = {
+      def setBreakpointByUrl(lineNumber: Int, scriptUri: String, condition: Option[String] = None): Debugger.SetBreakpointByUrlResult = {
         addScript(script("a")) //TODO: specify line number range here to make the test clearer
         val debugger = newActorInstance[Debugger]
 
         debugger ! Messages.Request("1", Domain.enable)
-        inside(requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(lineNumber, scriptUri, 0, None))) {
+        inside(requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(lineNumber, scriptUri, 0, condition))) {
           case result: Debugger.SetBreakpointByUrlResult => result
         }
       }
@@ -170,6 +170,11 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       "should return no locatoins if the breakpoint location is unknown" in {
         val result = setBreakpointByUrl(101, "a")
         result.locations should be ('empty)
+      }
+
+      "should translate empty condition to no condition" in {
+        setBreakpointByUrl(3, "a", Some(""))
+        verify(currentScriptHost).setBreakpoint(any[String], any[ScriptLocation], meq(None))
       }
     }
 
