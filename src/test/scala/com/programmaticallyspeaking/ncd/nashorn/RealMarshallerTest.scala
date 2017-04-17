@@ -234,7 +234,7 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
 }
 
 object RealMarshallerTest {
-  def expand(host: ScriptHost, node: ValueNode): Any = {
+  def expand(host: ScriptHost, node: ValueNode, includeInherited: Boolean = false): Any = {
     val seenObjectIds = mutable.Set[ObjectId]()
     def recurse(node: ValueNode): Any = node match {
       case complex: ComplexNode if seenObjectIds.contains(complex.objectId) =>
@@ -242,7 +242,7 @@ object RealMarshallerTest {
         throw new Exception("Cycle detected for object " + complex.objectId)
       case complex: ComplexNode =>
         seenObjectIds += complex.objectId
-        host.getObjectProperties(complex.objectId, true, false).map(e => e._2.descriptorType match {
+        host.getObjectProperties(complex.objectId, !includeInherited, false).map(e => e._2.descriptorType match {
           case PropertyDescriptorType.Generic =>
             e._1 -> "???"
           case PropertyDescriptorType.Data =>

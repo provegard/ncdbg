@@ -47,9 +47,13 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     ("JSObject array (slot only)", s"createInstance('${classOf[OnlySlotBasedArrayJSObject].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
     ("JSObject array (slot with misbehaving getMember)", s"createInstance('${classOf[SlotBasedArrayJSObjectThatMisbehavesForGetMember].getName}')", Map("0" -> "a", "1" -> "b", "length" -> 2)),
     ("JSObject object", s"createInstance('${classOf[ObjectLikeJSObject].getName}')", Map("a" -> 42, "b" -> 43)),
-    ("Scala object with val", s"createInstance('${classOf[ClassWithVal].getName}')", Map("foo" -> "bar")),
-    ("Scala object with var", s"createInstance('${classOf[ClassWithVar].getName}')", Map("foo" -> "var")),
-    ("Scala object with private val", s"createInstance('${classOf[ClassWithPrivateVal].getName}')", Map("foo" -> "priv-val"))
+    ("Scala instance with val", s"createInstance('${classOf[ClassWithVal].getName}')", Map("foo" -> "bar")),
+    ("Scala instance with var", s"createInstance('${classOf[ClassWithVar].getName}')", Map("foo" -> "var")),
+    ("Scala instance with private val", s"createInstance('${classOf[ClassWithPrivateVal].getName}')", Map("foo" -> "priv-val"))
+  )
+  val complexValuesAlsoInherited = Table(
+    ("desc", "expression", "expected"),
+    ("Scala instance with inherited field", s"createInstance('${classOf[SubClass].getName}')", Map("foo" -> "priv-val", "sub" -> "qux"))
   )
 
   def testProperties(clazz: Class[_])(handler: (Map[String, ObjectPropertyDescriptor] => Unit)) = {
@@ -65,9 +69,17 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
 
   "Object property expansion works for" - {
     forAll(complexValues) { (desc, expr, expected) =>
-      desc in {
+      desc + " (only own)" in {
         evaluateExpression(expr) { (host, actual) =>
           expand(host, actual) should equal (expected)
+        }
+      }
+    }
+
+    forAll(complexValuesAlsoInherited) { (desc, expr, expected) =>
+      desc + " (also inherited)" in {
+        evaluateExpression(expr) { (host, actual) =>
+          expand(host, actual, true) should equal (expected)
         }
       }
     }
@@ -117,6 +129,18 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
           props.find(_._1 == "foo").map(_._2.isWritable) should be (Some(true))
         }
       }
+
+      "should mark an own property as own" in {
+        testProperties(classOf[SubClass]) { props =>
+          props.find(_._1 == "sub").map(_._2.isOwn) should be (Some(true))
+        }
+      }
+
+      "should mark an inherited property as not own" in {
+        testProperties(classOf[SubClass]) { props =>
+          props.find(_._1 == "foo").map(_._2.isOwn) should be (Some(false))
+        }
+      }
     }
 
     "Object modification" - {
@@ -147,4 +171,8 @@ class ClassWithVar {
 
 class ClassWithPrivateVal {
   private val foo = "priv-val"
+}
+
+class SubClass extends ClassWithPrivateVal {
+  private val sub = "qux"
 }

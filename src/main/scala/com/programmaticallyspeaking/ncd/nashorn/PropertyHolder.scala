@@ -30,31 +30,45 @@ class ArbitraryObjectPropertyHolder(obj: ObjectReference)(implicit marshaller: M
   override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
     val invoker = new DynamicInvoker(marshaller.thread, obj)
     val clazz = invoker.applyDynamic("getClass")().asInstanceOf[ObjectReference]
-    val classInvoker = new DynamicInvoker(marshaller.thread, clazz)
 
-    // TODO: Handle onlyOwn == false
-    classInvoker.getDeclaredFields() match {
-      case arr: ArrayReference =>
-        arr.getValues.asScala.map { f =>
-          val mirror = new ReflectionFieldMirror(f.asInstanceOf[ObjectReference])
-          val isAccessible = mirror.isAccessible
-          if (!isAccessible) {
-            mirror.setAccessible(true)
-          }
-          try {
-            val theValue = mirror.get(obj)
+    def fieldsFor(clazz: ObjectReference, own: Boolean): Map[String, ObjectPropertyDescriptor] = {
+      val classInvoker = new DynamicInvoker(marshaller.thread, clazz)
 
-            // TODO: isOwn depends on input (see TODO above)
-            mirror.name -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
-              isWritable = !mirror.isFinal, isOwn = true, Some(theValue), None, None)
-          } finally {
+      classInvoker.getDeclaredFields() match {
+        case arr: ArrayReference =>
+          arr.getValues.asScala.map { f =>
+            val mirror = new ReflectionFieldMirror(f.asInstanceOf[ObjectReference])
+            val isAccessible = mirror.isAccessible
             if (!isAccessible) {
-              mirror.setAccessible(false)
+              mirror.setAccessible(true)
             }
-          }
+            try {
+              val theValue = mirror.get(obj)
 
-        }.toMap
-      case _ => Map.empty
+              mirror.name -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
+                isWritable = !mirror.isFinal, isOwn = own, Some(theValue), None, None)
+            } finally {
+              if (!isAccessible) {
+                mirror.setAccessible(false)
+              }
+            }
+
+          }.toMap
+        case _ => Map.empty
+      }
+    }
+    val fields = fieldsFor(clazz, own = true)
+    if (onlyOwn) fields else {
+      // Visit parent classes as well
+      def parents(c: ObjectReference): Seq[ObjectReference] = {
+        val invoker = new DynamicInvoker(marshaller.thread, c)
+        invoker.getSuperclass() match {
+          case sc: ObjectReference => Seq(sc) ++ parents(sc)
+          case _ => Seq.empty
+        }
+      }
+      val pp = parents(clazz)
+      fields ++ pp.flatMap(c => fieldsFor(c, own = false))
     }
   }
 }
