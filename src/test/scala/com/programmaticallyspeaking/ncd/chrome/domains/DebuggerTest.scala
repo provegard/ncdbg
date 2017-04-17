@@ -137,7 +137,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val debugger = newActorInstance[Debugger]
 
         debugger ! Messages.Request("1", Domain.enable)
-        inside(requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(lineNumber, scriptUri, 0, ""))) {
+        inside(requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(lineNumber, scriptUri, 0, None))) {
           case result: Debugger.SetBreakpointByUrlResult => result
         }
       }
@@ -179,7 +179,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val debugger = newActorInstance[Debugger]
         debugger ! Messages.Request("1", Domain.enable)
 
-        val result = requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(5, "a", 0, "")) match {
+        val result = requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(5, "a", 0, None)) match {
           case result: Debugger.SetBreakpointByUrlResult => result
           case other => fail("Unexpected: " + other)
         }
@@ -486,8 +486,8 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
   override def createScriptHost(): ScriptHost = {
     val host = super.createScriptHost()
 
-    when(host.setBreakpoint(any[String], any[ScriptLocation])).thenAnswerWith({
-      case (uri: String) :: (scriptLoc : ScriptLocation) :: Nil =>
+    when(host.setBreakpoint(any[String], any[ScriptLocation], any[Option[String]])).thenAnswerWith({
+      case (uri: String) :: (scriptLoc : ScriptLocation) :: condition :: Nil =>
         val id = "bp_" + scriptLoc.lineNumber1Based
         // Arbitrary test stuff. High line numbers don't exist!
         if (scriptLoc.lineNumber1Based > 100) None

@@ -82,7 +82,8 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
         promises.remove(id).foreach(_.trySuccess(data))
 
       case Messages.ErrorResponse(id, error) =>
-        val ex = new Exception(error)
+        val msg = if (error == null) "<null>" else (if (error == "") "<unknown>" else error)
+        val ex = new Exception(msg)
         promises.remove(id).foreach(_.tryFailure(ex))
         Future { subject.onError(ex) }
 

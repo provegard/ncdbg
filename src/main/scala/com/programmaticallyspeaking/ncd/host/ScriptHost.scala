@@ -94,9 +94,10 @@ trait ScriptHost {
     *
     * @param scriptUri the URI of the script
     * @param location the location in the script where the breakpoint should be set
+    * @param condition optional condition to use for the breakpoint
     * @return a structure describing the breakpoint that was set
     */
-  def setBreakpoint(scriptUri: String, location: ScriptLocation): Option[Breakpoint]
+  def setBreakpoint(scriptUri: String, location: ScriptLocation, condition: Option[String]): Option[Breakpoint]
 
   def getBreakpointLocations(scriptId: String, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation]
 

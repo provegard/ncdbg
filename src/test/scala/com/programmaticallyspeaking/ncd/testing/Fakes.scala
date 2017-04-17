@@ -24,7 +24,7 @@ object FakeScriptHost extends ScriptHost {
   override def scriptById(id: String): Option[Script] = None
   override def events: Observable[ScriptEvent] = eventSubject
   override def scripts: Seq[Script] = Seq.empty
-  override def setBreakpoint(scriptUri: String, location: ScriptLocation): Option[Breakpoint] = notImpl
+  override def setBreakpoint(scriptUri: String, location: ScriptLocation, condition: Option[String]): Option[Breakpoint] = notImpl
   override def getBreakpointLocations(scriptId: String, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation] = Seq.empty
   override def step(stepType: StepType): Done = notImpl
   override def pauseOnBreakpoints(): Done = notImpl

@@ -221,7 +221,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
             // debugger
             (for {
               s <- getHost.scriptById(scriptId)
-              bp <- getHost.setBreakpoint(s.url.toString, ScriptLocation(2, 3))
+              bp <- getHost.setBreakpoint(s.url.toString, ScriptLocation(2, 3), None)
             } yield bp) match {
               case Some(bps) => breakpointIds += bps.breakpointId
               case None => donePromise.failure(new Exception("No script or breakpoint"))

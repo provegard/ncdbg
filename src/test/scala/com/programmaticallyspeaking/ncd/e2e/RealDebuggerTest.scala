@@ -87,6 +87,37 @@ class RealDebuggerTest extends E2ETestFixture with FreeActorTesting with ScalaFu
     })
   }
 
+  "should support a conditional breakpoint" in {
+    enableDebugger
+    val script =
+      """debugger;
+        |var list = [];
+        |for (var i = 0; i < 2; i++) {
+        |  list.push(i);
+        |}
+      """.stripMargin
+
+    runScript(script)(callFrames => {
+      withHead(callFrames) { cf =>
+        getHost.scriptById(cf.location.scriptId) match {
+          case Some(s) =>
+            sendRequest(Debugger.setBreakpointByUrl(3, s.url.toString, 3, Some("i>0")))
+          case None => fail("Unknown script: " + cf.location.scriptId)
+        }
+      }
+    }, callFrames => {
+      withHead(callFrames) { cf =>
+        val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "i", None, None, None))
+        // We may/will get i==1.0, so the assert becomes somewhat complicated.
+        r2 match {
+          case EvaluateOnCallFrameResult(ro, None) =>
+            ro.value.map(_.toString.toDouble.toInt) should be (Some(1))
+          case other => fail("Unexpected result: " + other)
+        }
+      }
+    })
+  }
+
   private def withHead(callFrames: Seq[CallFrame])(fun: (CallFrame) => Unit) = {
     callFrames.headOption match {
       case Some(cf) => fun(cf)

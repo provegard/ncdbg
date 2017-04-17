@@ -819,18 +819,40 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame], location: Option[Location]): Boolean = {
-    stackFrames.headOption.map(_.breakpoint) match {
-      case Some(breakpoint) =>
-        pausedData = Some(new PausedData(thread, stackFrames))
+    stackFrames.headOption.collect { case sf: StackFrameImpl => sf } match {
+      case Some(topStackFrame) =>
+        val breakpoint = topStackFrame.breakpoint
 
-        scriptById(breakpoint.scriptId).foreach { s =>
-          val line = s.sourceLine(breakpoint.location.lineNumber1Based).getOrElse("<unknown line>")
-          log.info(s"Pausing at ${s.url}:${breakpoint.location.lineNumber1Based}: $line")
+        // Check condition if we have one. We cannot do this until now (which means that a conditional breakpoint
+        // will be slow) because we need stack frames and locals to be setup for code evaluation.
+        val conditionIsTrue = topStackFrame.activeBreakpoint.condition match {
+          case Some(c) =>
+            topStackFrame.eval(c, Map.empty) match {
+              case SimpleValue(true) => true
+              case SimpleValue(false) =>
+                log.trace(s"Not pausing on breakpoint ${breakpoint.breakpointId} in script ${breakpoint.scriptId} since the condition ($c) evaluated to false.")
+                false
+              case other =>
+                log.warn(s"Condition $c resulted in unexpected value $other, will pause.")
+                // It's best to pause since we don't know what happened, I think.
+                true
+            }
+          case None => true // no condition, always stop
         }
 
-        val hitBreakpoint = HitBreakpoint(stackFrames)
-        emitEvent(hitBreakpoint)
-        true
+        if (conditionIsTrue) {
+          // Indicate that we're paused
+          pausedData = Some(new PausedData(thread, stackFrames))
+
+          scriptById(breakpoint.scriptId).foreach { s =>
+            val line = s.sourceLine(breakpoint.location.lineNumber1Based).getOrElse("<unknown line>")
+            log.info(s"Pausing at ${s.url}:${breakpoint.location.lineNumber1Based}: $line")
+          }
+
+          val hitBreakpoint = HitBreakpoint(stackFrames)
+          emitEvent(hitBreakpoint)
+        }
+        conditionIsTrue
       case None =>
         log.debug(s"Won't pause at $location since there are no stack frames at all.")
         false
@@ -894,12 +916,20 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  override def setBreakpoint(scriptUri: String, scriptLocation: ScriptLocation): Option[Breakpoint] = {
-    findBreakableLocations(scriptUri, scriptLocation).map { all =>
+  override def setBreakpoint(scriptUri: String, scriptLocation: ScriptLocation, condition: Option[String]): Option[Breakpoint] = {
+    findBreakableLocations(scriptUri, scriptLocation).filter(_.nonEmpty).map { all =>
       val newId = breakpointIdGenerator.next
-      log.info(s"Setting a breakpoint with ID $newId for locations ${all.mkString(", ")} in $scriptUri")
+      val conditionDescription = condition.map(c => s" with condition ($c)").getOrElse("")
+      log.info(s"Setting a breakpoint with ID $newId for locations ${all.mkString(", ")} in $scriptUri$conditionDescription")
 
-      val activeBp = ActiveBreakpoint(newId, all)
+      // Force boolean and handle that the condition contains a trailing comment
+      val wrapper = condition.map(c =>
+        s"""!!(function() {
+           |return $c
+           |})()
+         """.stripMargin)
+
+      val activeBp = ActiveBreakpoint(newId, all, wrapper)
       activeBp.enable()
       enabledBreakpoints += (activeBp.id -> activeBp)
       activeBp.toBreakpoint
@@ -917,7 +947,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     findBreakableLocation(location).map { bl =>
       enabledBreakpoints.values.find(_.contains(bl)) match {
         case Some(ab) => ab // existing active breakpoint
-        case None => ActiveBreakpoint(breakpointIdGenerator.next, Seq(bl)) // temporary breakpoint (e.g. debugger statement)
+        case None => ActiveBreakpoint(breakpointIdGenerator.next, Seq(bl), None) // temporary breakpoint (e.g. debugger statement)
       }
     }
   }
@@ -1047,45 +1077,48 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       throw new IllegalStateException("A breakpoint must be active for stepping to work")
   }
 
+  private def evaluateOnStackFrame(pd: PausedData, stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): ValueNode = {
+    findStackFrame(pd, stackFrameId) match {
+      case Some(sf: StackFrameImpl) =>
+        implicit val marshaller = new Marshaller(pd.thread, mappingRegistry)
+
+        // Get the Value instances corresponding to the named objects
+        val namedValues = namedObjects.flatMap {
+          case (name, objectId) =>
+            objectDescriptorById.get(objectId) match {
+              // TODO: Should we handle extras here?
+              case Some(descriptor) if descriptor.native.isDefined => Seq(name -> descriptor.native.get)
+              case Some(_) => Seq.empty
+              case _ =>
+                throw new IllegalArgumentException(s"No object with ID '$objectId' was found.")
+            }
+        }
+
+        // Evaluating code may modify any existing object, which means that we cannot keep our object properties
+        // cache. There's no point trying to be smart here and only remove entries for the named objects, since the
+        // code may call a function that modifies an object that we don't know about here.
+        pd.objectPropertiesCache.clear()
+
+        // By resetting change tracking before evaluating the expression, we can track changes made to any
+        // named objects.
+        resetChangeTracking(sf, namedValues)
+
+        val result = sf.eval(expression, namedValues)
+
+        // Update locals that changed, if needed. It's not sufficient for the synthetic locals object to have
+        // been updated, since generated Java code will access the local variables directly.
+        updateChangedLocals(sf, namedValues, namedObjects)
+
+        result
+      case _ =>
+        log.warn(s"No stack frame found with ID $stackFrameId. Available IDs: " + pd.stackFrames.map(_.id).mkString(", "))
+        throw new IllegalArgumentException(s"Failed to find a stack frame with ID $stackFrameId")
+    }
+  }
+
   override def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode] = Try {
     pausedData match {
-      case Some(pd) =>
-        findStackFrame(pd, stackFrameId) match {
-          case Some(sf: StackFrameImpl) =>
-            implicit val marshaller = new Marshaller(pd.thread, mappingRegistry)
-
-            // Get the Value instances corresponding to the named objects
-            val namedValues = namedObjects.flatMap {
-              case (name, objectId) =>
-                objectDescriptorById.get(objectId) match {
-                  // TODO: Should we handle extras here?
-                  case Some(descriptor) if descriptor.native.isDefined => Seq(name -> descriptor.native.get)
-                  case Some(_) => Seq.empty
-                  case _ =>
-                    throw new IllegalArgumentException(s"No object with ID '$objectId' was found.")
-                }
-            }
-
-            // Evaluating code may modify any existing object, which means that we cannot keep our object properties
-            // cache. There's no point trying to be smart here and only remove entries for the named objects, since the
-            // code may call a function that modifies an object that we don't know about here.
-            pd.objectPropertiesCache.clear()
-
-            // By resetting change tracking before evaluating the expression, we can track changes made to any
-            // named objects.
-            resetChangeTracking(sf, namedValues)
-
-            val result = sf.eval(expression, namedValues)
-
-            // Update locals that changed, if needed. It's not sufficient for the synthetic locals object to have
-            // been updated, since generated Java code will access the local variables directly.
-            updateChangedLocals(sf, namedValues, namedObjects)
-
-            result
-          case _ =>
-            log.warn(s"No stack frame found with ID $stackFrameId. Available IDs: " + pd.stackFrames.map(_.id).mkString(", "))
-            throw new IllegalArgumentException(s"Failed to find a stack frame with ID $stackFrameId")
-        }
+      case Some(pd) => evaluateOnStackFrame(pd, stackFrameId, expression, namedObjects)
       case None =>
         log.warn(s"Evaluation of '$expression' for stack frame $stackFrameId cannot be done in a non-paused state.")
         throw new IllegalStateException("Code evaluation can only be done in a paused state.")
@@ -1428,7 +1461,7 @@ object InitialInitializationComplete extends ScriptEvent
   * @param id the breakpoint ID
   * @param breakableLocations the breakable locations
   */
-case class ActiveBreakpoint(id: String, breakableLocations: Seq[BreakableLocation]) {
+case class ActiveBreakpoint(id: String, breakableLocations: Seq[BreakableLocation], condition: Option[String]) {
   assert(breakableLocations.nonEmpty, "An active breakpoint needs at least one breakable location")
   assert(breakableLocations.map(_.scriptLocation.columnNumber1Based).distinct.size == 1, "Unexpected different column numbers in breakable locations!")
 

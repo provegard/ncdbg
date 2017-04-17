@@ -70,7 +70,7 @@ object Debugger extends Logging {
 
   case class GetPossibleBreakpointsResult(locations: Seq[Location])
 
-  case class setBreakpointByUrl(lineNumber: Int, url: String, columnNumber: Int, condition: String)
+  case class setBreakpointByUrl(lineNumber: Int, url: String, columnNumber: Int, condition: Option[String])
 
   case class removeBreakpoint(breakpointId: String)
 
@@ -177,9 +177,9 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
           throw new IllegalArgumentException("Unknown script ID: " + scriptId)
       }
 
-    case Debugger.setBreakpointByUrl(lineNumberBase0, url, columnNumberBase0, _) =>
+    case Debugger.setBreakpointByUrl(lineNumberBase0, url, columnNumberBase0, condition) =>
       val lineNumberBase1 = lineNumberBase0 + 1
-      scriptHost.setBreakpoint(url, ScriptLocation(lineNumberBase0 + 1, columnNumberBase0 + 1)) match {
+      scriptHost.setBreakpoint(url, ScriptLocation(lineNumberBase0 + 1, columnNumberBase0 + 1), condition) match {
         case Some(bp) =>
           // Echo the column number. Java/JDI doesn't care about column numbers (at least Location doesn't contain one),
           // but it seems to be important for proper source map support.
