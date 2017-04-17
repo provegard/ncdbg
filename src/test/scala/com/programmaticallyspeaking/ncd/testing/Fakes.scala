@@ -18,19 +18,19 @@ object FakeScriptHost extends ScriptHost {
   val eventSubject = new SerializedSubject[ScriptEvent]
 
   override def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode] = Try(notImpl)
-  override def removeBreakpointById(id: String): Done = notImpl
-  override def resume(): Done = notImpl
-  override def reset(): Done = notImpl
+  override def removeBreakpointById(id: String): Unit = notImpl
+  override def resume(): Unit = notImpl
+  override def reset(): Unit = notImpl
   override def scriptById(id: String): Option[Script] = None
   override def events: Observable[ScriptEvent] = eventSubject
   override def scripts: Seq[Script] = Seq.empty
   override def setBreakpoint(scriptUri: String, location: ScriptLocation, condition: Option[String]): Option[Breakpoint] = notImpl
   override def getBreakpointLocations(scriptId: String, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation] = Seq.empty
-  override def step(stepType: StepType): Done = notImpl
-  override def pauseOnBreakpoints(): Done = notImpl
-  override def ignoreBreakpoints(): Done = notImpl
+  override def step(stepType: StepType): Unit = notImpl
+  override def pauseOnBreakpoints(): Unit = notImpl
+  override def ignoreBreakpoints(): Unit = notImpl
   override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, types.ObjectPropertyDescriptor] = Map.empty
-  override def pauseOnExceptions(pauseType: ExceptionPauseType): Done = notImpl
+  override def pauseOnExceptions(pauseType: ExceptionPauseType): Unit = notImpl
   
   private def notImpl[R]: R = throw new UnsupportedOperationException("FakeScriptHost is not complete")
 }

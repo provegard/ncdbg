@@ -345,11 +345,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  def initialize(): Done = {
+  def initialize(): Unit = {
     watchAddedClasses()
     log.debug("Postponing initialization until classes have stabilized")
     retryInitLater()
-    Done
   }
 
 
@@ -358,8 +357,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
     // Go through reference types that exist so far. More may arrive later!
     referenceTypes.asScala.foreach(considerReferenceType(_: ReferenceType, InitialScriptResolveAttempts))
-
-    Done
   }
 
   private def considerInitializationToBeComplete(): Unit = {
@@ -402,10 +399,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     case e: VMDisconnectEvent => e
   }.nonEmpty
 
-  def handleOperation(eventQueueItem: NashornScriptOperation): Done = eventQueueItem match {
+  def handleOperation(eventQueueItem: NashornScriptOperation): Unit = eventQueueItem match {
     case NashornEventSet(es) if hasDeathOrDisconnectEvent(es) =>
       signalComplete()
-      Done
     case NashornEventSet(eventSet) =>
       var doResume = true
       eventSet.asScala.foreach { ev =>
@@ -451,7 +447,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         }
       }
       if (doResume) eventSet.resume()
-      Done
     case ConsiderReferenceType(refType, attemptsLeft) =>
       // We may have resolved the reference type when hitting a breakpoint, and in that case we can ignore this retry
       // attempt.
@@ -460,7 +455,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       } else {
         considerReferenceType(refType, attemptsLeft)
       }
-      Done
     case x@PostponeInitialize =>
 
       if (lastSeenClassPrepareRequests == seenClassPrepareRequests) doInitialize()
@@ -468,7 +462,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         lastSeenClassPrepareRequests = seenClassPrepareRequests
         retryInitLater()
       }
-      Done
     case operation =>
       throw new IllegalArgumentException("Unknown operation: " + operation)
   }
@@ -969,25 +962,23 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       log.debug("Ignoring resume request when not paused (no pause data).")
   }
 
-  override def resume(): Done = {
+  override def resume(): Unit = {
     resumeWhenPaused()
-    Done
   }
 
-  private def removeAllBreakpoints(): Done = {
+  private def removeAllBreakpoints(): Unit = {
     enabledBreakpoints.foreach(e => e._2.disable())
     enabledBreakpoints.clear()
-    Done
   }
 
-  override def reset(): Done = {
+  override def reset(): Unit = {
     log.info("Resetting VM...")
     willPauseOnBreakpoints = false
     removeAllBreakpoints()
     resume()
   }
 
-  override def removeBreakpointById(id: String): Done = {
+  override def removeBreakpointById(id: String): Unit = {
     enabledBreakpoints.get(id) match {
       case Some(activeBp) =>
         log.info(s"Removing breakpoint with id $id")
@@ -996,7 +987,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       case None =>
         log.warn(s"Got request to remove an unknown breakpoint with id $id")
     }
-    Done
   }
 
   private def enableBreakpointOnce(bl: BreakableLocation): Unit = {
@@ -1057,7 +1047,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  override def step(stepType: StepType): Done = pausedData match {
+  override def step(stepType: StepType): Unit = pausedData match {
     case Some(pd) =>
       log.info(s"Stepping with type $stepType")
       // Note that we don't issue normal step requests to the remove VM, because a script line != a Java line, so if we
@@ -1072,7 +1062,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       }
 
       resumeWhenPaused()
-      Done
     case None =>
       throw new IllegalStateException("A breakpoint must be active for stepping to work")
   }
@@ -1202,19 +1191,17 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     pausedData.stackFrames.find(_.id == id)
   }
 
-  override def pauseOnBreakpoints(): Done = {
+  override def pauseOnBreakpoints(): Unit = {
     log.info("Will pause on breakpoints")
     willPauseOnBreakpoints = true
-    Done
   }
 
-  override def ignoreBreakpoints(): Done = {
+  override def ignoreBreakpoints(): Unit = {
     log.info("Will ignore breakpoints")
     willPauseOnBreakpoints = false
-    Done
   }
 
-  override def pauseOnExceptions(pauseType: ExceptionPauseType): Done = {
+  override def pauseOnExceptions(pauseType: ExceptionPauseType): Unit = {
     val erm = virtualMachine.eventRequestManager()
 
     // Clear all first, simpler than trying to keep in sync
@@ -1234,8 +1221,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     } else {
       log.info("Won't pause on exceptions")
     }
-
-    Done
   }
 
   private def removeHidden(prop: (String, ObjectPropertyDescriptor)): Boolean = !prop._1.startsWith(hiddenPrefix)

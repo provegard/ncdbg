@@ -3,7 +3,7 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 import java.lang.reflect.UndeclaredThrowableException
 
 import akka.actor.{Actor, ActorRef}
-import com.programmaticallyspeaking.ncd.host.{Done, ScriptEvent, ScriptHost}
+import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
 import org.slf4s.Logging
 
@@ -98,9 +98,6 @@ abstract class DomainActor(scriptHost: ScriptHost) extends Actor with Logging {
         case msg: Messages.DomainMessage =>
           sender() ! msg
         case u: Unit =>
-          sender() ! Messages.Accepted(req.id)
-        case d: Done =>
-          // Done is a Unit replacement to achieve synchronous calls, so we treat it just as Unit.
           sender() ! Messages.Accepted(req.id)
         case data =>
           sender() ! Messages.Response(req.id, data)

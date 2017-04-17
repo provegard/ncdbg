@@ -1,7 +1,7 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
 import akka.actor.{Actor, ActorRef, DeadLetter, Props}
-import com.programmaticallyspeaking.ncd.host.{Done, ScriptEvent, ScriptHost}
+import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.testing.{FakeScriptHost, UnitTest}
 
 import scala.collection.mutable.ListBuffer
@@ -9,7 +9,6 @@ import scala.concurrent.Future
 
 object TestDomainActor {
   case object fail
-  case object beDone
   case class echo(msg: String)
   case class echoLater(msg: String)
 }
@@ -25,8 +24,6 @@ class TestDomainActor(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
         Thread.sleep(200)
         msg
       }
-    case TestDomainActor.beDone =>
-      Done
   }
 
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
@@ -114,15 +111,6 @@ class DomainActorTest extends UnitTest with DomainActorTesting {
 
       val resp = requestAndReceiveResponse(actor, "2", TestDomainActor.echo("hello"))
       resp should be ("hello")
-    }
-
-    "should treat 'Done' in the same way as 'Unit', i.e. => Accepted" in {
-      val actor = newActorInstance[TestDomainActor]
-
-      enableActor(actor)
-
-      val resp = requestAndReceiveResponse(actor, "2", TestDomainActor.beDone)
-      resp should be (Accepted)
     }
 
     "should be able to return a Future-wrapped value when handling a message" in {

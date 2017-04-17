@@ -49,15 +49,6 @@ case object StepInto extends StepType
 case object StepOver extends StepType
 case object StepOut extends StepType
 
-/**
-  * Return type for [[ScriptHost]] methods that otherwise would return [[Unit]]. The point is to make the typed actor
-  * implementation treat all methods as synchronous rather than treating the `Unit`-returning ones as fire-and-forget.
-  * One alternative would be to let all methods return [[scala.concurrent.Future]], but it makes the trait very awkward
-  * to implement.
-  */
-trait Done
-object Done extends Done
-
 trait ScriptHost {
   /**
     * Evaluates an expression on a specific stack frame. Variables visible on that stack frame can be used in the
@@ -72,14 +63,14 @@ trait ScriptHost {
     */
   def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode]
 
-  def removeBreakpointById(id: String): Done
+  def removeBreakpointById(id: String): Unit
 
-  def resume(): Done
+  def resume(): Unit
 
   /**
     * Resets the host - resumes if the host is paused and disables all breakpoints.
     */
-  def reset(): Done
+  def reset(): Unit
 
   def scriptById(id: String): Option[Script]
 
@@ -101,19 +92,19 @@ trait ScriptHost {
 
   def getBreakpointLocations(scriptId: String, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation]
 
-  def step(stepType: StepType): Done
+  def step(stepType: StepType): Unit
 
   /**
     * Tells the host to pause when it encounters a breakpoint.
     */
-  def pauseOnBreakpoints(): Done
+  def pauseOnBreakpoints(): Unit
 
   /**
     * Tells the host to ignore breakpoints.
     */
-  def ignoreBreakpoints(): Done
+  def ignoreBreakpoints(): Unit
 
   def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor]
 
-  def pauseOnExceptions(pauseType: ExceptionPauseType): Done
+  def pauseOnExceptions(pauseType: ExceptionPauseType): Unit
 }

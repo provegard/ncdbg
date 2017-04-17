@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{Done, ScriptHost}
+import com.programmaticallyspeaking.ncd.host.ScriptHost
 import com.sun.jdi.VirtualMachine
 import com.sun.jdi.event.EventSet
 
@@ -14,9 +14,9 @@ case class NashornEventSet(eventSet: EventSet) extends NashornScriptOperation
 trait NashornScriptHost extends ScriptHost {
 
   // TODO: Should this return a resume flag? Is it ok to resume on another thread?
-  def handleOperation(eventQueueItem: NashornScriptOperation): Done
+  def handleOperation(eventQueueItem: NashornScriptOperation): Unit
 
-  def initialize(): Done
+  def initialize(): Unit
 
   val virtualMachine: VirtualMachine
 }
