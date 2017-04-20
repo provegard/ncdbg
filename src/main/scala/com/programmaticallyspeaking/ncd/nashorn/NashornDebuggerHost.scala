@@ -1179,6 +1179,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           case None => Left("Unknown object ID: " + an.objectId)
         }
       case SimpleValue(Undefined) => Right(List.empty)
+      case EmptyNode => Right(List.empty)
       case other => Left("Not a marshalled array: " + other)
     }
   }
