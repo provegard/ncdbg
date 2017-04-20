@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+* Don't include tools.jar in the distibuted zip; grab it from the runtime JDK instead.
+* Source map support, both file based (requires the file to be readable/accessible by
+  NCDbg) and inline (issue #23).
+* Fix marshalling of concatenated JS strings (issue #29)
+* Allow setting local variables using Debugger.setVariableValue (issue #30)
+* Limited Java 9 support (can debug a program running on Java 9)
+* Support conditional breakpoints
+* List inherited properties from an arbitrary Java object
+* JavaBeans support (issue #33)
+
 ## 0.3.0 (2017-03-27)
 
 * Don't leak the code evaluation marker (issue #19)
