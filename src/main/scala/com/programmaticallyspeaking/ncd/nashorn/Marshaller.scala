@@ -24,6 +24,7 @@ object Marshaller {
   def isUndefined(value: Value): Boolean = value != null && "jdk.nashorn.internal.runtime.Undefined".equals(value.`type`().name())
 
   val ConsStringClassName = "jdk.nashorn.internal.runtime.ConsString"
+  val ReflectMethodClassName = "java.lang.reflect.Method"
 }
 
 object MappingRegistry {
@@ -77,6 +78,8 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     marshalInPrivate(invoker.applyDynamic("toString")())
   }
 
+  private def isReflectMethod(obj: ObjectReference) = obj.`type`().name == ReflectMethodClassName
+
   private def marshalInPrivate(value: Value): MarshallerResult = value match {
     case primitive: PrimitiveValue => SimpleValue(marshalPrimitive(primitive))
     case s: StringReference => SimpleValue(s.value())
@@ -90,6 +93,10 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       MarshallerResult(vn, extra)
     case str: ObjectReference if isConsString(str) =>
       toStringOf(str)
+    case obj: ObjectReference if isReflectMethod(obj) =>
+      val mirror = new ReflectionMethodMirror(obj)
+      //TODO: Is the source correct??
+      FunctionNode(mirror.name, s"function ${mirror.name}() { [native code] }", objectId(obj))
     case obj: ObjectReference =>
       // Scala/Java object perhaps?
       ObjectNode(obj.`type`().name(), objectId(obj))

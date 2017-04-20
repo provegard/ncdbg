@@ -242,7 +242,8 @@ object RealMarshallerTest {
         throw new Exception("Cycle detected for object " + complex.objectId)
       case complex: ComplexNode =>
         seenObjectIds += complex.objectId
-        host.getObjectProperties(complex.objectId, !includeInherited, false).map(e => e._2.descriptorType match {
+        // Remove the 'class' JavaBean getter because it's everywhere so it's noise.
+        host.getObjectProperties(complex.objectId, !includeInherited, false).filter(_._1 != "class").map(e => e._2.descriptorType match {
           case PropertyDescriptorType.Generic =>
             e._1 -> "???"
           case PropertyDescriptorType.Data =>

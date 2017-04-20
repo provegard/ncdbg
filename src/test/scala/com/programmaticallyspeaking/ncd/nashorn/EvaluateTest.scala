@@ -1,7 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, Undefined}
-import com.programmaticallyspeaking.ncd.host.{ErrorValue, SimpleValue, ValueNode}
+import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor, Undefined}
+import com.programmaticallyspeaking.ncd.host._
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.util.{Failure, Success, Try}
@@ -56,7 +56,17 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
         |};
         |fun();
       """.stripMargin, "x", SimpleValue(21)),
-    ("var statement on global level", "debugger;", "var x = 55;", SimpleValue(Undefined))
+    ("var statement on global level", "debugger;", "var x = 55;", SimpleValue(Undefined)),
+    ("JavaBeans getter via property access",
+      s"""var obj = createInstance('${classOf[ClassWithJavaBeans].getName}');
+         |debugger;
+         |obj.toString();
+       """.stripMargin, "obj['fooBar']", SimpleValue("bar")),
+    ("JavaBeans setter via property access",
+      s"""var obj = createInstance('${classOf[ClassWithJavaBeans].getName}');
+         |debugger;
+         |obj.toString();
+       """.stripMargin, "obj['fooBar']='qux'; obj['fooBar']", SimpleValue("qux"))
   )
 
   val varRemember = Table(
@@ -152,3 +162,4 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
     }
   }
 }
+

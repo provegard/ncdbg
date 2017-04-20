@@ -1,7 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.ComplexNode
-import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
+import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.infra.StringAnyMap
 import org.scalatest.Inside
 import org.scalatest.prop.TableDrivenPropertyChecks
@@ -49,7 +49,10 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     ("JSObject object", s"createInstance('${classOf[ObjectLikeJSObject].getName}')", Map("a" -> 42, "b" -> 43)),
     ("Scala instance with val", s"createInstance('${classOf[ClassWithVal].getName}')", Map("foo" -> "bar")),
     ("Scala instance with var", s"createInstance('${classOf[ClassWithVar].getName}')", Map("foo" -> "var")),
-    ("Scala instance with private val", s"createInstance('${classOf[ClassWithPrivateVal].getName}')", Map("foo" -> "priv-val"))
+    ("Scala instance with private val", s"createInstance('${classOf[ClassWithPrivateVal].getName}')", Map("foo" -> "priv-val")),
+    ("Scala instance with JavaBeans property", s"createInstance('${classOf[ClassWithJavaBeans].getName}')", Map("fooBar" -> Map("get" -> "<function>", "set" -> "<function>"), "_foo" -> "bar")),
+    ("Scala instance with JavaBeans property (no set)", s"createInstance('${classOf[ClassWithJavaBeansOnlyGet].getName}')", Map("foo" -> Map("get" -> "<function>"), "_foo" -> "bar")),
+    ("Scala instance with JavaBeans property (no get)", s"createInstance('${classOf[ClassWithJavaBeansOnlySet].getName}')", Map("foo" -> Map("set" -> "<function>"), "_foo" -> "bar"))
   )
   val complexValuesAlsoInherited = Table(
     ("desc", "expression", "expected"),
@@ -61,7 +64,8 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     evaluateExpression(expr) {
       case (host, c: ComplexNode) =>
         val props = host.getObjectProperties(c.objectId, false, false)
-        handler(props)
+
+        handler(props - "class")
 
       case (host, other) => fail("Unknown: " + other)
     }
@@ -141,6 +145,12 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
           props.find(_._1 == "foo").map(_._2.isOwn) should be (Some(false))
         }
       }
+
+      "should create an accessor property for a JavaBeans property" in {
+        testProperties(classOf[ClassWithJavaBeans]) { props =>
+          props.find(_._1 == "fooBar").map(_._2.descriptorType) should be (Some(PropertyDescriptorType.Accessor))
+        }
+      }
     }
 
     "Object modification" - {
@@ -175,4 +185,20 @@ class ClassWithPrivateVal {
 
 class SubClass extends ClassWithPrivateVal {
   private val sub = "qux"
+}
+
+class ClassWithJavaBeans {
+  private var _foo = "bar"
+  def getFooBar() = _foo
+  def setFooBar(s: String): Unit = _foo = s
+}
+
+class ClassWithJavaBeansOnlyGet {
+  private val _foo = "bar"
+  def getFoo() = _foo
+}
+
+class ClassWithJavaBeansOnlySet {
+  private var _foo = "bar"
+  def setFoo(s: String): Unit = _foo = s
 }
