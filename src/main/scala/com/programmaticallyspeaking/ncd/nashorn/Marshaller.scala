@@ -95,7 +95,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       toStringOf(str)
     case obj: ObjectReference if isReflectMethod(obj) =>
       val mirror = new ReflectionMethodMirror(obj)
-      //TODO: Is the source correct??
       FunctionNode(mirror.name, s"function ${mirror.name}() { [native code] }", objectId(obj))
     case obj: ObjectReference =>
       // Scala/Java object perhaps?
