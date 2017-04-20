@@ -5,7 +5,7 @@ import java.util.concurrent.Executor
 
 import org.slf4s.Logging
 
-import scala.concurrent.{Await, Promise}
+import scala.concurrent.{Await, Future, Promise}
 import scala.reflect.ClassTag
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
@@ -27,6 +27,7 @@ class ExecutorProxy(executor: Executor) {
 
       executor.execute(() => {
         Try(method.invoke(instance, args: _*)) match {
+          case Success(f: Future[AnyRef]) => resultPromise.completeWith(f)
           case Success(result) => resultPromise.success(result)
           case Failure(t: InvocationTargetException) => resultPromise.failure(t.getCause)
           case Failure(t) => resultPromise.failure(t)
@@ -39,7 +40,8 @@ class ExecutorProxy(executor: Executor) {
         log.trace(s"Elapsed time for $className.$methodName = $millis ms")
       }
 
-      Await.result(resultPromise.future, 30.seconds) //TODO: Configurable
+      if (classOf[Future[_]].isAssignableFrom(method.getReturnType)) resultPromise.future
+      else Await.result(resultPromise.future, 30.seconds) //TODO: Configurable
     }
   }
 }

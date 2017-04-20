@@ -107,4 +107,13 @@ trait ScriptHost {
   def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor]
 
   def pauseOnExceptions(pauseType: ExceptionPauseType): Unit
+
+  /**
+    * Restart the frame with the given ID. This operation can only be done when the VM is paused. The VM will remain
+    * paused afterwards.
+    *
+    * @param stackFrameId the ID of the stack frame to restart
+    * @return the stack frames after restarting
+    */
+  def restartStackFrame(stackFrameId: String): Seq[StackFrame]
 }

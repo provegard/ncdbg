@@ -74,6 +74,10 @@ object Debugger extends Logging {
 
   case class removeBreakpoint(breakpointId: String)
 
+  case class restartFrame(callFrameId: CallFrameId)
+
+  case class RestartFrameResult(callFrames: Seq[CallFrame])
+
   case class SetBreakpointByUrlResult(breakpointId: String, locations: Seq[Location])
 
   case class Location(scriptId: String, lineNumber: Int, columnNumber: Int)
@@ -280,6 +284,8 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
           throw new IllegalArgumentException(problem)
       }
 
+    case Debugger.restartFrame(callFrameId) =>
+      stackFramesToCallFrames(scriptHost.restartStackFrame(callFrameId))
   }
 
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
@@ -298,16 +304,19 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
     case ScopeType.With => "with"
   }
 
-  private def pauseBasedOnBreakpoint(hitBreakpoint: HitBreakpoint): Unit = {
+  private def stackFramesToCallFrames(frames: Seq[StackFrame]): Seq[CallFrame] = {
     val converter = RemoteObjectConverter.byReference
     def toRemoteObject(value: ValueNode) = converter.toRemoteObject(value)
-    val callFrames = hitBreakpoint.stackFrames.map { sf =>
+    frames.map { sf =>
       val scopes = sf.scopeChain.map(s => Scope(scopeType(s), toRemoteObject(s.value)))
       val thisObj = toRemoteObject(sf.thisObj)
       // Reuse stack frame ID as call frame ID so that mapping is easier when we talk to the debugger
       CallFrame(sf.id, Location(sf.breakpoint.scriptId, sf.breakpoint.location.lineNumber1Based - 1, sf.breakpoint.location.columnNumber1Based - 1), scopes, thisObj, sf.functionDetails.name)
     }
+  }
 
+  private def pauseBasedOnBreakpoint(hitBreakpoint: HitBreakpoint): Unit = {
+    val callFrames = stackFramesToCallFrames(hitBreakpoint.stackFrames)
     hitBreakpoint.stackFrames.headOption match {
       case Some(sf) =>
         // Call frames are saved to be used with setVariableValue.

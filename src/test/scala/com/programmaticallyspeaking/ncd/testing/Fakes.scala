@@ -14,7 +14,6 @@ object FakeFilePublisher extends FilePublisher {
 }
 
 object FakeScriptHost extends ScriptHost {
-
   val eventSubject = new SerializedSubject[ScriptEvent]
 
   override def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode] = Try(notImpl)
@@ -33,4 +32,6 @@ object FakeScriptHost extends ScriptHost {
   override def pauseOnExceptions(pauseType: ExceptionPauseType): Unit = notImpl
   
   private def notImpl[R]: R = throw new UnsupportedOperationException("FakeScriptHost is not complete")
+
+  override def restartStackFrame(stackFrameId: String): Seq[StackFrame] = notImpl
 }

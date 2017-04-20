@@ -26,6 +26,7 @@ class NashornDebuggerConnector(hostName: String, port: Int) extends Logging {
     val vm = Connections.connect(hostName, port, 5000)
     log.info("Connected!")
     log.info("VM information: " + vm.description())
+
     connectionPromise.success(vm)
   }
 }

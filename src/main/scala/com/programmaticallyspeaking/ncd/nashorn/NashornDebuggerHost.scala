@@ -9,14 +9,14 @@ import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.{JSObjectMirror, ScriptObjectMirror}
 import com.sun.jdi.event._
-import com.sun.jdi.request.{EventRequest, ExceptionRequest}
+import com.sun.jdi.request.{EventRequest, ExceptionRequest, StepRequest}
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}
 
 
@@ -732,7 +732,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             }
 
             try {
-              findActiveBreakpoint(location).map(ab => new StackFrameImpl(stackframeId, thisObj, scopeChain, ab, evaluateCodeOnFrame, functionDetails(functionMethod))) match {
+              findActiveBreakpoint(location).map(ab => StackFrameImpl(stackframeId, thisObj, scopeChain, ab, evaluateCodeOnFrame, functionDetails(functionMethod))) match {
                 case Some(sf) => StackFrameHolder(Some(sf))
                 case None =>
                   log.warn(s"Won't create a stack frame for location ($location) since we don't recognize it.")
@@ -750,19 +750,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  private def handleBreakpoint(ev: LocatableEvent): Boolean = {
-    // Resume right away if we're not pausing on breakpoints
-    if (!willPauseOnBreakpoints) return true
-
-    // Log at debug level because we get noise due to exception requests.
-    log.debug(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")
-    val thread = ev.thread()
-
-    // Start with a fresh object registry
-    objectDescriptorById.clear()
-
-    locationForLocals.clear()
-
+  private def captureStackFrames(thread: ThreadReference): Seq[StackFrameHolder] = {
     // Get all Values FIRST, before marshalling. This is because marshalling requires us to call methods, which
     // will temporarily resume threads, which causes the stack frames to become invalid.
     val perStackFrame = thread.frames().asScala.map { sf =>
@@ -792,8 +780,23 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
 
     // Second pass, marshal
-    val stackFrames = buildStackFramesSequence(perStackFrame, thread)
+    buildStackFramesSequence(perStackFrame, thread)
+  }
 
+  private def handleBreakpoint(ev: LocatableEvent): Boolean = {
+    // Resume right away if we're not pausing on breakpoints
+    if (!willPauseOnBreakpoints) return true
+
+    // Log at debug level because we get noise due to exception requests.
+    log.debug(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")
+    val thread = ev.thread()
+
+    // Start with a fresh object registry
+    objectDescriptorById.clear()
+
+    locationForLocals.clear()
+
+    val stackFrames = captureStackFrames(thread)
     stackFrames.headOption match {
       case Some(holder) if holder.stackFrame.isEmpty && !holder.mayBeAtSpecialStatement =>
         // First/top stack frame doesn't belong to a script. Resume!
@@ -1315,10 +1318,46 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  class StackFrameImpl(val id: String, val thisObj: ValueNode, val scopeChain: Seq[Scope],
-                       val activeBreakpoint: ActiveBreakpoint,
-                       val eval: CodeEvaluator,
-                       val functionDetails: FunctionDetails) extends StackFrame {
+  override def restartStackFrame(stackFrameId: String): Seq[StackFrame] = {
+    pausedData match {
+      case Some(pd) =>
+        log.warn(s"Request to restart stack frame $stackFrameId. Note that depending on the Java version of the target, this may cause the target to crash.")
+        // Get the Location of the stack frame to pop
+        pd.stackFrames.find(_.id == stackFrameId) match {
+          case Some(sf: StackFrameImpl) =>
+            val location = sf.activeBreakpoint.firstBreakableLocation.location // ew
+
+            // Now get the current stack frame list and identify the correct target. This is needed since the old
+            // stack frame list isn't valid anymore (due to thread resume due to marshalling).
+            pd.thread.frames().asScala.find(_.location() == location) match {
+              case Some(jdiStackFrame) =>
+                log.debug(s"Popping stack frame at location ${jdiStackFrame.location()}")
+
+                // ThreadReference.popFrames(StackFrame) API doc:
+                // "All frames up to and including the frame are popped off the stack. The frame previous to the
+                // parameter frame will become the current frame. After this operation, this thread will be suspended
+                // at the invoke instruction of the target method that created frame. The frame's method can be
+                // reentered with a step into the instruction.
+                pd.thread.popFrames(jdiStackFrame)
+
+                // Don't grab new frames - simply assume that we can reuse a slice of the current list.
+                pd.stackFrames.span(_ ne sf)._2.tail
+
+              case None =>
+                throw new IllegalArgumentException("Unknown stack frame location: " + location)
+            }
+          case _ => throw new IllegalArgumentException("Unknown stack frame ID: " + stackFrameId)
+        }
+
+      case None =>
+        throw new IllegalStateException("Frame restart can only be done in a paused state.")
+    }
+  }
+
+  case class StackFrameImpl(id: String, thisObj: ValueNode, scopeChain: Seq[Scope],
+                            activeBreakpoint: ActiveBreakpoint,
+                            eval: CodeEvaluator,
+                            functionDetails: FunctionDetails) extends StackFrame {
     val breakpoint = activeBreakpoint.toBreakpoint
   }
 
@@ -1326,7 +1365,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     val mayBeAtSpecialStatement = location.isDefined
     val isAtDebuggerStatement = location.exists(isDebuggerStatementLocation)
   }
-
 }
 
 object InitialInitializationComplete extends ScriptEvent

@@ -26,96 +26,154 @@ class RealDebuggerTest extends E2ETestFixture with FreeActorTesting with ScalaFu
 
   def sendRequest(msg: AnyRef): Any = sendRequestAndWait(debugger, msg)
 
-  "should support setVariableValue" in {
-    enableDebugger
-    val script =
-      """
-        |this.x = 5;
-        |var f = function () {
-        |  var x = 6;
-        |  debugger;
-        |};
-        |var f2 = function () {
-        |  var y = x;
-        |  debugger;
-        |  y.toString();
-        |}
-        |f();
-        |f2();
-      """.stripMargin
+  "Debugging" - {
+    "should support setVariableValue" in {
+      enableDebugger
+      val script =
+        """
+          |this.x = 5;
+          |var f = function () {
+          |  var x = 6;
+          |  debugger;
+          |};
+          |var f2 = function () {
+          |  var y = x;
+          |  debugger;
+          |  y.toString();
+          |}
+          |f();
+          |f2();
+        """.stripMargin
 
-    runScript(script)(callFrames => {
-      withHead(callFrames) { cf =>
-        // In function f, scope 0 should be global
-        sendRequest(Debugger.setVariableValue(0, "x", RuntimeD.CallArgument(Some(42), None, None), cf.callFrameId))
-      }
-    }, callFrames => {
-      withHead(callFrames) { cf =>
-        // In function f2, y should have value 42
-        val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "y", None, None, None))
-        r2 should be(EvaluateOnCallFrameResult(RemoteObject.forNumber(42)))
-      }
-    })
-  }
-
-  "should support setVariableValue when a local variable is targeted" in {
-    enableDebugger
-    val script =
-      """
-        |var f = function (username) {
-        |  debugger;
-        |  return "Hello " + username;
-        |};
-        |this.greeting = f("foo");
-        |debugger;
-      """.stripMargin
-
-    runScript(script)(callFrames => {
-      withHead(callFrames) { cf =>
-        // Get the local scope
-        cf.scopeChain.zipWithIndex.find(_._1.`type` == "local") match {
-          case Some((_, idx)) =>
-            sendRequest(Debugger.setVariableValue(idx, "username", RuntimeD.CallArgument(Some("bar"), None, None), cf.callFrameId))
-          case None => fail("No local scope")
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          // In function f, scope 0 should be global
+          sendRequest(Debugger.setVariableValue(0, "x", RuntimeD.CallArgument(Some(42), None, None), cf.callFrameId))
         }
-      }
-    }, callFrames => {
-      withHead(callFrames) { cf =>
-        val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "this.greeting", None, None, None))
-        r2 should be(EvaluateOnCallFrameResult(RemoteObject.forString("Hello bar")))
-      }
-    })
-  }
-
-  "should support a conditional breakpoint" in {
-    enableDebugger
-    val script =
-      """debugger;
-        |var list = [];
-        |for (var i = 0; i < 2; i++) {
-        |  list.push(i);
-        |}
-      """.stripMargin
-
-    runScript(script)(callFrames => {
-      withHead(callFrames) { cf =>
-        getHost.scriptById(cf.location.scriptId) match {
-          case Some(s) =>
-            sendRequest(Debugger.setBreakpointByUrl(3, s.url.toString, 3, Some("i>0")))
-          case None => fail("Unknown script: " + cf.location.scriptId)
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          // In function f2, y should have value 42
+          val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "y", None, None, None))
+          r2 should be(EvaluateOnCallFrameResult(RemoteObject.forNumber(42)))
         }
-      }
-    }, callFrames => {
-      withHead(callFrames) { cf =>
-        val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "i", None, None, None))
-        // We may/will get i==1.0, so the assert becomes somewhat complicated.
-        r2 match {
-          case EvaluateOnCallFrameResult(ro, None) =>
-            ro.value.map(_.toString.toDouble.toInt) should be (Some(1))
-          case other => fail("Unexpected result: " + other)
+      })
+    }
+
+    "should support setVariableValue when a local variable is targeted" in {
+      enableDebugger
+      val script =
+        """
+          |var f = function (username) {
+          |  debugger;
+          |  return "Hello " + username;
+          |};
+          |this.greeting = f("foo");
+          |debugger;
+        """.stripMargin
+
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          // Get the local scope
+          cf.scopeChain.zipWithIndex.find(_._1.`type` == "local") match {
+            case Some((_, idx)) =>
+              sendRequest(Debugger.setVariableValue(idx, "username", RuntimeD.CallArgument(Some("bar"), None, None), cf.callFrameId))
+            case None => fail("No local scope")
+          }
         }
-      }
-    })
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "this.greeting", None, None, None))
+          r2 should be(EvaluateOnCallFrameResult(RemoteObject.forString("Hello bar")))
+        }
+      })
+    }
+
+    "should support a conditional breakpoint" in {
+      enableDebugger
+      val script =
+        """debugger;
+          |var list = [];
+          |for (var i = 0; i < 2; i++) {
+          |  list.push(i);
+          |}
+        """.stripMargin
+
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          getHost.scriptById(cf.location.scriptId) match {
+            case Some(s) =>
+              sendRequest(Debugger.setBreakpointByUrl(3, s.url.toString, 3, Some("i>0")))
+            case None => fail("Unknown script: " + cf.location.scriptId)
+          }
+        }
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "i", None, None, None))
+          // We may/will get i==1.0, so the assert becomes somewhat complicated.
+          r2 match {
+            case EvaluateOnCallFrameResult(ro, None) =>
+              ro.value.map(_.toString.toDouble.toInt) should be (Some(1))
+            case other => fail("Unexpected result: " + other)
+          }
+        }
+      })
+    }
+
+    "should support frame restart when paused at a debugger statement" in {
+      enableDebugger
+      val script =
+        """var f = function () {
+          |  debugger; // stop here
+          |  debugger; // after restart + resume, we should NOT get here
+          |};
+          |f();
+        """.stripMargin
+
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          sendRequest(Debugger.restartFrame(cf.callFrameId))
+          sendRequest(Debugger.resume)
+        }
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (1) // 0-based
+        }
+      })
+    }
+
+    "should support frame restart when paused at a regular breakpoint" in {
+      enableDebugger
+      val script =
+        """var f = function () {
+          |  f.toString(); // regular breakpoint here
+          |};
+          |f();            // make sure f is compiled
+          |debugger;
+          |f();
+          |debugger;       // after resume, we should NOT get here
+        """.stripMargin
+
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          // At 'debugger', set the initial breakpoint
+          val scriptUrl = getHost.scriptById(cf.location.scriptId).map(_.url.toString).getOrElse(
+            throw new IllegalArgumentException("No script with ID: " + cf.location.scriptId))
+          sendRequest(Debugger.setBreakpointByUrl(1, scriptUrl, 2, None))
+          sendRequest(Debugger.resume)
+        }
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          // At the regular breakpoint
+          sendRequest(Debugger.restartFrame(cf.callFrameId))
+          sendRequest(Debugger.resume)
+        }
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (1) // 0-based
+        }
+      })
+    }
+
   }
 
   private def withHead(callFrames: Seq[CallFrame])(fun: (CallFrame) => Unit) = {
