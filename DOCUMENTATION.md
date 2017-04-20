@@ -140,3 +140,9 @@ I've observed this behavior in Chrome 55 but not in Chrome 56, so if you're runn
 may want to upgrade. The problem is that a debugger breakpoint may be hit before the Developer Tools console 
 "subsystem" has initialized, and in this situation console input is basically ignored. A reload usually
 helps also.
+
+### When I restart a frame, the target application crashes
+
+There appears to be a Java bug (submitted, not confirmed as of 2017-04-20) that causes an intermittent
+`AbstractMethodError` to be thrown after the VM is resumed after stack frames have been popped.
+
