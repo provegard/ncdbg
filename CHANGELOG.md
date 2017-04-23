@@ -12,6 +12,7 @@
 * List inherited properties from an arbitrary Java object
 * JavaBeans support (issue #33)
 * Support `Debugger.restartFrame` (issue #31)
+* Support the Profiling domain and CPU profiling (issue #32)
 
 ## 0.3.0 (2017-03-27)
 
