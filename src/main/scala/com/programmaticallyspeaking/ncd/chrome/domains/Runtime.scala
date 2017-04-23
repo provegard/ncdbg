@@ -102,6 +102,8 @@ object Runtime {
   object PropertyDescriptor extends PropertyDescriptorBuilder
 
   case class ConsoleAPICalledEventParams(`type`: String, args: Seq[RemoteObject], executionContextId: ExecutionContextId, timestamp: Timestamp)
+
+  case class CallFrame(functionName: String, scriptId: ScriptId, url: String, lineNumber: Int, columnNumber: Int)
 }
 
 class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {

@@ -43,7 +43,7 @@ class NashornDebugger(implicit executionContext: ExecutionContext) extends Loggi
   def create(virtualMachine: VirtualMachine)(implicit system: ActorSystem): NashornScriptHost = {
     var singleThreadedScriptHost: NashornScriptHost = null
 
-    def asyncInvokeOnHost(invoker: (NashornScriptHost => Unit)): Unit = {
+    def asyncInvokeOnHost(invoker: (NashornScriptHost => Any)): Future[Any] = {
       Future(invoker(singleThreadedScriptHost))
     }
 

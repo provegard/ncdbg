@@ -7,6 +7,7 @@ import com.programmaticallyspeaking.ncd.chrome.net.FilePublisher
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.messaging.{Observable, SerializedSubject}
 
+import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 object FakeFilePublisher extends FilePublisher {
@@ -34,4 +35,7 @@ object FakeScriptHost extends ScriptHost {
   private def notImpl[R]: R = throw new UnsupportedOperationException("FakeScriptHost is not complete")
 
   override def restartStackFrame(stackFrameId: String): Seq[StackFrame] = notImpl
+
+  override def startProfiling(samplingInterval: FiniteDuration): Unit = notImpl
+  override def stopProfiling(): ProfilingData = notImpl
 }

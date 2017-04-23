@@ -71,7 +71,6 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val event = requestAndReceiveEvent(debugger, "1", Domain.enable)
         event.method should be ("Debugger.scriptParsed")
       }
-      //TODO: assert event details
 
       "should tell the host to pause on breakpoints" in {
         val debugger = newActorInstance[Debugger]

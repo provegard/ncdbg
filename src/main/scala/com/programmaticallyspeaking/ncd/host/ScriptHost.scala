@@ -4,6 +4,7 @@ import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
 import com.programmaticallyspeaking.ncd.infra.ScriptURL
 import com.programmaticallyspeaking.ncd.messaging.Observable
 
+import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
 case class ScriptLocation(lineNumber1Based: Int, columnNumber1Based: Int) {
@@ -117,4 +118,43 @@ trait ScriptHost {
     * @return the stack frames after restarting
     */
   def restartStackFrame(stackFrameId: String): Seq[StackFrame]
+
+  /**
+    * Start profiling with the given sampling interval. Since there's some overhead when collecting stack frames via
+    * JDI, it's not guaranteed that the resulting sampling interval will equal the requested. There can only be one
+    * ongoing profiling "session" at a time.
+    *
+    * @param samplingInterval requested sampling interval
+    */
+  def startProfiling(samplingInterval: FiniteDuration): Unit
+
+  /**
+    * Stops the current profiling "session" and returns profiling data.
+    *
+    * @return profiling data
+    */
+  def stopProfiling(): ProfilingData
+}
+
+/**
+  * Contains profiling data.
+  *
+  * @param samples a list of samples
+  * @param startNanos the start time obtained using [[System.nanoTime()]]
+  * @param stopNanos the stop time obtained using [[System.nanoTime()]]
+  */
+case class ProfilingData(samples: Seq[Sample], startNanos: Long, stopNanos: Long)
+
+/**
+  * Contains an individual profiling sample.
+  *
+  * @param nanoTime sample time obtained using [[System.nanoTime()]]
+  * @param stackFrames a list of script stack frames, possibly empty
+  * @param sampleType type of sample
+  */
+case class Sample(nanoTime: Long, stackFrames: Seq[StackFrame], sampleType: SampleType.SampleType)
+
+object SampleType extends Enumeration {
+  type SampleType = Value
+  val Script, Java, Idle = Value
 }

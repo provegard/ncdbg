@@ -2,6 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import java.io.FileNotFoundException
 import java.util.Collections
+import java.util.concurrent.{Executors, ScheduledFuture, TimeUnit}
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
@@ -9,14 +10,15 @@ import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.{JSObjectMirror, ScriptObjectMirror}
 import com.sun.jdi.event._
-import com.sun.jdi.request.{EventRequest, ExceptionRequest, StepRequest}
+import com.sun.jdi.request.{EventRequest, ExceptionRequest}
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 
@@ -129,9 +131,14 @@ object NashornDebuggerHost {
   val localScopeObjectIdPrefix = "$$locals-"
 
   case class ObjectDescriptor(native: Option[Value], marshalled: ComplexNode, extras: Map[String, ValueNode])
+
+  private val infrastructureThreadNames = Set("attach listener", "reference handler", "finalizer", "signal dispatcher")
+
+  def isInfrastructureThread(t: ThreadReference) = infrastructureThreadNames.contains(t.name().toLowerCase)
+  def isRunningThread(t: ThreadReference) = t.status() == ThreadReference.THREAD_STATUS_RUNNING
 }
 
-class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis: ((NashornScriptHost) => Unit) => Unit) extends NashornScriptHost with Logging {
+class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any]) extends NashornScriptHost with Logging {
   import NashornDebuggerHost._
   import com.programmaticallyspeaking.ncd.infra.BetterOption._
 
@@ -191,6 +198,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private var lastSeenClassPrepareRequests = -1L
 
   private val exceptionRequests = ListBuffer[ExceptionRequest]()
+
+  private var profiling: Option[OngoingProfiling] = None
+  private lazy val profilingExecutor = Executors.newSingleThreadScheduledExecutor()
 
   private def addBreakableLocations(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
     breakableLocationsByScriptUrl.getOrElseUpdate(script.url.toString, ListBuffer.empty) ++= breakableLocations
@@ -1365,7 +1375,91 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     val mayBeAtSpecialStatement = location.isDefined
     val isAtDebuggerStatement = location.exists(isDebuggerStatementLocation)
   }
+
+  override def startProfiling(samplingInterval: FiniteDuration): Unit = {
+    require(profiling.isEmpty, "Only one profiling can be ongoing at a time")
+
+    log.info(s"Starting profiling with sampling interval ${samplingInterval.toMicros} microseconds")
+    val now = System.nanoTime()
+    val samples = ListBuffer[Sample]()
+    val collect: Runnable = () => {
+      val f = asyncInvokeOnThis(_.collectProfilingSample())
+      // To prevent the profiling executor from just scheduling a lot of async collections, we must wait for each
+      // collection to complete.
+      try Await.result(f, 1.second) catch {
+        case NonFatal(t) => log.error("Sample collection failed", t)
+      }
+    }
+
+    val ss = profilingExecutor.scheduleAtFixedRate(collect, 0, samplingInterval.toMicros, TimeUnit.MICROSECONDS)
+    profiling = Some(OngoingProfiling(ss, samples, now))
+  }
+
+  override def stopProfiling(): ProfilingData = profiling match {
+    case Some(ongoing) =>
+      val now = System.nanoTime()
+
+      // Copy the samples right away, since the samples list is mutable and may change before the scheduled job stops.
+      val samplesCopy = Seq(ongoing.samples: _*)
+
+      log.info(s"Stopping profiling, collected ${samplesCopy.size} samples")
+      ongoing.schedule.cancel(false)
+
+      profiling = None
+      ProfilingData(samplesCopy, ongoing.startNanos, now)
+    case None => throw new IllegalArgumentException("No ongoing profiling")
+  }
+
+  private def buildStackFramesSequenceForProfiling(locations: Seq[Location], thread: ThreadReference): Seq[StackFrameHolder] = {
+    locations.map { location =>
+      val functionMethod = location.method()
+      val stackframeId = stackframeIdGenerator.next
+
+      try {
+        //TODO: Should we include a native frame, e.g. inside NativeInt8Array?
+        findActiveBreakpoint(location).map(ab => StackFrameImpl(stackframeId, null, Seq.empty, ab, null, functionDetails(functionMethod))) match {
+          case Some(sf) => StackFrameHolder(Some(sf))
+          case None => StackFrameHolder(None)
+        }
+      } catch {
+        case _: AbsentInformationException => StackFrameHolder(None)
+      }
+    }
+  }
+
+  def collectProfilingSample(): Unit = profiling match {
+    case Some(ongoing) =>
+      val now = System.nanoTime()
+      virtualMachine.suspend()
+      try {
+        val relevantThreads = virtualMachine.allThreads().asScala.filterNot(isInfrastructureThread).filter(isRunningThread)
+
+        val stackFrameListPerThread = relevantThreads.map { thread =>
+          val locations = thread.frames().asScala.map(_.location())
+          buildStackFramesSequenceForProfiling(locations, thread).flatMap(_.stackFrame)
+        }.filter(_.nonEmpty)
+
+        val samples = if (stackFrameListPerThread.nonEmpty) {
+          stackFrameListPerThread.map(Sample(now, _, SampleType.Script))
+        } else if (relevantThreads.nonEmpty) {
+          // Non-script threads running
+          Seq(Sample(now, Seq.empty, SampleType.Java))
+        } else {
+          // No running relevant threads, so the target is idle
+          Seq(Sample(now, Seq.empty, SampleType.Idle))
+        }
+
+        // TODO: One sample for all threads? Or one per thread?
+        ongoing.samples ++= samples
+
+      } finally virtualMachine.resume()
+
+    case None =>
+      log.warn("Cannot collect a profiling sample - no ongoing profiling!")
+  }
 }
+
+case class OngoingProfiling(schedule: ScheduledFuture[_], samples: ListBuffer[Sample], startNanos: Long)
 
 object InitialInitializationComplete extends ScriptEvent
 

@@ -12,6 +12,7 @@ case class NashornEventSet(eventSet: EventSet) extends NashornScriptOperation
   * a typed actor and ensure that *all* access happens inside an actor.
   */
 trait NashornScriptHost extends ScriptHost {
+  def collectProfilingSample(): Unit
 
   // TODO: Should this return a resume flag? Is it ok to resume on another thread?
   def handleOperation(eventQueueItem: NashornScriptOperation): Unit
