@@ -137,6 +137,6 @@ helps also.
 
 ### When I restart a frame, the target application crashes
 
-There appears to be a Java bug (submitted, not confirmed as of 2017-04-20) that causes an intermittent
-`AbstractMethodError` to be thrown after the VM is resumed after stack frames have been popped.
-
+Due to Java bug [JDK-8161579](http://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8161579),
+`AbstractMethodError` may be thrown after the VM is resumed after stack frames have been popped. The bug entry
+comments suggest that 8u132 and later may be free from the bug.
