@@ -292,7 +292,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
           val thisObj = objectWithId("$$this")
           val scopeObjectId = ObjectId("$$scope")
           val scopeObj = ObjectNode("Object", scopeObjectId)
-          val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), Breakpoint("bp1", "a", location(10)), "fun")
+          val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), Breakpoint("bp1", "a", None, location(10)), "fun")
           val ev = simulateHitBreakpoint(Seq(stackFrame))
           val params = getEventParams(ev)
 
@@ -308,7 +308,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       "with a scope object" - {
         val thisObj = objectWithId("$$this")
         val scopeObj = objectWithId("$$scope")
-        val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), Breakpoint("bp1", "a", location(10)), "fun")
+        val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), Breakpoint("bp1", "a", None, location(10)), "fun")
 
         "should result in a Debugger.paused event" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
@@ -343,7 +343,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       "without scopes" - {
         val thisObj = objectWithId("$$this")
-        val stackFrame = createStackFrame("sf1", thisObj, None, Breakpoint("bp1", "a", location(10)), "fun")
+        val stackFrame = createStackFrame("sf1", thisObj, None, Breakpoint("bp1", "a", None, location(10)), "fun")
 
         "should not have a scopes in the event params" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
@@ -498,7 +498,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         if (scriptLoc.lineNumber1Based > 100) None
         else {
           activeBreakpoints += id
-          Some(Breakpoint(id, uri + "_id", scriptLoc))
+          Some(Breakpoint(id, uri + "_id", None, scriptLoc))
         }
     })
     when(host.removeBreakpointById(any[String])).thenAnswerWith({

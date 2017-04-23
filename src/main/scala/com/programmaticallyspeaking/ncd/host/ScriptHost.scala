@@ -1,6 +1,7 @@
 package com.programmaticallyspeaking.ncd.host
 
 import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
+import com.programmaticallyspeaking.ncd.infra.ScriptURL
 import com.programmaticallyspeaking.ncd.messaging.Observable
 
 import scala.util.Try
@@ -9,7 +10,7 @@ case class ScriptLocation(lineNumber1Based: Int, columnNumber1Based: Int) {
   override def toString: String = lineNumber1Based + ":" + columnNumber1Based
 }
 
-case class Breakpoint(breakpointId: String, scriptId: String, location: ScriptLocation)
+case class Breakpoint(breakpointId: String, scriptId: String, scriptURL: Option[ScriptURL], location: ScriptLocation)
 
 sealed trait ScopeType
 object ScopeType {

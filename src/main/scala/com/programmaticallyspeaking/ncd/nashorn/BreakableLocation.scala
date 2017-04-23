@@ -50,7 +50,7 @@ class BreakableLocation(val script: Script, eventRequestManager: EventRequestMan
     breakpointRequest = null
   }
 
-  def toBreakpoint(id: String) = Breakpoint(id, script.id, scriptLocation)
+  def toBreakpoint(id: String) = Breakpoint(id, script.id, Some(script.url), scriptLocation)
 
   override def toString: String = script.id + "/" + scriptLocation.toString
 }
