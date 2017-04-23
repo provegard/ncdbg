@@ -77,12 +77,6 @@ By default, NCDbg listens on port 7778 for connections from Chrome Developer Too
 
 The argument value can be a port number of an address on the form _&lt;host>:&lt;port>_.
 
-### Setting the idle timeout
-
-There's an idle timeout on the connection between Chrome Developer Tools and NCDbg. After the timeout, the connection is
-closed. By default the timeout is 120 seconds, and to set a different timeout, use `--idle-timeout` or `-i` with a
-timeout value in seconds.
-
 ## Nashorn behavior
 
 This section lists some Nashorn behavior that may be surprising at first.
