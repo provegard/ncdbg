@@ -172,6 +172,10 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
 
       scriptHost.pauseOnBreakpoints()
 
+    case Domain.disable =>
+      // Prepare for re-enabling
+      emittedScripts.clear()
+
     case Debugger.getScriptSource(scriptId) =>
       log.debug(s"Requested script source for script with ID $scriptId")
       scriptHost.scriptById(scriptId) match {

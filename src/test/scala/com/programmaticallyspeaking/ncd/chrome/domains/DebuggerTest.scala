@@ -80,6 +80,20 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
         verify(currentScriptHost).pauseOnBreakpoints()
       }
+
+      "should re-emit ScriptParsed events after disabling and re-enabling" in {
+        addScript(script("a"))
+        val debugger = newActorInstance[Debugger]
+
+        val e1 = requestAndReceiveEvent(debugger, "1", Domain.enable)
+        val scriptId1 = e1.params.asInstanceOf[ScriptParsedEventParams].scriptId
+
+        requestAndReceiveResponse(debugger, "2", Domain.disable)
+        val e2 = requestAndReceiveEvent(debugger, "3", Domain.enable)
+        val scriptId2 = e2.params.asInstanceOf[ScriptParsedEventParams].scriptId
+
+        scriptId2 should be (scriptId1)
+      }
     }
 
     "setPauseOnExceptions" - {
