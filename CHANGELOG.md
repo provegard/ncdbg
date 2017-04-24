@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2017-04-24)
 
 * Don't include tools.jar in the distibuted zip; grab it from the runtime JDK instead.
 * Source map support, both file based (requires the file to be readable/accessible by
