@@ -52,8 +52,11 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     ("Scala instance with private val", s"createInstance('${classOf[ClassWithPrivateVal].getName}')", Map("foo" -> "priv-val")),
     ("Scala instance with JavaBeans property", s"createInstance('${classOf[ClassWithJavaBeans].getName}')", Map("fooBar" -> Map("get" -> "<function>", "set" -> "<function>"), "_foo" -> "bar")),
     ("Scala instance with JavaBeans property (no set)", s"createInstance('${classOf[ClassWithJavaBeansOnlyGet].getName}')", Map("foo" -> Map("get" -> "<function>"), "_foo" -> "bar")),
-    ("Scala instance with JavaBeans property (no get)", s"createInstance('${classOf[ClassWithJavaBeansOnlySet].getName}')", Map("foo" -> Map("set" -> "<function>"), "_foo" -> "bar"))
+    ("Scala instance with JavaBeans property (no get)", s"createInstance('${classOf[ClassWithJavaBeansOnlySet].getName}')", Map("foo" -> Map("set" -> "<function>"), "_foo" -> "bar")),
+    ("Hashtable-based object", s"createInstance('${classOf[HashtableDerivate].getName}')", Map("foo" -> "bar", "bar" -> "baz")),
+    ("Hashtable-based object with complex keys and int values", s"createInstance('${classOf[HashtableComplexKeysIntValues].getName}')", Map("foo" -> 1, "bar" -> 2))
   )
+
   val complexValuesAlsoInherited = Table(
     ("desc", "expression", "expected"),
     ("Scala instance with inherited field", s"createInstance('${classOf[SubClass].getName}')", Map("foo" -> "priv-val", "sub" -> "qux"))
@@ -201,4 +204,18 @@ class ClassWithJavaBeansOnlyGet {
 class ClassWithJavaBeansOnlySet {
   private var _foo = "bar"
   def setFoo(s: String): Unit = _foo = s
+}
+
+class HashtableDerivate extends java.util.Hashtable[Object, Object] {
+  put("foo", "bar")
+  put("bar", "baz")
+}
+
+class HashtableComplexKeysIntValues extends java.util.Hashtable[Key, Int] {
+  put(new Key("foo"), 1)
+  put(new Key("bar"), 2)
+}
+
+class Key(s: String) {
+  override def toString: String = s
 }

@@ -1,9 +1,11 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
-import com.programmaticallyspeaking.ncd.host.{SimpleValue, ValueNode}
+import com.programmaticallyspeaking.ncd.host.{ComplexNode, SimpleValue, ValueNode}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.{ClassMirror, ReflectionFieldMirror, ReflectionMethodMirror}
 import com.sun.jdi.{ArrayReference, ObjectReference}
+
+import scala.collection.mutable
 
 trait PropertyHolder {
   def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor]
@@ -121,5 +123,34 @@ object ArbitraryObjectPropertyHolder {
       ms.map(_.mirror.declaringClassName).distinct.size == 1 &&
     // All non-void types should be the same (essentially this is a return-parameter type match)
       ms.flatMap(m => m.mirror.parameterTypeNames :+ m.mirror.returnTypeName).filter(_ != VoidTypeName).distinct.size == 1
+  }
+}
+
+class HashtablePropertyHolder(table: ObjectReference)(implicit marshaller: Marshaller) extends PropertyHolder {
+  import com.programmaticallyspeaking.ncd.nashorn.mirrors.Mirrors._
+  private val tableInvoker = new DynamicInvoker(marshaller.thread, table)
+
+  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+    val enumeration = tableInvoker.keys()
+    val enumInvoker = new DynamicInvoker(marshaller.thread, enumeration.asInstanceOf[ObjectReference])
+    val result = mutable.Map[String, ObjectPropertyDescriptor]()
+    while (enumInvoker.hasMoreElements().asBool(false)) {
+      val keyValue = enumInvoker.next()
+      val marshalledKey = marshaller.marshal(keyValue)
+
+      // Keys in a JS object are strings
+      val keyAsString = marshalledKey match {
+        case SimpleValue(something) => something.toString
+        case _ if keyValue.isInstanceOf[ObjectReference] =>
+          val keyInvoker = new DynamicInvoker(marshaller.thread, keyValue.asInstanceOf[ObjectReference])
+          keyInvoker.applyDynamic("toString")().asString
+        case _ => throw new RuntimeException("Unknown Hashtable key: " + keyValue)
+      }
+
+      val value: ValueNode = tableInvoker.get(keyValue)
+
+      result += keyAsString -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, true, true, Some(value), None, None)
+    }
+    result.toMap
   }
 }

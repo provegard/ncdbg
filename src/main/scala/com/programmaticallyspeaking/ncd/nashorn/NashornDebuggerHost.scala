@@ -1275,6 +1275,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         new JSObjectMirror(ref)
       case ref: ArrayReference =>
         new ArrayPropertyHolder(ref)
+      case obj: ObjectReference if marshaller.isHashtable(obj) =>
+        new HashtablePropertyHolder(obj)
       case obj: ObjectReference =>
         new ArbitraryObjectPropertyHolder(obj)
     }

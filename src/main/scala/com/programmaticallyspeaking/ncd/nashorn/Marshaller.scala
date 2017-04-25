@@ -174,6 +174,11 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case _ => false
   }
 
+  def isHashtable(value: Value): Boolean = value match {
+    case objRef: ObjectReference if inherits(objRef, classOf[java.util.Hashtable[_, _]].getName) => true
+    case _ => false
+  }
+
   private def toArray(ref: ArrayReference) = ArrayNode(ref.length(), None, objectId(ref))
 
   private def toArray(mirror: ScriptObjectMirror) = {
