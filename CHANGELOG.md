@@ -1,5 +1,10 @@
 # Changelog
 
+# Unreleased
+
+* Show a java.util.Hashtable as a JS object with properties, not as a native Java
+  object (issue #36).
+
 ## 0.4.0 (2017-04-24)
 
 * Don't include tools.jar in the distibuted zip; grab it from the runtime JDK instead.
