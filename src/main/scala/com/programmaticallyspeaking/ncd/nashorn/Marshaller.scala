@@ -78,8 +78,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     marshalInPrivate(invoker.applyDynamic("toString")())
   }
 
-  private def isReflectMethod(obj: ObjectReference) = obj.`type`().name == ReflectMethodClassName
-
   private def marshalInPrivate(value: Value): MarshallerResult = value match {
     case primitive: PrimitiveValue => SimpleValue(marshalPrimitive(primitive))
     case s: StringReference => SimpleValue(s.value())
@@ -93,9 +91,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
       MarshallerResult(vn, extra)
     case str: ObjectReference if isConsString(str) =>
       toStringOf(str)
-    case obj: ObjectReference if isReflectMethod(obj) =>
-      val mirror = new ReflectionMethodMirror(obj)
-      FunctionNode(mirror.name, s"function ${mirror.name}() { [native code] }", objectId(obj))
     case obj: ObjectReference =>
       // Scala/Java object perhaps?
       ObjectNode(obj.`type`().name(), objectId(obj))

@@ -53,6 +53,7 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     ("Scala instance with JavaBeans property", s"createInstance('${classOf[ClassWithJavaBeans].getName}')", Map("fooBar" -> Map("get" -> "<function>", "set" -> "<function>"), "_foo" -> "bar")),
     ("Scala instance with JavaBeans property (no set)", s"createInstance('${classOf[ClassWithJavaBeansOnlyGet].getName}')", Map("foo" -> Map("get" -> "<function>"), "_foo" -> "bar")),
     ("Scala instance with JavaBeans property (no get)", s"createInstance('${classOf[ClassWithJavaBeansOnlySet].getName}')", Map("foo" -> Map("set" -> "<function>"), "_foo" -> "bar")),
+    ("Scala instance with inherited JavaBeans property", s"createInstance('${classOf[JavaBeansSubClass].getName}')", Map.empty),
     ("Hashtable-based object", s"createInstance('${classOf[HashtableDerivate].getName}')", Map("foo" -> "bar", "bar" -> "baz")),
     ("Hashtable-based object with complex keys and int values", s"createInstance('${classOf[HashtableComplexKeysIntValues].getName}')", Map("foo" -> 1, "bar" -> 2))
   )
@@ -195,6 +196,8 @@ class ClassWithJavaBeans {
   def getFooBar() = _foo
   def setFooBar(s: String): Unit = _foo = s
 }
+
+class JavaBeansSubClass extends ClassWithJavaBeans
 
 class ClassWithJavaBeansOnlyGet {
   private val _foo = "bar"

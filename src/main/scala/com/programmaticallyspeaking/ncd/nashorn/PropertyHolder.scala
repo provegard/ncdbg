@@ -1,9 +1,8 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
-import com.programmaticallyspeaking.ncd.host.{ComplexNode, SimpleValue, ValueNode}
-import com.programmaticallyspeaking.ncd.nashorn.mirrors.{ClassMirror, ReflectionFieldMirror, ReflectionMethodMirror}
-import com.sun.jdi.{ArrayReference, ObjectReference}
+import com.sun.jdi.{ArrayReference, Method, ObjectReference}
 
 import scala.collection.mutable
 
@@ -30,66 +29,52 @@ class ArrayPropertyHolder(array: ArrayReference)(implicit marshaller: Marshaller
 class ArbitraryObjectPropertyHolder(obj: ObjectReference)(implicit marshaller: Marshaller) extends PropertyHolder {
   import ArbitraryObjectPropertyHolder._
 
-  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
-    val invoker = new DynamicInvoker(marshaller.thread, obj)
-    val clazz = invoker.applyDynamic("getClass")().asInstanceOf[ObjectReference]
+  import scala.collection.JavaConverters._
+  private val refType = obj.referenceType()
 
-    val fields = fieldsFor(clazz, own = true) ++ javaBeansFor(clazz)
-    if (onlyOwn) fields else {
-      // Visit parent classes as well
-      def parents(c: ObjectReference): Seq[ObjectReference] = {
-        val invoker = new DynamicInvoker(marshaller.thread, c)
-        invoker.getSuperclass() match {
-          case sc: ObjectReference => Seq(sc) ++ parents(sc)
-          case _ => Seq.empty
-        }
-      }
-      val pp = parents(clazz)
-      fields ++ pp.flatMap(c => fieldsFor(c, own = false))
-    }
+  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+    fieldMap(onlyOwn) ++ javaBeansMap(onlyOwn)
   }
 
-  private def javaBeansFor(clazz: ObjectReference): Map[String, ObjectPropertyDescriptor] = {
-    val cmirror = new ClassMirror(clazz)
-    cmirror.publicMethods
+  private def fieldMap(onlyOwn: Boolean): Map[String, ObjectPropertyDescriptor] = {
+    val fields = if (onlyOwn) refType.fields() else refType.allFields()
+    fields.asScala.map { f =>
+      val isOwn = f.declaringType() == refType
+      val theValue = marshaller.marshal(obj.getValue(f))
+      f.name() -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
+        isWritable = !f.isFinal, isOwn = isOwn, Some(theValue), None, None)
+    }.toMap
+  }
+
+  private def javaBeansMap(onlyOwn: Boolean): Map[String, ObjectPropertyDescriptor] = {
+    val methods = if (onlyOwn) refType.methods() else refType.allMethods() //TODO: Test non-all here!
+    methods.asScala
       .flatMap(methodToJavaBeanMethod) // filter out JavaBean methods
       .groupBy(_.propertyName)
       .filter(g => fitTogether(g._2))
       .map { g =>
-        val getter = g._2.find(_.isGetter).map(_.mirror.asFunctionNode)
-        val setter = g._2.find(!_.isGetter).map(_.mirror.asFunctionNode)
-        val isOwn = g._2.head.mirror.declaringClassName == cmirror.name
+        val getter = g._2.find(_.isGetter).map(_.toFunctionNode)
+        val setter = g._2.find(!_.isGetter).map(_.toFunctionNode)
+        val isOwn = g._2.head.method.declaringType() == refType
         g._1 -> ObjectPropertyDescriptor(PropertyDescriptorType.Accessor,
           false, true, setter.isDefined, isOwn, None, getter, setter)
       }
-      .toMap
   }
-
-  private def fieldsFor(clazz: ObjectReference, own: Boolean): Map[String, ObjectPropertyDescriptor] = {
-    val cmirror = new ClassMirror(clazz)
-    cmirror.declaredFields.map { mirror =>
-      val isAccessible = mirror.isAccessible
-      if (!isAccessible) {
-        mirror.setAccessible(true)
-      }
-      try {
-        val theValue = mirror.get(obj)
-
-        mirror.name -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
-          isWritable = !mirror.isFinal, isOwn = own, Some(theValue), None, None)
-      } finally {
-        if (!isAccessible) {
-          mirror.setAccessible(false)
-        }
-      }
-
-    }.toMap
-  }
-
 }
 
 object ArbitraryObjectPropertyHolder {
-  private case class JavaBeansMethod(propertyName: String, mirror: ReflectionMethodMirror, isGetter: Boolean)
+  import scala.collection.JavaConverters._
+
+  private case class JavaBeansMethod(propertyName: String, method: Method, isGetter: Boolean) {
+    private[nashorn] def toFunctionNode: FunctionNode = {
+      // As far as I can tell, DevTools doesn't care about a property getter/setter other than what they signify.
+      // When a getter is clicked in the UI, the property value is fetched "normally". This is good, because I don't
+      // know how to marshal a JDI Method as an ObjectReference via Marshaller.
+      val id = Seq(method.declaringType().name(), method.name(), method.signature()).mkString(";")
+      val oid = ObjectId(id)
+      FunctionNode(method.name(), s"function ${method.name()}() { [native code] }", oid)
+    }
+  }
 
   private val nameRegexp = "^[gs]et(\\p{Lu})(.*)".r
   private val VoidTypeName = "void"
@@ -99,17 +84,17 @@ object ArbitraryObjectPropertyHolder {
     case _ => None
   }
 
-  private def methodToJavaBeanMethod(mirror: ReflectionMethodMirror): Option[JavaBeansMethod] = {
-    extractJavaBeansPropertyName(mirror.name).map { propName =>
-      JavaBeansMethod(propName, mirror, mirror.name.startsWith("get"))
+  private def methodToJavaBeanMethod(method: Method): Option[JavaBeansMethod] = {
+    extractJavaBeansPropertyName(method.name()).map { propName =>
+      JavaBeansMethod(propName, method, method.name().startsWith("get"))
     }.filter(meetsBeanRequirements)
   }
 
   private def meetsBeanRequirements(m: JavaBeansMethod): Boolean = {
     if (m.isGetter) {
-      m.mirror.returnTypeName != VoidTypeName && m.mirror.parameterTypeNames.isEmpty
+      m.method.returnTypeName() != VoidTypeName && m.method.argumentTypeNames().isEmpty
     } else {
-      m.mirror.returnTypeName == VoidTypeName && m.mirror.parameterTypeNames.size == 1
+      m.method.returnTypeName() == VoidTypeName && m.method.argumentTypeNames().size() == 1
     }
   }
 
@@ -120,9 +105,9 @@ object ArbitraryObjectPropertyHolder {
     // isGetter must be different across all
       ms.map(_.isGetter).distinct.size == ms.size &&
     // all must belong to the same class
-      ms.map(_.mirror.declaringClassName).distinct.size == 1 &&
+      ms.map(_.method.declaringType()).distinct.size == 1 &&
     // All non-void types should be the same (essentially this is a return-parameter type match)
-      ms.flatMap(m => m.mirror.parameterTypeNames :+ m.mirror.returnTypeName).filter(_ != VoidTypeName).distinct.size == 1
+      ms.flatMap(m => m.method.argumentTypeNames().asScala :+ m.method.returnTypeName()).filter(_ != VoidTypeName).distinct.size == 1
   }
 }
 
