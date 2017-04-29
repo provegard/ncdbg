@@ -31,7 +31,7 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
 
   def getOwnKeys(all: Boolean): Array[String] = invoker.getOwnKeys(all) match {
     case arr: ArrayReference => arr.getValues.asScala.map(_.asString).toArray
-    case other => throw new IllegalStateException("Expected ScriptObject.getOwnKeys to return an array")
+    case other => throw new IllegalStateException("Expected ScriptObject.getOwnKeys to return an array, but got: " + other)
   }
 
   def getOwnPropertyDescriptor(property: String): Option[PropertyDescriptorMirror] =
