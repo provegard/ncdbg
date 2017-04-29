@@ -33,7 +33,9 @@ class ArbitraryObjectPropertyHolder(obj: ObjectReference)(implicit marshaller: M
   private val refType = obj.referenceType()
 
   override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
-    fieldMap(onlyOwn) ++ javaBeansMap(onlyOwn)
+    var props = javaBeansMap(onlyOwn)
+    if (!onlyAccessors) props = fieldMap(onlyOwn) ++ props
+    props
   }
 
   private def fieldMap(onlyOwn: Boolean): Map[String, ObjectPropertyDescriptor] = {
@@ -116,6 +118,8 @@ class HashtablePropertyHolder(table: ObjectReference)(implicit marshaller: Marsh
   private val tableInvoker = new DynamicInvoker(marshaller.thread, table)
 
   override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+    if (onlyAccessors) return Map.empty // Hashtable cannot have accessor properties
+
     val enumeration = tableInvoker.keys()
     val enumInvoker = new DynamicInvoker(marshaller.thread, enumeration.asInstanceOf[ObjectReference])
     val result = mutable.Map[String, ObjectPropertyDescriptor]()

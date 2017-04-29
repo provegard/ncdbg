@@ -32,6 +32,8 @@ class JSObjectMirror(val jsObject: ObjectReference)(implicit marshaller: Marshal
   def getSlot(index: Int): ValueNode = invoker.applyDynamic(getSlotSignature)(index)
 
   override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+    if (onlyAccessors) return Map.empty // JSObject cannot have accessor properties
+
     // For an array, keySet should return indices + "length", and then we get use getSlot.
     keySet().map { prop =>
       val theValue =

@@ -63,6 +63,13 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     ("Scala instance with inherited field", s"createInstance('${classOf[SubClass].getName}')", Map("foo" -> "priv-val", "sub" -> "qux"))
   )
 
+  val complexValuesOnlyAccessors = Table(
+    ("desc", "expression", "expected"),
+    ("JSObject object", s"createInstance('${classOf[ObjectLikeJSObject].getName}')", Map.empty[String, Any]),
+    ("Hashtable-based object", s"createInstance('${classOf[HashtableDerivate].getName}')", Map.empty),
+    ("Scala instance with JavaBeans property", s"createInstance('${classOf[ClassWithJavaBeans].getName}')", Map("fooBar" -> Map("get" -> "<function>", "set" -> "<function>")))
+  )
+
   def testProperties(clazz: Class[_])(handler: (Map[String, ObjectPropertyDescriptor] => Unit)) = {
     val expr = s"createInstance('${clazz.getName}')"
     evaluateExpression(expr) {
@@ -87,7 +94,15 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     forAll(complexValuesAlsoInherited) { (desc, expr, expected) =>
       desc + " (also inherited)" in {
         evaluateExpression(expr) { (host, actual) =>
-          expand(host, actual, true) should equal (expected)
+          expand(host, actual, includeInherited = true) should equal (expected)
+        }
+      }
+    }
+
+    forAll(complexValuesOnlyAccessors) { (desc, expr, expected) =>
+      desc + " (own, only accessors)" in {
+        evaluateExpression(expr) { (host, actual) =>
+          expand(host, actual, includeInherited = false, onlyAccessors = true) should equal (expected)
         }
       }
     }

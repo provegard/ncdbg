@@ -234,7 +234,7 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
 }
 
 object RealMarshallerTest {
-  def expand(host: ScriptHost, node: ValueNode, includeInherited: Boolean = false): Any = {
+  def expand(host: ScriptHost, node: ValueNode, includeInherited: Boolean = false, onlyAccessors: Boolean = false): Any = {
     val seenObjectIds = mutable.Set[ObjectId]()
     def recurse(node: ValueNode): Any = node match {
       case complex: ComplexNode if seenObjectIds.contains(complex.objectId) =>
@@ -243,7 +243,7 @@ object RealMarshallerTest {
       case complex: ComplexNode =>
         seenObjectIds += complex.objectId
         // Remove the 'class' JavaBean getter because it's everywhere so it's noise.
-        host.getObjectProperties(complex.objectId, !includeInherited, false).filter(_._1 != "class").map(e => e._2.descriptorType match {
+        host.getObjectProperties(complex.objectId, !includeInherited, onlyAccessors).filter(_._1 != "class").map(e => e._2.descriptorType match {
           case PropertyDescriptorType.Generic =>
             e._1 -> "???"
           case PropertyDescriptorType.Data =>
