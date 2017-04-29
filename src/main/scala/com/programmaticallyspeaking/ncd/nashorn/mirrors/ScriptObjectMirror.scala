@@ -64,23 +64,33 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
   }
 
   override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
-    val propertyNames = if (onlyOwn) {
-      // Get own properties, pass true to get non-enumerable ones as well (because they are relevant for debugging)
-      getOwnKeys(true)
-    } else {
-      // Get all properties - this method walks the prototype chain
-      propertyIterator().toArray
+    // Note: ScriptObject.getPropertyDescriptor seems buggy. When it doesn't find the own property descriptor, it calls
+    // _getOwnPropertyDescriptor_ of the proto object, but that means that it won't ever look two levels up. Therefore
+    // we have to walk the prototype chain manually. On the plus side, we don't have to use an iterator to get property
+    // names and it's easier to separate own from proto descriptors.
+    if (onlyOwn)
+      ownProperties(markAsOwn = true, onlyAccessors = onlyAccessors)
+    else {
+      var current: ScriptObjectMirror = this
+      var props = Map.empty[String, ObjectPropertyDescriptor]
+      while (current != null) {
+        props = props ++ current.ownProperties(current eq this, onlyAccessors)
+        // getProto of Global returns Global, so make sure uniqueID differs!
+        current = invoker.getProto() match {
+          case objRef: ObjectReference if objRef.uniqueID() != current.scriptObject.uniqueID() =>
+            new ScriptObjectMirror(objRef)
+          case _ => null
+        }
+      }
+      props
     }
+  }
+
+  private def ownProperties(markAsOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+    // Get own properties, pass true to get non-enumerable ones as well (because they are relevant for debugging)
+    val propertyNames = getOwnKeys(true)
     propertyNames.map { prop =>
-      // Get either only the own descriptor or try both ways (own + proto). This is required for us to know
-      // if the descriptor represents an own property.
-      val ownDescriptor = getOwnPropertyDescriptor(prop)
-      // TODO ugly, ugly.. make nicer
-      val hasOwnDescriptor = ownDescriptor.isDefined
-
-      val protoDescriptor = if (onlyOwn || hasOwnDescriptor) None else getPropertyDescriptor(prop)
-
-      val descriptorToUse = protoDescriptor.orElse(ownDescriptor)
+      val descriptorToUse = getOwnPropertyDescriptor(prop)
         .getOrElse(throw new IllegalStateException(s"No property descriptor for ${scriptObject.`type`().name()}.$prop"))
 
       // Read descriptor-generic information
@@ -88,26 +98,29 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
       val isConfigurable = descriptorToUse.isConfigurable
       val isEnumerable = descriptorToUse.isEnumerable
       val isWritable = descriptorToUse.isWritable
-
-      prop -> (theType match {
-        case 0 =>
-          // Generic
-          ObjectPropertyDescriptor(PropertyDescriptorType.Generic, isConfigurable, isEnumerable, isWritable, hasOwnDescriptor,
-            None, None, None)
-        case 1 =>
-          // Data, value is ok to use
-          val theValue = descriptorToUse.getValue
-          ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable, isEnumerable, isWritable, hasOwnDescriptor,
-            Option(theValue), None, None)
-        case 2 =>
-          // Accessor, getter/setter are ok to use
-          val getter = descriptorToUse.getGetter
-          val setter = descriptorToUse.getSetter
-          ObjectPropertyDescriptor(PropertyDescriptorType.Accessor, isConfigurable, isEnumerable, isWritable, hasOwnDescriptor,
-            None, Option(getter), Option(setter))
-        case other => throw new IllegalArgumentException("Unknown property descriptor type: " + other)
-      })
-    }.filter(e => !onlyAccessors || e._2.descriptorType == PropertyDescriptorType.Accessor).toMap
+      val isAccessor = theType == 2
+      if (onlyAccessors && !isAccessor)
+        null // TODO: Fix ugly null usage
+      else
+        prop -> (theType match {
+          case 0 =>
+            // Generic
+            ObjectPropertyDescriptor(PropertyDescriptorType.Generic, isConfigurable, isEnumerable, isWritable, markAsOwn,
+              None, None, None)
+          case 1 =>
+            // Data, value is ok to use
+            val theValue = descriptorToUse.getValue
+            ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable, isEnumerable, isWritable, markAsOwn,
+              Option(theValue), None, None)
+          case 2 =>
+            // Accessor, getter/setter are ok to use
+            val getter = descriptorToUse.getGetter
+            val setter = descriptorToUse.getSetter
+            ObjectPropertyDescriptor(PropertyDescriptorType.Accessor, isConfigurable, isEnumerable, isWritable, markAsOwn,
+              None, Option(getter), Option(setter))
+          case other => throw new IllegalArgumentException("Unknown property descriptor type: " + other)
+        })
+    }.filterNot(_ == null).toMap
   }
 }
 

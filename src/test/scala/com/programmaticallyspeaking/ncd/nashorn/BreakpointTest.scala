@@ -116,14 +116,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     }
 
     "a local scope" - {
-      val script =
-        """(function (arg) {
-          |  debugger;
-          |  arg.toString();
-          |})("test");
-        """.stripMargin
-
-      def evaluateScopeObject(handler: (ScriptHost, ComplexNode) => Unit): Unit = {
+      def evaluateScopeObject(script: String)(handler: (ScriptHost, ComplexNode) => Unit): Unit = {
         waitForBreakpoint(script) { (host, breakpoint) =>
           breakpoint.stackFrames.headOption.flatMap(st => st.scopeChain.find(_.scopeType == ScopeType.Local)) match {
             case Some(scope) =>
@@ -138,30 +131,70 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         }
       }
 
-      "should make a variable (argument) writable" in {
-        evaluateScopeObject { (host, scopeObj) =>
-          host.getObjectProperties(scopeObj.objectId, true, false).get("arg") match {
-            case Some(propDesc) =>
-              propDesc.isWritable should be (true)
-            case None => fail("No property named 'arg'")
+      "with a function argument" - {
+        val script =
+          """(function (arg) {
+            |  debugger;
+            |  arg.toString();
+            |})("test");
+          """.stripMargin
+
+        "should make a variable (argument) writable" in {
+          evaluateScopeObject(script) { (host, scopeObj) =>
+            host.getObjectProperties(scopeObj.objectId, true, false).get("arg") match {
+              case Some(propDesc) =>
+                propDesc.isWritable should be (true)
+              case None => fail("No property named 'arg'")
+            }
+          }
+        }
+
+        "should publish a variable (argument) as a data property with a value" in {
+          evaluateScopeObject(script) { (host, scopeObj) =>
+            host.getObjectProperties(scopeObj.objectId, true, false).get("arg") match {
+              case Some(propDesc) =>
+                propDesc.value should be (Some(SimpleValue("test")))
+              case None => fail("No property named 'arg'")
+            }
+          }
+        }
+
+        "should not leak the anonymous 'obj' object when getting all properties (not only own)" in {
+          evaluateScopeObject(script) { (host, scopeObj) =>
+            host.getObjectProperties(scopeObj.objectId, false, false).keys should not contain ("obj")
           }
         }
       }
 
-      "should publish a variable (argument) as a data property with a value" in {
-        evaluateScopeObject { (host, scopeObj) =>
-          host.getObjectProperties(scopeObj.objectId, true, false).get("arg") match {
-            case Some(propDesc) =>
-              propDesc.value should be (Some(SimpleValue("test")))
-            case None => fail("No property named 'arg'")
+      "in a peculiar situation that I cannot really describe" - {
+        val script =
+          """
+            |(function() {
+            |  var bar, fun, number;
+            |
+            |  number = 0;
+            |  bar = new Int8Array([21, 31]); // this is required, don't know why
+            |
+            |  fun = function() {
+            |    var sub = 42;
+            |    number += 1; // must capture closure
+            |    debugger;
+            |    sub.toString();
+            |  };
+            |
+            |  this.get = fun;
+            |
+            |}).call(this);
+            |
+            |this.get();
+          """.stripMargin
+
+        "should support property extraction from the local scope object" in {
+          evaluateScopeObject(script) { (host, scopeObj) =>
+            host.getObjectProperties(scopeObj.objectId, false, false).keys should contain ("sub")
           }
         }
-      }
 
-      "should not leak the anonymous 'obj' object when getting all properties (not only own)" in {
-        evaluateScopeObject { (host, scopeObj) =>
-          host.getObjectProperties(scopeObj.objectId, false, false).keys should not contain ("obj")
-        }
       }
     }
   }
