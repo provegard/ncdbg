@@ -4,6 +4,8 @@
 
 * Show a java.util.Hashtable as a JS object with properties, not as a native Java
   object (issue #36).
+* Faster extraction of properties from a plain Java object.
+* More robust getObjectProperties handling for ScriptObject (issue #38)
 
 ## 0.4.0 (2017-04-24)
 
