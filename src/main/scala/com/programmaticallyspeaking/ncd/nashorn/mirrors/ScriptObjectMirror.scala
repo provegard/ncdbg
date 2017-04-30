@@ -61,6 +61,8 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
     new ScriptArrayMirror(scriptObject)
   }
 
+  protected def shouldIncludeProperty(propName: String): Boolean = true
+
   override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
     // Note: ScriptObject.getPropertyDescriptor seems buggy. When it doesn't find the own property descriptor, it calls
     // _getOwnPropertyDescriptor_ of the proto object, but that means that it won't ever look two levels up. Therefore
@@ -87,7 +89,7 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
   private def ownProperties(markAsOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
     // Get own properties, pass true to get non-enumerable ones as well (because they are relevant for debugging)
     val propertyNames = getOwnKeys(true)
-    var props = propertyNames.map { prop =>
+    var props = propertyNames.filter(shouldIncludeProperty).map { prop =>
       val descriptorToUse = getOwnPropertyDescriptor(prop)
         .getOrElse(throw new IllegalStateException(s"No property descriptor for ${scriptObject.`type`().name()}.$prop"))
 
@@ -120,8 +122,8 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
         })
     }.filterNot(_ == null).toMap
 
-    if (!props.contains("__proto__")) {
-      protoProperty.foreach(p => props = props + ("__proto__" -> p))
+    if (!props.contains(protoName) && shouldIncludeProperty(protoName)) {
+      protoProperty.foreach(p => props = props + (protoName -> p))
     }
 
     props
@@ -157,4 +159,5 @@ object ScriptObjectMirror {
   val putObjectObjectBoolSignature = "put(Ljava/lang/Object;Ljava/lang/Object;Z)Ljava/lang/Object;"
   val getObjectSignature = "get(Ljava/lang/Object;)Ljava/lang/Object;"
   val getIntSignature = "get(I)Ljava/lang/Object;"
+  val protoName = "__proto__"
 }

@@ -1238,8 +1238,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  private def removeHidden(prop: (String, ObjectPropertyDescriptor)): Boolean = !prop._1.startsWith(hiddenPrefix)
-
   private def accessorToDataForLocals(objectId: ObjectId)(prop: (String, ObjectPropertyDescriptor)): (String, ObjectPropertyDescriptor) = {
     if (objectId.id.startsWith(localScopeObjectIdPrefix) && prop._2.descriptorType == PropertyDescriptorType.Accessor) {
       val desc = prop._2
@@ -1261,18 +1259,25 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     } else prop
   }
 
-  private def createPropertyHolder(objectId: ObjectId, objectDescriptor: ObjectDescriptor)(implicit marshaller: Marshaller): Option[PropertyHolder] = {
+  private def createPropertyHolder(objectId: ObjectId, objectDescriptor: ObjectDescriptor, includeProto: Boolean)(implicit marshaller: Marshaller): Option[PropertyHolder] = {
     val cache = pausedData.get.propertyHolderCache
 
     cache.getOrElseUpdate(objectId, {
       objectDescriptor.native collect {
         case ref: ObjectReference if marshaller.isScriptObject(ref) =>
           new ScriptObjectMirror(ref) {
+
             override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
-              // Don't include hidden properties that we add in scopeWithFreeVariables
-              // Furthermore, for a local scope object, properties are accessors, but we want them to appear as regular
+              // For a local scope object, properties are accessors, but we want them to appear as regular
               // properties to DevTools. The fact that they are accessors is an implementation detail.
-              super.properties(onlyOwn, onlyAccessors).filter(removeHidden).map(accessorToDataForLocals(objectId))
+              super.properties(onlyOwn, onlyAccessors).map(accessorToDataForLocals(objectId))
+            }
+
+            override protected def shouldIncludeProperty(propName: String) = {
+              // Don't include hidden properties that we add in scopeWithFreeVariables
+              if (propName.startsWith(hiddenPrefix)) false
+              else if (propName == ScriptObjectMirror.protoName) includeProto
+              else true
             }
           }
         case ref: ObjectReference if marshaller.isJSObject(ref) =>
@@ -1298,12 +1303,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       // the scope-own properties. Perhaps scopes aren't prototypically related in Chrome?
       val actualOnlyOwn = onlyOwn || isScopeObject
 
+      // We're not interested in the __proto__ property for scope objects.
+      val includeProto = !isScopeObject
+
       objectDescriptorById.get(objectId) match {
         case Some(desc: ObjectDescriptor) =>
           // Get object properties, via a cache.
           val cacheKey = ObjectPropertiesKey(objectId, actualOnlyOwn, onlyAccessors)
           val objectProperties = pausedData.get.objectPropertiesCache.getOrElseUpdate(cacheKey, {
-            createPropertyHolder(objectId, desc).map(_.properties(actualOnlyOwn, onlyAccessors)).getOrElse(Map.empty)
+            createPropertyHolder(objectId, desc, includeProto).map(_.properties(actualOnlyOwn, onlyAccessors)).getOrElse(Map.empty)
           })
 
           // In addition, the node may contain extra entries that typically do not come from Nashorn. One example is
