@@ -35,7 +35,6 @@ object NashornDebuggerHost {
   val JL_Long = "java.lang.Long"
   val JL_Double = "java.lang.Double"
 
-//  val JDWP_ERR_INVALID_SLOT = 35
   object JDWP_ERR_INVALID_SLOT {
     def unapply(v: Any): Option[Throwable] = v match {
       case e: InternalException if e.errorCode() == 35 => Some(e)
@@ -113,6 +112,8 @@ object NashornDebuggerHost {
       * Java process, an arbitrary Java object may change while in this state, so we only cache JS objects.
       */
     val objectPropertiesCache = mutable.Map[ObjectPropertiesKey, Map[String, ObjectPropertyDescriptor]]()
+
+    val propertyHolderCache = mutable.Map[ObjectId, Option[PropertyHolder]]()
   }
 
   private[NashornDebuggerHost] case class ObjectPropertiesKey(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean)
@@ -1261,25 +1262,29 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def createPropertyHolder(objectId: ObjectId, objectDescriptor: ObjectDescriptor)(implicit marshaller: Marshaller): Option[PropertyHolder] = {
-    objectDescriptor.native collect {
-      case ref: ObjectReference if marshaller.isScriptObject(ref) =>
-        new ScriptObjectMirror(ref) {
-          override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
-            // Don't include hidden properties that we add in scopeWithFreeVariables
-            // Furthermore, for a local scope object, properties are accessors, but we want them to appear as regular
-            // properties to DevTools. The fact that they are accessors is an implementation detail.
-            super.properties(onlyOwn, onlyAccessors).filter(removeHidden).map(accessorToDataForLocals(objectId))
+    val cache = pausedData.get.propertyHolderCache
+
+    cache.getOrElseUpdate(objectId, {
+      objectDescriptor.native collect {
+        case ref: ObjectReference if marshaller.isScriptObject(ref) =>
+          new ScriptObjectMirror(ref) {
+            override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+              // Don't include hidden properties that we add in scopeWithFreeVariables
+              // Furthermore, for a local scope object, properties are accessors, but we want them to appear as regular
+              // properties to DevTools. The fact that they are accessors is an implementation detail.
+              super.properties(onlyOwn, onlyAccessors).filter(removeHidden).map(accessorToDataForLocals(objectId))
+            }
           }
-        }
-      case ref: ObjectReference if marshaller.isJSObject(ref) =>
-        new JSObjectMirror(ref)
-      case ref: ArrayReference =>
-        new ArrayPropertyHolder(ref)
-      case obj: ObjectReference if marshaller.isHashtable(obj) =>
-        new HashtablePropertyHolder(obj)
-      case obj: ObjectReference =>
-        new ArbitraryObjectPropertyHolder(obj)
-    }
+        case ref: ObjectReference if marshaller.isJSObject(ref) =>
+          new JSObjectMirror(ref)
+        case ref: ArrayReference =>
+          new ArrayPropertyHolder(ref)
+        case obj: ObjectReference if marshaller.isHashtable(obj) =>
+          new HashtablePropertyHolder(obj)
+        case obj: ObjectReference =>
+          new ArbitraryObjectPropertyHolder(obj)
+      }
+    })
   }
 
   override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = pausedData match {
