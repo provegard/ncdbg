@@ -287,7 +287,13 @@ object RealMarshallerTest {
       case other => false
     }
 
+  /**
+    * If [[anyEqWithMapSupport]] is used as implicit `Equality`, this object can appear as a `Map` value (possibly in
+    * a nested `Map`) to match any actual value.
+    */
   case object AnyObject
+
+  def anyEqWithMapSupport: Equality[Any] = (a: Any, b: Any) => compareAny(a, b)
 
   private def compareAny(a: Any, b: Any): Boolean = a match {
     case aMap: Map[Any, _] =>
