@@ -3,13 +3,14 @@ package com.programmaticallyspeaking.ncd.nashorn
 import java.util
 
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, PropertyDescriptorType, Undefined}
+import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
 import jdk.nashorn.api.scripting.AbstractJSObject
 import org.scalactic.Equality
 import org.scalatest.Inside
 import org.scalatest.prop.TableDrivenPropertyChecks
 
-import scala.collection.mutable
+import scala.collection.{GenMap, mutable}
+import scala.language.higherKinds
 import scala.util.Try
 
 class RealMarshallerTest extends RealMarshallerTestFixture with Inside with TableDrivenPropertyChecks {
@@ -234,16 +235,22 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
 }
 
 object RealMarshallerTest {
-  def expand(host: ScriptHost, node: ValueNode, includeInherited: Boolean = false, onlyAccessors: Boolean = false): Any = {
+  case class Cycle(objectId: ObjectId)
+  def expand(host: ScriptHost, node: ValueNode, includeInherited: Boolean = false, onlyAccessors: Boolean = false, expandProto: Boolean = false): Any = {
     val seenObjectIds = mutable.Set[ObjectId]()
+    // Remove the 'class' JavaBean getter because it's everywhere so it's noise.
+    def removeProps: ((String, ObjectPropertyDescriptor)) => Boolean = e => {
+      if (e._1 == "class") false
+      else if (e._1 == "__proto__" && !expandProto) false
+      else true
+    }
     def recurse(node: ValueNode): Any = node match {
       case complex: ComplexNode if seenObjectIds.contains(complex.objectId) =>
         // In Nashorn, apparently the constructor of the prototype of a function is the function itself...
-        throw new Exception("Cycle detected for object " + complex.objectId)
+        Cycle(complex.objectId)
       case complex: ComplexNode =>
         seenObjectIds += complex.objectId
-        // Remove the 'class' JavaBean getter because it's everywhere so it's noise.
-        host.getObjectProperties(complex.objectId, !includeInherited, onlyAccessors).filter(_._1 != "class").map(e => e._2.descriptorType match {
+        host.getObjectProperties(complex.objectId, !includeInherited, onlyAccessors).filter(removeProps).map(e => e._2.descriptorType match {
           case PropertyDescriptorType.Generic =>
             e._1 -> "???"
           case PropertyDescriptorType.Data =>
@@ -279,6 +286,32 @@ object RealMarshallerTest {
 
       case other => false
     }
+
+  case object AnyObject
+
+  private def compareAny(a: Any, b: Any): Boolean = a match {
+    case aMap: Map[Any, _] =>
+      b match {
+        case bMap: Map[Any, _] => compareMaps(aMap, bMap)
+        case _ => a == b
+      }
+    case _ => a == b
+  }
+
+  private def compareMaps(a: Map[Any, _], b: Map[Any, _]): Boolean = {
+    if (a.size != b.size) return false
+    // Go through entries in a and require equality for values
+    val bIsOk = a forall { entry =>
+      b.get(entry._1) match {
+        case Some(AnyObject) => true
+        case Some(value) => compareAny(entry._2, value)
+        case None => false
+      }
+    }
+    // Return false if b contains an entry that is not in a
+    val bHasKeyNotInA = !b.forall(e => a.contains(e._1))
+    bIsOk && !bHasKeyNotInA
+  }
 }
 
 abstract class BaseArrayJSObject(items: Seq[AnyRef]) extends AbstractJSObject {

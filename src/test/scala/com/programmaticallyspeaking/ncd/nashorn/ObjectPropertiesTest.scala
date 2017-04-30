@@ -70,6 +70,18 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     ("Scala instance with JavaBeans property", s"createInstance('${classOf[ClassWithJavaBeans].getName}')", Map("fooBar" -> Map("get" -> "<function>", "set" -> "<function>")))
   )
 
+  val complexValuesIncludingProto = Table(
+    ("desc", "expression", "expected"),
+    ("Script object with prototype",
+      """(function() {
+        |  var base = { foo: 41 };
+        |  var obj = Object.create(base);
+        |  obj.bar = 42;
+        |  return obj;
+        |})()
+      """.stripMargin, Map("bar" -> 42, "__proto__" -> Map("foo" -> 41, "__proto__" -> AnyObject)))
+  )
+
   def testProperties(clazz: Class[_])(handler: (Map[String, ObjectPropertyDescriptor] => Unit)) = {
     val expr = s"createInstance('${clazz.getName}')"
     evaluateExpression(expr) {
@@ -103,6 +115,15 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
       desc + " (own, only accessors)" in {
         evaluateExpression(expr) { (host, actual) =>
           expand(host, actual, includeInherited = false, onlyAccessors = true) should equal (expected)
+        }
+      }
+    }
+
+    forAll(complexValuesIncludingProto) { (desc, expr, expected) =>
+      desc + " (own, including __proto__)" in {
+        evaluateExpression(expr) { (host, actual) =>
+          implicit val eq = anyEqWithMapSupport
+          expand(host, actual, expandProto = true) should equal (expected)
         }
       }
     }

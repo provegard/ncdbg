@@ -87,7 +87,7 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
   private def ownProperties(markAsOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
     // Get own properties, pass true to get non-enumerable ones as well (because they are relevant for debugging)
     val propertyNames = getOwnKeys(true)
-    propertyNames.map { prop =>
+    var props = propertyNames.map { prop =>
       val descriptorToUse = getOwnPropertyDescriptor(prop)
         .getOrElse(throw new IllegalStateException(s"No property descriptor for ${scriptObject.`type`().name()}.$prop"))
 
@@ -119,6 +119,21 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
           case other => throw new IllegalArgumentException("Unknown property descriptor type: " + other)
         })
     }.filterNot(_ == null).toMap
+
+    if (!props.contains("__proto__")) {
+      protoProperty.foreach(p => props = props + ("__proto__" -> p))
+    }
+
+    props
+  }
+
+  private def protoProperty: Option[ObjectPropertyDescriptor] = {
+    Option(invoker.getProto()).map { v =>
+      val protoValue = Some(marshaller.marshal(v))
+      // I don't know if __proto__ is configurable. It is writable though.
+      ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = false,
+        isWritable = true, isOwn = true, protoValue, None, None)
+    }
   }
 }
 
