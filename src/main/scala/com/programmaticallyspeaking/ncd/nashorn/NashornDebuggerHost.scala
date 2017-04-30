@@ -1285,12 +1285,20 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = pausedData match {
     case Some(pd) =>
       implicit val marshaller = new Marshaller(pd.thread, mappingRegistry)
+
+      val scopeObjectIds: Seq[ObjectId] = pd.stackFrames.flatMap(_.scopeChain).map(_.value).collect{case o: ObjectNode => o.objectId}
+      val isScopeObject = scopeObjectIds.contains(objectId)
+
+      // For scope objects, DevTools passes onlyOwn==false, but manual testing shows that Chrome itself only returns
+      // the scope-own properties. Perhaps scopes aren't prototypically related in Chrome?
+      val actualOnlyOwn = onlyOwn || isScopeObject
+
       objectDescriptorById.get(objectId) match {
         case Some(desc: ObjectDescriptor) =>
           // Get object properties, via a cache.
-          val cacheKey = ObjectPropertiesKey(objectId, onlyOwn, onlyAccessors)
+          val cacheKey = ObjectPropertiesKey(objectId, actualOnlyOwn, onlyAccessors)
           val objectProperties = pausedData.get.objectPropertiesCache.getOrElseUpdate(cacheKey, {
-            createPropertyHolder(objectId, desc).map(_.properties(onlyOwn, onlyAccessors)).getOrElse(Map.empty)
+            createPropertyHolder(objectId, desc).map(_.properties(actualOnlyOwn, onlyAccessors)).getOrElse(Map.empty)
           })
 
           // In addition, the node may contain extra entries that typically do not come from Nashorn. One example is

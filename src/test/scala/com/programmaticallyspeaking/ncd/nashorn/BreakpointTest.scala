@@ -17,7 +17,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
       """var globalVar = 0;
         |debugger;
         |globalVar.toString()
-      """.stripMargin, Seq("Global:.*globalVar.*")),
+      """.stripMargin, Seq("Global:.*globalVar.*Uint16Array.*")),
     ("inside a function with a local variable",
       """(function () {
         |  var x = 0;
@@ -116,7 +116,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     }
 
     "a local scope" - {
-      def evaluateScopeObject(script: String)(handler: (ScriptHost, ComplexNode) => Unit): Unit = {
+      def evaluateLocalScopeObject(script: String)(handler: (ScriptHost, ComplexNode) => Unit): Unit = {
         waitForBreakpoint(script) { (host, breakpoint) =>
           breakpoint.stackFrames.headOption.flatMap(st => st.scopeChain.find(_.scopeType == ScopeType.Local)) match {
             case Some(scope) =>
@@ -140,7 +140,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
           """.stripMargin
 
         "should make a variable (argument) writable" in {
-          evaluateScopeObject(script) { (host, scopeObj) =>
+          evaluateLocalScopeObject(script) { (host, scopeObj) =>
             host.getObjectProperties(scopeObj.objectId, true, false).get("arg") match {
               case Some(propDesc) =>
                 propDesc.isWritable should be (true)
@@ -150,7 +150,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         }
 
         "should publish a variable (argument) as a data property with a value" in {
-          evaluateScopeObject(script) { (host, scopeObj) =>
+          evaluateLocalScopeObject(script) { (host, scopeObj) =>
             host.getObjectProperties(scopeObj.objectId, true, false).get("arg") match {
               case Some(propDesc) =>
                 propDesc.value should be (Some(SimpleValue("test")))
@@ -160,7 +160,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         }
 
         "should not leak the anonymous 'obj' object when getting all properties (not only own)" in {
-          evaluateScopeObject(script) { (host, scopeObj) =>
+          evaluateLocalScopeObject(script) { (host, scopeObj) =>
             host.getObjectProperties(scopeObj.objectId, false, false).keys should not contain ("obj")
           }
         }
@@ -190,11 +190,16 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
           """.stripMargin
 
         "should support property extraction from the local scope object" in {
-          evaluateScopeObject(script) { (host, scopeObj) =>
+          evaluateLocalScopeObject(script) { (host, scopeObj) =>
             host.getObjectProperties(scopeObj.objectId, false, false).keys should contain ("sub")
           }
         }
 
+        "should not include closure variables in the local scope, even if not-own properties are requested, because that is how Chrome works, it seems..." in {
+          evaluateLocalScopeObject(script) { (host, scopeObj) =>
+            host.getObjectProperties(scopeObj.objectId, false, false).keys should not contain ("number")
+          }
+        }
       }
     }
   }
