@@ -68,9 +68,7 @@ dependencies {
 
     compile group: 'com.programmaticallyspeaking', name: 'tinyws', version: '0.0.6'
 
-    // TODO: Update this once a proper slf4s-api release is available.
-    compile 'com.github.provegard:slf4s:2cbc154cf095d9e2027bf978502bb7443afcfdf3'
-//    compile group: 'org.slf4s', name: 'slf4s-api_2.12', version: '1.7.13'
+    compile group: 'org.slf4s', name: 'slf4s-api_2.12', version: '1.7.25'
 
     compile group: 'com.typesafe.akka', name: 'akka-actor_2.12', version: akkaVersion
 
