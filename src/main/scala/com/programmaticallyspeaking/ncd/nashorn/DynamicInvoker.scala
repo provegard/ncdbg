@@ -22,6 +22,8 @@ class Invokers {
   private val sinvokers = mutable.Map[Mirror, StaticInvoker]()
 
   def getDynamic(objectReference: ObjectReference): DynamicInvoker = {
+    // TODO: Reconsider caching here. We'd like to cache on reference type, but we can obviously not reuse the object ref.
+    // TODO: Perhaps break out a special type cache and inject in the invoker?
     dinvokers.getOrElseUpdate(objectReference, new DynamicInvoker(objectReference))
   }
 
