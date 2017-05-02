@@ -1315,11 +1315,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         case Some(desc: ObjectDescriptor) =>
           // Get object properties, via a cache.
           val cacheKey = ObjectPropertiesKey(objectId, actualOnlyOwn, onlyAccessors)
-//          val objectProperties = pausedData.get.objectPropertiesCache.getOrElseUpdate(cacheKey, {
-//            createPropertyHolder(objectId, desc, includeProto).map(_.properties(actualOnlyOwn, onlyAccessors)).getOrElse(Map.empty)
-//          })
-          val objectProperties =
+          val objectProperties = pausedData.get.objectPropertiesCache.getOrElseUpdate(cacheKey, {
             createPropertyHolder(objectId, desc, includeProto).map(_.properties(actualOnlyOwn, onlyAccessors)).getOrElse(Map.empty)
+          })
 
           // In addition, the node may contain extra entries that typically do not come from Nashorn. One example is
           // the Java stack we add if we detect a Java exception.
