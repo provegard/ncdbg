@@ -3,12 +3,14 @@ package com.programmaticallyspeaking.ncd.nashorn
 import java.util.Collections
 
 import com.programmaticallyspeaking.ncd.host._
+import com.programmaticallyspeaking.ncd.host.types.Undefined
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import com.sun.jdi._
 import com.sun.jdi.request.{ClassPrepareRequest, EventRequestManager}
 import org.scalatest.mockito.MockitoSugar
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
 class MarshallerTest extends UnitTest with MockitoSugar {
   import org.mockito.Mockito._
@@ -31,16 +33,31 @@ class MarshallerTest extends UnitTest with MockitoSugar {
     thread
   }
   def newMarshaller = new Marshaller(fakeThread, mappingRegistry)
-  
+
+  def mockValue[A <: Value : ClassTag](typeName: String = "DoesntMatter"): A = {
+    val v = mock[A]
+    val tp = new Type {
+      override def signature(): String = ""
+      override def name(): String = typeName
+      override def virtualMachine(): VirtualMachine = ???
+    }
+    when(v.`type`()).thenReturn(tp)
+    v
+  }
+
   "Marshaller" - {
     "should marshal null" in {
       newMarshaller.marshal(null) should be (EmptyNode)
     }
 
+    "should marshal undefined" in {
+      val uv = mockValue[ObjectReference]("jdk.nashorn.internal.runtime.Undefined")
+      newMarshaller.marshal(uv) should be (SimpleValue(Undefined))
+    }
+
     "should marshal a primitive value" - {
       "which is a Byte" in {
-        val bv = mock[ByteValue]
-        when(bv.byteValue()).thenReturn(42.asInstanceOf[Byte])
+        val bv = byteValue(42.asInstanceOf[Byte])
         newMarshaller.marshal(bv) should be (SimpleValue(42.asInstanceOf[Byte]))
       }
     }
@@ -73,7 +90,7 @@ class MarshallerTest extends UnitTest with MockitoSugar {
   }
 
   private def arrayOfStrings(strings: Seq[String]): ArrayReference = {
-    val ar = mock[ArrayReference]
+    val ar = mockValue[ArrayReference]()
     val list: java.util.List[Value] = strings.map(s => stringRef(s).asInstanceOf[Value]).asJava
     when(ar.getValues).thenReturn(list)
     when(ar.length()).thenReturn(strings.size)
@@ -81,14 +98,14 @@ class MarshallerTest extends UnitTest with MockitoSugar {
   }
 
   private def stringRef(s: String): StringReference = {
-    val sr = mock[StringReference]
+    val sr = mockValue[StringReference]()
     when(sr.value()).thenReturn(s)
     sr
   }
 
-  private def booleanValue(value: Boolean): PrimitiveValue = {
-    val pv = mock[BooleanValue]
-    when(pv.booleanValue()).thenReturn(value.booleanValue())
+  private def byteValue(value: Byte): PrimitiveValue = {
+    val pv = mockValue[ByteValue]()
+    when(pv.byteValue()).thenReturn(value.toByte)
     pv
   }
 }

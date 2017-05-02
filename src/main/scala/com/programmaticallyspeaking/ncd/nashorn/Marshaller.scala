@@ -6,10 +6,9 @@ import com.programmaticallyspeaking.ncd.infra.IdGenerator
 import com.programmaticallyspeaking.ncd.nashorn.mirrors._
 import com.sun.jdi._
 import jdk.nashorn.api.scripting.NashornException
-import jdk.nashorn.internal.runtime.ScriptObject
 
+import scala.collection.mutable
 import scala.language.implicitConversions
-import scala.util.Try
 
 object Marshaller {
   val objectIdGenerator = new IdGenerator("objid-")
@@ -24,7 +23,7 @@ object Marshaller {
   def isUndefined(value: Value): Boolean = value != null && "jdk.nashorn.internal.runtime.Undefined".equals(value.`type`().name())
 
   val ConsStringClassName = "jdk.nashorn.internal.runtime.ConsString"
-  val ReflectMethodClassName = "java.lang.reflect.Method"
+  val ScriptObjectClassName = "jdk.nashorn.internal.runtime.ScriptObject"
 }
 
 object MappingRegistry {
@@ -40,7 +39,21 @@ trait MappingRegistry {
   def register(value: Value, valueNode: ComplexNode, extraProperties: Map[String, ValueNode]): Unit
 }
 
-class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) extends ThreadUser {
+class MarshallerCache {
+  private val inheritorCache = mutable.Map[(String, String), Boolean]()
+
+  def inherits(obj: ObjectReference, typeName: String): Option[Boolean] = {
+    val key = (obj.referenceType().name(), typeName)
+    inheritorCache.get(key)
+  }
+
+  def indicateInheritance(obj: ObjectReference, typeName: String, inherits: Boolean): Unit = {
+    val key = (obj.referenceType().name(), typeName)
+    inheritorCache += key -> inherits
+  }
+}
+
+class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry, cache: MarshallerCache = new MarshallerCache) extends ThreadUser {
   import Marshaller._
 
   import scala.collection.JavaConverters._
@@ -79,13 +92,14 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   }
 
   private def marshalInPrivate(value: Value): MarshallerResult = value match {
+    case x if x == null => EmptyNode
+    case UndefinedValue(vn) => vn
     case primitive: PrimitiveValue => SimpleValue(marshalPrimitive(primitive))
     case s: StringReference => SimpleValue(s.value())
     case arr: ArrayReference => toArray(arr)
     case so if isScriptObject(so) => marshalScriptObject(so)
     case so if isJSObject(so) => marshalJSObject(so)
     case BoxedValue(vn) => vn
-    case UndefinedValue(vn) => vn
     case ExceptionValue((vn, maybeJavaStack)) =>
       val extra = maybeJavaStack.map(st => "javaStack" -> SimpleValue(st)).toMap + ("message" -> SimpleValue(vn.data.message))
       MarshallerResult(vn, extra)
@@ -94,7 +108,6 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     case obj: ObjectReference =>
       // Scala/Java object perhaps?
       ObjectNode(obj.`type`().name(), objectId(obj))
-    case x if x == null => EmptyNode
     case other => throw new IllegalArgumentException("Don't know how to marshal: " + other)
   }
 
@@ -157,15 +170,13 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
   def isScriptObject(value: Value): Boolean = value match {
     case objRef: ObjectReference =>
       val typeName = value.`type`().name()
+      // We only care about Nashorn classes
+      if (!typeName.startsWith("jdk.nashorn.internal")) return false
       // JO classes are dynamically generated
       if (typeName.startsWith("jdk.nashorn.internal.scripts.JO")) return true
       // JD classes as well. Saw these first with JDK 9!
       if (typeName.startsWith("jdk.nashorn.internal.scripts.JD")) return true
-      Try {
-        // TODO: Cache this
-        val clazz = Class.forName(typeName)
-        classOf[ScriptObject].isAssignableFrom(clazz)
-      }.getOrElse(false)
+      inherits(objRef, ScriptObjectClassName)
     case _ => false
   }
 
@@ -341,7 +352,15 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry) 
     * @param obj the object
     * @param typeName the full type name
     */
-  private def inherits(obj: ObjectReference, typeName: String) = allReachableTypesIncluding(obj.referenceType()).exists(_.name() == typeName)
+  private def inherits(obj: ObjectReference, typeName: String) = {
+    cache.inherits(obj, typeName) match {
+      case Some(answer) => answer
+      case None =>
+        val answer = allReachableTypesIncluding(obj.referenceType()).exists(_.name() == typeName)
+        cache.indicateInheritance(obj, typeName, answer)
+        answer
+    }
+  }
 
   private case class LocationData(lineNumber: Int, columnNumber: Int, url: String)
 }

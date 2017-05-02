@@ -107,7 +107,7 @@ object NashornDebuggerHost {
 
   case object PostponeInitialize extends NashornScriptOperation
 
-  private[NashornDebuggerHost] class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame]) {
+  private[NashornDebuggerHost] class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame], val marshaller: Marshaller) {
     /** We assume that we can cache object properties as long as we're in a paused state. Since we're connected to a
       * Java process, an arbitrary Java object may change while in this state, so we only cache JS objects.
       */
@@ -674,8 +674,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     scopeChain
   }
 
-  private def buildStackFramesSequence(perStackFrame: Seq[(Map[String, Value], Location)], thread: ThreadReference): Seq[StackFrameHolder] = {
-    implicit val marshaller = new Marshaller(thread, mappingRegistry)
+  private def buildStackFramesSequence(perStackFrame: Seq[(Map[String, Value], Location)], thread: ThreadReference)(implicit marshaller: Marshaller): Seq[StackFrameHolder] = {
     perStackFrame.map {
       case (values, location) =>
         val functionMethod = location.method()
@@ -761,7 +760,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  private def captureStackFrames(thread: ThreadReference): Seq[StackFrameHolder] = {
+  private def captureStackFrames(thread: ThreadReference)(implicit marshaller: Marshaller): Seq[StackFrameHolder] = {
     // Get all Values FIRST, before marshalling. This is because marshalling requires us to call methods, which
     // will temporarily resume threads, which causes the stack frames to become invalid.
     val perStackFrame = thread.frames().asScala.map { sf =>
@@ -807,6 +806,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
     locationForLocals.clear()
 
+    // Shared marshaller
+    implicit val marshaller = new Marshaller(thread, mappingRegistry)
+
     val stackFrames = captureStackFrames(thread)
     stackFrames.headOption match {
       case Some(holder) if holder.stackFrame.isEmpty && !holder.mayBeAtSpecialStatement =>
@@ -825,7 +827,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame], location: Option[Location]): Boolean = {
+  private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame], location: Option[Location])(implicit marshaller: Marshaller): Boolean = {
     stackFrames.headOption.collect { case sf: StackFrameImpl => sf } match {
       case Some(topStackFrame) =>
         val breakpoint = topStackFrame.breakpoint
@@ -849,7 +851,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
         if (conditionIsTrue) {
           // Indicate that we're paused
-          pausedData = Some(new PausedData(thread, stackFrames))
+          pausedData = Some(new PausedData(thread, stackFrames, marshaller))
 
           scriptById(breakpoint.scriptId).foreach { s =>
             val line = s.sourceLine(breakpoint.location.lineNumber1Based).getOrElse("<unknown line>")
@@ -1083,7 +1085,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private def evaluateOnStackFrame(pd: PausedData, stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): ValueNode = {
     findStackFrame(pd, stackFrameId) match {
       case Some(sf: StackFrameImpl) =>
-        implicit val marshaller = new Marshaller(pd.thread, mappingRegistry)
+        implicit val marshaller = pd.marshaller
 
         // Get the Value instances corresponding to the named objects
         val namedValues = namedObjects.flatMap {
@@ -1294,7 +1296,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = pausedData match {
     case Some(pd) =>
-      implicit val marshaller = new Marshaller(pd.thread, mappingRegistry)
+      implicit val marshaller = pd.marshaller
 
       val scopeObjectIds: Seq[ObjectId] = pd.stackFrames.flatMap(_.scopeChain).map(_.value).collect{case o: ObjectNode => o.objectId}
       val isScopeObject = scopeObjectIds.contains(objectId)
