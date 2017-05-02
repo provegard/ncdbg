@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn.mirrors
 
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror.getObjectSignature
-import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, Marshaller, PropertyHolder}
+import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, Invokers, Marshaller, PropertyHolder}
 import com.sun.jdi._
 
 import scala.language.implicitConversions
@@ -18,7 +18,8 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
 
   import scala.collection.JavaConverters._
 
-  protected lazy val invoker = new DynamicInvoker(marshaller.thread, scriptObject)
+  private implicit val thread: ThreadReference = marshaller.thread
+  protected lazy val invoker = Invokers.shared.getDynamic(scriptObject)
 
   lazy val className: String = invoker.getClassName().asString
 
@@ -142,6 +143,7 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
 class ScriptArrayMirror(scriptObject: ObjectReference)(implicit marshaller: Marshaller) extends ScriptObjectMirror(scriptObject) {
   import Mirrors._
   import ScriptObjectMirror._
+  private implicit val thread: ThreadReference = marshaller.thread
 
   def length: Int = invoker.getLength().asNumber(0).intValue()
 
@@ -150,6 +152,7 @@ class ScriptArrayMirror(scriptObject: ObjectReference)(implicit marshaller: Mars
 
 class ScriptFunctionMirror(scriptObject: ObjectReference)(implicit marshaller: Marshaller) extends ScriptObjectMirror(scriptObject) {
   import Mirrors._
+  private implicit val thread: ThreadReference = marshaller.thread
 
   lazy val name: String = invoker.getName().asString
   lazy val source: String = invoker.toSource().asString

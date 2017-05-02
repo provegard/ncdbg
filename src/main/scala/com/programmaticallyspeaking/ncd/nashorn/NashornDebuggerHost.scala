@@ -481,10 +481,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     FunctionDetails(functionMethod.name())
   }
 
-  private def boxed(thread: ThreadReference, prim: PrimitiveValue, typeName: String, method: String): Value = {
+  private def boxed(prim: PrimitiveValue, typeName: String, method: String)(implicit thread: ThreadReference): Value = {
     foundWantedTypes.get(typeName) match {
       case Some(aType) =>
-        val invoker = new StaticInvoker(thread, aType)
+        val invoker = Invokers.shared.getStatic(aType)
         invoker.applyDynamic(method)(prim)
       case None => throw new IllegalArgumentException(s"Failed to find the '$typeName' type.")
     }
@@ -497,19 +497,20 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     * @return the boxed value
     */
   // TODO: Move this method to some class where it fits better. Marshaller? VirtualMachineExtensions?
-  private def boxed(thread: ThreadReference, prim: PrimitiveValue): Value = prim match {
-    case b: BooleanValue => boxed(thread, b, JL_Boolean, "valueOf(Z)Ljava/lang/Boolean;")
-    case i: IntegerValue => boxed(thread, i, JL_Integer, "valueOf(I)Ljava/lang/Integer;")
+  private def boxed(prim: PrimitiveValue)(implicit thread: ThreadReference): Value = prim match {
+    case b: BooleanValue => boxed(b, JL_Boolean, "valueOf(Z)Ljava/lang/Boolean;")
+    case i: IntegerValue => boxed(i, JL_Integer, "valueOf(I)Ljava/lang/Integer;")
     case l: LongValue =>
       // LongValue is kept for completeness - Nashorn since8 8u91 or something like that doesn't use Long for
       // representing numbers anymore.
-      boxed(thread, l, JL_Long, "valueOf(J)Ljava/lang/Long;")
-    case d: DoubleValue => boxed(thread, d, JL_Double, "valueOf(D)Ljava/lang/Double;")
+      boxed(l, JL_Long, "valueOf(J)Ljava/lang/Long;")
+    case d: DoubleValue => boxed(d, JL_Double, "valueOf(D)Ljava/lang/Double;")
     case _ => throw new IllegalArgumentException("Cannot box " + prim)
   }
 
   private def scopeWithFreeVariables(scopeObject: Value, freeVariables: Map[String, AnyRef])(implicit marshaller: Marshaller): Value = {
     require(scopeObject != null, "Scope object must be non-null")
+    implicit val thread = marshaller.thread
     // If there aren't any free variables, we don't need to create a wrapper scope
     if (freeVariables.isEmpty) return scopeObject
 
@@ -535,12 +536,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
     scopeObjFactory += "return obj;}).call(this)"
 
-    val anObject = DebuggerSupport_eval_custom(marshaller.thread, scopeObject, null, scopeObjFactory).asInstanceOf[ObjectReference]
+    val anObject = DebuggerSupport_eval_custom(scopeObject, null, scopeObjFactory).asInstanceOf[ObjectReference]
     val mirror = new ScriptObjectMirror(anObject)
     freeVariables.foreach {
       case (name, value) =>
         val valueToPut = value match {
-          case prim: PrimitiveValue => boxed(marshaller.thread, prim)
+          case prim: PrimitiveValue => boxed(prim)
           case other => other
         }
         mirror.put(hiddenPrefix + name, valueToPut, isStrict = false)
@@ -559,7 +560,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     * @param code the code to evaluate
     * @return the result of the evaluation. A thrown exception is wrapped in a [[ThrownExceptionReference]] instance.
     */
-  private def DebuggerSupport_eval_custom(thread: ThreadReference, thisObject: Value, scopeObject: Value, code: String): Value = {
+  private def DebuggerSupport_eval_custom(thisObject: Value, scopeObject: Value, code: String)(implicit thread: ThreadReference): Value = {
     // Based on the following code:
 //    static Object eval(ScriptObject scope, Object self, String string, boolean returnException) {
 //      Global global = Context.getGlobal();
@@ -575,14 +576,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 //    }
     foundWantedTypes.get(NIR_Context) match {
       case Some(ct: ClassType) =>
-        val invoker = new StaticInvoker(thread, ct)
+        val invoker = Invokers.shared.getStatic(ct)
 
         val global = invoker.getGlobal()
-        val globalInvoker = new DynamicInvoker(thread, global.asInstanceOf[ObjectReference])
+        val globalInvoker = Invokers.shared.getDynamic(global.asInstanceOf[ObjectReference])
         val initialScope = if (scopeObject != null) scopeObject else global
         val callThis = if (thisObject != null) thisObject else global
         val context = globalInvoker.getContext()
-        val contextInvoker = new DynamicInvoker(thread, context.asInstanceOf[ObjectReference])
+        val contextInvoker = Invokers.shared.getDynamic(context.asInstanceOf[ObjectReference])
 
         try {
           val codeWithMarker = s"""'$EvaluatedCodeMarker';$code"""
@@ -612,9 +613,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     ScopeType.Closure
   }
 
-  private def prototypeOf(marshaller: Marshaller, value: Value): Option[Value] = value match {
+  private def prototypeOf(value: Value)(implicit thread: ThreadReference): Option[Value] = value match {
     case ref: ObjectReference =>
-      val invoker = new DynamicInvoker(marshaller.thread, ref)
+      val invoker = Invokers.shared.getDynamic(ref)
       val maybeProto = Option(invoker.getProto())
       // Prototype of Global is jdk.nashorn.internal.objects.NativeObject$Prototype - ignore it
       if (maybeProto.exists(_.`type`().name().endsWith("$Prototype"))) None
@@ -622,12 +623,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     case _ => None
   }
 
-  private def prototypeChain(marshaller: Marshaller, value: Value): Seq[Value] = prototypeOf(marshaller, value) match {
-    case Some(proto) => Seq(proto) ++ prototypeChain(marshaller, proto)
+  private def prototypeChain(value: Value)(implicit thread: ThreadReference): Seq[Value] = prototypeOf(value) match {
+    case Some(proto) => Seq(proto) ++ prototypeChain(proto)
     case None => Seq.empty
   }
 
   private def createScopeChain(marshaller: Marshaller, originalScopeValue: Option[Value], thisValue: Value, marshalledThisNode: ValueNode, localNode: Option[ObjectNode]): Seq[Scope] = {
+    implicit val thread: ThreadReference = marshaller.thread
     // Note: I tried to mimic how Chrome reports scopes, but it's a bit difficult. For example, if the current scope
     // is a 'with' scope, there is no way (that I know of) to determine if we're in a function (IIFE) inside a with
     // block or if we're inside a with block inside a function.
@@ -639,7 +641,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       } else {
         foundWantedTypes.get(NIR_Context) match {
           case Some(context) =>
-            val invoker = new StaticInvoker(marshaller.thread, context)
+            val invoker = Invokers.shared.getStatic(context)
             val global = invoker.getGlobal()
             Option(global).map(toScope)
           case None =>
@@ -661,7 +663,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       case Some((v, s)) =>
         // Add the scope and all its parent scopes
         scopeChain += s
-        scopeChain ++= prototypeChain(marshaller, v).map(toScope)
+        scopeChain ++= prototypeChain(v).map(toScope)
       case None =>
         // noop
     }
@@ -674,7 +676,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     scopeChain
   }
 
-  private def buildStackFramesSequence(perStackFrame: Seq[(Map[String, Value], Location)], thread: ThreadReference)(implicit marshaller: Marshaller): Seq[StackFrameHolder] = {
+  private def buildStackFramesSequence(perStackFrame: Seq[(Map[String, Value], Location)])(implicit marshaller: Marshaller): Seq[StackFrameHolder] = {
+    implicit val thread: ThreadReference = marshaller.thread
     perStackFrame.map {
       case (values, location) =>
         val functionMethod = location.method()
@@ -723,7 +726,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
                 val scopeToUse = scopeWithFreeVariables(localScope, namedValues)
 
                 try {
-                  val ret = DebuggerSupport_eval_custom(thread, originalThis, scopeToUse, code)
+                  val ret = DebuggerSupport_eval_custom(originalThis, scopeToUse, code)
                   marshaller.marshal(ret) match {
                     case SimpleValue(str: String) if str == EvaluatedCodeMarker =>
                       // A non-expression statements such as "var x = 42" causes the evaluation marker to leak as an
@@ -790,7 +793,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
 
     // Second pass, marshal
-    buildStackFramesSequence(perStackFrame, thread)
+    buildStackFramesSequence(perStackFrame)
   }
 
   private def handleBreakpoint(ev: LocatableEvent): Boolean = {
@@ -799,7 +802,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
     // Log at debug level because we get noise due to exception requests.
     log.debug(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")
-    val thread = ev.thread()
+    implicit val thread = ev.thread()
 
     // Start with a fresh object registry
     objectDescriptorById.clear()
@@ -807,7 +810,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     locationForLocals.clear()
 
     // Shared marshaller
-    implicit val marshaller = new Marshaller(thread, mappingRegistry)
+    implicit val marshaller = new Marshaller(mappingRegistry)
 
     val stackFrames = captureStackFrames(thread)
     stackFrames.headOption match {
@@ -1312,9 +1315,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         case Some(desc: ObjectDescriptor) =>
           // Get object properties, via a cache.
           val cacheKey = ObjectPropertiesKey(objectId, actualOnlyOwn, onlyAccessors)
-          val objectProperties = pausedData.get.objectPropertiesCache.getOrElseUpdate(cacheKey, {
+//          val objectProperties = pausedData.get.objectPropertiesCache.getOrElseUpdate(cacheKey, {
+//            createPropertyHolder(objectId, desc, includeProto).map(_.properties(actualOnlyOwn, onlyAccessors)).getOrElse(Map.empty)
+//          })
+          val objectProperties =
             createPropertyHolder(objectId, desc, includeProto).map(_.properties(actualOnlyOwn, onlyAccessors)).getOrElse(Map.empty)
-          })
 
           // In addition, the node may contain extra entries that typically do not come from Nashorn. One example is
           // the Java stack we add if we detect a Java exception.

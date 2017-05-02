@@ -53,7 +53,7 @@ class MarshallerCache {
   }
 }
 
-class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry, cache: MarshallerCache = new MarshallerCache) extends ThreadUser {
+class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = new MarshallerCache)(implicit val thread: ThreadReference) {
   import Marshaller._
 
   import scala.collection.JavaConverters._
@@ -87,7 +87,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry, 
   private def isConsString(str: ObjectReference) = str.`type`().name == ConsStringClassName
 
   private def toStringOf(obj: ObjectReference) = {
-    val invoker = new DynamicInvoker(thread, obj)
+    val invoker = Invokers.shared.getDynamic(obj)
     marshalInPrivate(invoker.applyDynamic("toString")())
   }
 
@@ -112,7 +112,7 @@ class Marshaller(val thread: ThreadReference, mappingRegistry: MappingRegistry, 
   }
 
   private def attemptUnboxing(value: ObjectReference): Option[ValueNode] = {
-    val invoker = new DynamicInvoker(thread, value)
+    val invoker = Invokers.shared.getDynamic(value)
     val v = value.referenceType().name() match {
       case "java.lang.Double" => invoker.doubleValue()
       case "java.lang.Float" => invoker.floatValue()

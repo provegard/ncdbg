@@ -1,12 +1,13 @@
 package com.programmaticallyspeaking.ncd.nashorn.mirrors
 
 import com.programmaticallyspeaking.ncd.host.ValueNode
-import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, Marshaller}
-import com.sun.jdi.ObjectReference
+import com.programmaticallyspeaking.ncd.nashorn.{Invokers, Marshaller}
+import com.sun.jdi.{ObjectReference, ThreadReference}
 
 class PropertyDescriptorMirror(propertyDescriptor: ObjectReference)(implicit marshaller: Marshaller) {
   import Mirrors._
-  private val invoker = new DynamicInvoker(marshaller.thread, propertyDescriptor)
+  private implicit val thread: ThreadReference = marshaller.thread
+  private val invoker = Invokers.shared.getDynamic(propertyDescriptor)
 
   lazy val isConfigurable: Boolean = invoker.isConfigurable().asBool(false)
   lazy val isEnumerable: Boolean = invoker.isEnumerable().asBool(false)

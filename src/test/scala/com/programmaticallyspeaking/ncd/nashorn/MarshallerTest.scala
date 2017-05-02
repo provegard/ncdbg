@@ -32,7 +32,8 @@ class MarshallerTest extends UnitTest with MockitoSugar {
     when(thread.virtualMachine()).thenReturn(vm)
     thread
   }
-  def newMarshaller = new Marshaller(fakeThread, mappingRegistry)
+
+  def newMarshaller = new Marshaller(mappingRegistry)(fakeThread)
 
   def mockValue[A <: Value : ClassTag](typeName: String = "DoesntMatter"): A = {
     val v = mock[A]

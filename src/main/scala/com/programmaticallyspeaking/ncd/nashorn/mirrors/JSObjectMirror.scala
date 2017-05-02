@@ -3,14 +3,15 @@ package com.programmaticallyspeaking.ncd.nashorn.mirrors
 import com.programmaticallyspeaking.ncd.host.ValueNode
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.infra.StringUtils.isUnsignedInt
-import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, Marshaller, PropertyHolder}
-import com.sun.jdi.ObjectReference
+import com.programmaticallyspeaking.ncd.nashorn.{DynamicInvoker, Invokers, Marshaller, PropertyHolder}
+import com.sun.jdi.{ObjectReference, ThreadReference}
 
 class JSObjectMirror(val jsObject: ObjectReference)(implicit marshaller: Marshaller) extends PropertyHolder {
   import JSObjectMirror._
   import Mirrors._
 
-  private lazy val invoker = new DynamicInvoker(marshaller.thread, jsObject)
+  private implicit val thread: ThreadReference = marshaller.thread
+  private lazy val invoker = Invokers.shared.getDynamic(jsObject)
 
   lazy val className: String = invoker.getClassName().asString
 
@@ -19,7 +20,7 @@ class JSObjectMirror(val jsObject: ObjectReference)(implicit marshaller: Marshal
 
   def keySet(): Set[String] = {
     val theSet = invoker.keySet().asInstanceOf[ObjectReference]
-    val setInvoker = new DynamicInvoker(marshaller.thread, theSet)
+    val setInvoker = Invokers.shared.getDynamic(theSet)
     val iterator = new IteratorMirror[String](setInvoker.iterator().asInstanceOf[ObjectReference])
     iterator.toSet
   }

@@ -3,6 +3,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 import com.programmaticallyspeaking.ncd.host.{ComplexNode, ErrorValue, ValueNode}
 import com.sun.jdi._
 
+import scala.collection.mutable
 import scala.language.implicitConversions
 import scala.language.dynamics
 import scala.util.control.NonFatal
@@ -11,10 +12,32 @@ class MissingMethodException(val name: String, message: String) extends RuntimeE
 
 class InvocationFailedException(message: String, val exceptionReference: ObjectReference) extends RuntimeException(message)
 
-abstract class Invoker(val thread: ThreadReference) extends ThreadUser {
+object Invokers {
+  val shared: Invokers = new Invokers
+}
+
+class Invokers {
+
+  private val dinvokers = mutable.Map[Mirror, DynamicInvoker]()
+  private val sinvokers = mutable.Map[Mirror, StaticInvoker]()
+
+  def getDynamic(objectReference: ObjectReference): DynamicInvoker = {
+    dinvokers.getOrElseUpdate(objectReference, new DynamicInvoker(objectReference))
+  }
+
+  def getStatic(classType: ClassType): StaticInvoker = {
+    sinvokers.getOrElseUpdate(classType, new StaticInvoker(classType))
+  }
+}
+
+abstract class Invoker(refType: ReferenceType) {
   import scala.collection.JavaConverters._
 
-  protected def toValue(x: Any): Value = x match {
+  private val visibleMethods = refType.visibleMethods().asScala
+  private val methodsByName = visibleMethods.groupBy(_.name())
+  private val methodsByNameAndSig = visibleMethods.groupBy(m => (m.name(), m.signature()))
+
+  protected def toValue(x: Any)(implicit thread: ThreadReference): Value = x match {
     case v: Value => v
     case b: Boolean => thread.virtualMachine().mirrorOf(b)
     case b: Byte => thread.virtualMachine().mirrorOf(b)
@@ -31,16 +54,19 @@ abstract class Invoker(val thread: ThreadReference) extends ThreadUser {
 
   protected def findMethod(referenceType: ReferenceType, methodName: String, argCount: Int): Either[Seq[Method], Method] = {
     val sigIndex = methodName.indexOf('(')
-    val (name, sig) = if (sigIndex >= 0) {
+    if (sigIndex >= 0) {
       // Method name contains signature
-      methodName.splitAt(sigIndex)
+      methodsByNameAndSig.get(methodName.splitAt(sigIndex)).flatMap(_.headOption) match {
+        case Some(method) => Right(method)
+        case None => Left(Seq.empty)
+      }
     } else {
-      (methodName, null)
-    }
-    val namedMethods = referenceType.methodsByName(name).asScala
-    namedMethods.find(m => m.argumentTypes().size() == argCount && (sig == null || sig == m.signature())) match {
-      case Some(method) => Right(method)
-      case None => Left(namedMethods)
+      // Only a method name
+      methodsByName.get(methodName).map(_.filter(_.argumentTypeNames().size() == argCount)).map(_.toList) match {
+        case Some(method :: Nil) => Right(method)
+        case Some(methods) => Left(methods)
+        case None => Left(Seq.empty)
+      }
     }
   }
 
@@ -49,12 +75,12 @@ abstract class Invoker(val thread: ThreadReference) extends ThreadUser {
       "\n\nCandidates:\n" + candidates.map(m => s"- ${m.name()}${m.signature()}").mkString("\n"))
   }
 
-  protected def unpackError[R](handle: => R): R = {
+  protected def unpackError[R](handle: => R)(implicit thread: ThreadReference): R = {
     try handle catch {
       case ex: InvocationException =>
         try {
           // Try to marshal the exception. We expect Marshaller to register an ErrorValue with extra property 'javaStack'.
-          val marshaller = new Marshaller(thread, new ThrowingMappingRegistry)
+          val marshaller = new Marshaller(new ThrowingMappingRegistry)
           marshaller.marshal(ex.exception())
           throw new RuntimeException("Invocation failed", ex)
         } catch {
@@ -83,16 +109,16 @@ abstract class Invoker(val thread: ThreadReference) extends ThreadUser {
   }
 }
 
-class DynamicInvoker(thread: ThreadReference, objectReference: ObjectReference) extends Invoker(thread) with Dynamic {
+class DynamicInvoker(objectReference: ObjectReference) extends Invoker(objectReference.referenceType()) with Dynamic {
   import scala.collection.JavaConverters._
   import VirtualMachineExtensions._
 
-  def applyDynamic(methodName: String)(args: Any*): Value = {
+  def applyDynamic(methodName: String)(args: Any*)(implicit thread: ThreadReference): Value = {
     findMethod(objectReference.referenceType(), methodName, args.size) match {
       case Right(method) =>
         val argValues = args.map(toValue)
         thread.virtualMachine().withoutClassPrepareRequests {
-          unpackError(objectReference.invokeMethod(suspendedThread(), method, argValues.asJava, ObjectReference.INVOKE_SINGLE_THREADED))
+          unpackError(objectReference.invokeMethod(thread, method, argValues.asJava, ObjectReference.INVOKE_SINGLE_THREADED))
         }
       case Left(candidates) =>
         rejectCall(methodName, objectReference.referenceType(), args, candidates)
@@ -100,16 +126,16 @@ class DynamicInvoker(thread: ThreadReference, objectReference: ObjectReference) 
   }
 }
 
-class StaticInvoker(thread: ThreadReference, classType: ClassType) extends Invoker(thread) with Dynamic {
+class StaticInvoker(classType: ClassType) extends Invoker(classType) with Dynamic {
   import scala.collection.JavaConverters._
   import VirtualMachineExtensions._
 
-  def applyDynamic(methodName: String)(args: Any*): Value = {
+  def applyDynamic(methodName: String)(args: Any*)(implicit thread: ThreadReference): Value = {
     findMethod(classType, methodName, args.size) match {
       case Right(method) =>
         val argValues = args.map(toValue)
         thread.virtualMachine().withoutClassPrepareRequests {
-          unpackError(classType.invokeMethod(suspendedThread(), method, argValues.asJava, ObjectReference.INVOKE_SINGLE_THREADED))
+          unpackError(classType.invokeMethod(thread, method, argValues.asJava, ObjectReference.INVOKE_SINGLE_THREADED))
         }
       case Left(candidates) =>
         rejectCall(methodName, classType, args, candidates)

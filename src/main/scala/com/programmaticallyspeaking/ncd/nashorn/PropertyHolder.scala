@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
-import com.sun.jdi.{ArrayReference, Method, ObjectReference}
+import com.sun.jdi.{ArrayReference, Method, ObjectReference, ThreadReference}
 
 import scala.collection.mutable
 
@@ -115,13 +115,14 @@ object ArbitraryObjectPropertyHolder {
 
 class HashtablePropertyHolder(table: ObjectReference)(implicit marshaller: Marshaller) extends PropertyHolder {
   import com.programmaticallyspeaking.ncd.nashorn.mirrors.Mirrors._
-  private val tableInvoker = new DynamicInvoker(marshaller.thread, table)
+  private implicit val thread: ThreadReference = marshaller.thread
+  private val tableInvoker = Invokers.shared.getDynamic(table)
 
   override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
     if (onlyAccessors) return Map.empty // Hashtable cannot have accessor properties
 
     val enumeration = tableInvoker.keys()
-    val enumInvoker = new DynamicInvoker(marshaller.thread, enumeration.asInstanceOf[ObjectReference])
+    val enumInvoker = Invokers.shared.getDynamic(enumeration.asInstanceOf[ObjectReference])
     val result = mutable.Map[String, ObjectPropertyDescriptor]()
     while (enumInvoker.hasMoreElements().asBool(false)) {
       val keyValue = enumInvoker.next()
@@ -131,7 +132,7 @@ class HashtablePropertyHolder(table: ObjectReference)(implicit marshaller: Marsh
       val keyAsString = marshalledKey match {
         case SimpleValue(something) => something.toString
         case _ if keyValue.isInstanceOf[ObjectReference] =>
-          val keyInvoker = new DynamicInvoker(marshaller.thread, keyValue.asInstanceOf[ObjectReference])
+          val keyInvoker = Invokers.shared.getDynamic(keyValue.asInstanceOf[ObjectReference])
           keyInvoker.applyDynamic("toString")().asString
         case _ => throw new RuntimeException("Unknown Hashtable key: " + keyValue)
       }
