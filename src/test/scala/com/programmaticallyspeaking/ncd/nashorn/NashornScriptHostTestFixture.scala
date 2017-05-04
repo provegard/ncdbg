@@ -1,6 +1,8 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import java.io._
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import com.programmaticallyspeaking.ncd.host.ScriptEvent
@@ -75,7 +77,8 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
 
   protected val eventSubject = new SerializedSubject[ScriptEvent]
 
-  protected def reportProgress(msg: String): Unit = progress.add(msg)
+  private def nowString = ZonedDateTime.now().format(DateTimeFormatter.ISO_INSTANT)
+  protected def reportProgress(msg: String): Unit = progress.add(s"[$nowString] $msg")
 
   protected def summarizeProgress() = progress.asScala.mkString("\n")
 
@@ -209,6 +212,7 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorT
     Option(observer).foreach(addObserver)
 
     val f = vmRunningPromise.future.flatMap { host =>
+      reportProgress(">>>>>> TEST START")
       reportProgress("VM running, sending script")
       sendToVm(script, encodeBase64 = true)
       handler(host)
