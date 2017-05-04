@@ -163,6 +163,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   private val objectDescriptorById = mutable.Map[ObjectId, ObjectDescriptor]()
 
+  private val objectReferencesWithDisabledGC = ListBuffer[ObjectReference]()
+
   /**
     * Keeps track of the stack frame location for a given locals object that we have created to host local variable
     * values. This allows us to update local variables for the correct stack frame (based on its location). We cannot
@@ -457,7 +459,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
             log.error(s"Failed to handle event ${ev.getClass.getName}", ex)
         }
       }
-      if (doResume) eventSet.resume()
+      if (doResume) resume(eventSet)
     case ConsiderReferenceType(refType, attemptsLeft) =>
       // We may have resolved the reference type when hitting a breakpoint, and in that case we can ignore this retry
       // attempt.
@@ -475,6 +477,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       }
     case operation =>
       throw new IllegalArgumentException("Unknown operation: " + operation)
+  }
+
+  private def resume(eventSet: EventSet): Unit = {
+    enableGarbageCollectionWhereDisabled()
+    eventSet.resume()
   }
 
   def functionDetails(functionMethod: Method): FunctionDetails = {
@@ -796,6 +803,28 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     buildStackFramesSequence(perStackFrame)
   }
 
+  private def enableGarbageCollectionWhereDisabled(): Unit = {
+    objectReferencesWithDisabledGC.foreach(_.enableCollection())
+    objectReferencesWithDisabledGC.clear()
+  }
+
+  private def disableGarbageCollectionFor(value: Value): Unit = value match {
+    case objRef: ObjectReference =>
+      // Disable and track the reference so we can enable when we resume
+      objRef.disableCollection()
+      objectReferencesWithDisabledGC += objRef
+    case _ =>
+  }
+
+  private def createMarshaller()(implicit threadReference: ThreadReference): Marshaller = {
+    new Marshaller(mappingRegistry) {
+      override def marshal(value: Value): ValueNode = {
+        disableGarbageCollectionFor(value)
+        super.marshal(value)
+      }
+    }
+  }
+
   private def handleBreakpoint(ev: LocatableEvent): Boolean = {
     // Resume right away if we're not pausing on breakpoints
     if (!willPauseOnBreakpoints) return true
@@ -810,7 +839,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     locationForLocals.clear()
 
     // Shared marshaller
-    implicit val marshaller = new Marshaller(mappingRegistry)
+    implicit val marshaller = createMarshaller()
 
     val stackFrames = captureStackFrames(thread)
     stackFrames.headOption match {
@@ -973,6 +1002,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private def resumeWhenPaused(): Unit = pausedData match {
     case Some(data) =>
       log.info("Resuming virtual machine")
+      enableGarbageCollectionWhereDisabled()
       virtualMachine.resume()
       pausedData = None
       objectDescriptorById.clear() // only valid when paused
