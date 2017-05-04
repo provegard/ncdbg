@@ -108,6 +108,11 @@ object NashornDebuggerHost {
   case object PostponeInitialize extends NashornScriptOperation
 
   private[NashornDebuggerHost] class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame], val marshaller: Marshaller) {
+    def clearCaches(): Unit = {
+      objectPropertiesCache.clear()
+      propertyHolderCache.clear()
+    }
+
     /** We assume that we can cache object properties as long as we're in a paused state. Since we're connected to a
       * Java process, an arbitrary Java object may change while in this state, so we only cache JS objects.
       */
@@ -1006,6 +1011,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       virtualMachine.resume()
       pausedData = None
       objectDescriptorById.clear() // only valid when paused
+      data.clearCaches()
       emitEvent(Resumed)
     case None =>
       log.debug("Ignoring resume request when not paused (no pause data).")
