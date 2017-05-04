@@ -16,28 +16,31 @@ object Invokers {
   val shared: Invokers = new Invokers
 }
 
+class ReferenceTypeData(refType: ReferenceType) {
+  import scala.collection.JavaConverters._
+  private val visibleMethods = refType.visibleMethods().asScala
+  val methodsByName = visibleMethods.groupBy(_.name())
+  val methodsByNameAndSig = visibleMethods.groupBy(m => (m.name(), m.signature()))
+}
+
 class Invokers {
 
-  private val dinvokers = mutable.Map[Mirror, DynamicInvoker]()
-  private val sinvokers = mutable.Map[Mirror, StaticInvoker]()
+  private val typeData = mutable.Map[ReferenceType, ReferenceTypeData]()
+
+  private def referenceTypeDataFor(referenceType: ReferenceType): ReferenceTypeData = {
+    typeData.getOrElseUpdate(referenceType, new ReferenceTypeData(referenceType))
+  }
 
   def getDynamic(objectReference: ObjectReference): DynamicInvoker = {
-    // TODO: Reconsider caching here. We'd like to cache on reference type, but we can obviously not reuse the object ref.
-    // TODO: Perhaps break out a special type cache and inject in the invoker?
-    dinvokers.getOrElseUpdate(objectReference, new DynamicInvoker(objectReference))
+    new DynamicInvoker(objectReference, referenceTypeDataFor(objectReference.referenceType()))
   }
 
   def getStatic(classType: ClassType): StaticInvoker = {
-    sinvokers.getOrElseUpdate(classType, new StaticInvoker(classType))
+    new StaticInvoker(classType, referenceTypeDataFor(classType))
   }
 }
 
-abstract class Invoker(refType: ReferenceType) {
-  import scala.collection.JavaConverters._
-
-  private val visibleMethods = refType.visibleMethods().asScala
-  private val methodsByName = visibleMethods.groupBy(_.name())
-  private val methodsByNameAndSig = visibleMethods.groupBy(m => (m.name(), m.signature()))
+abstract class Invoker(referenceTypeData: ReferenceTypeData) {
 
   protected def toValue(x: Any)(implicit thread: ThreadReference): Value = x match {
     case v: Value => v
@@ -58,13 +61,13 @@ abstract class Invoker(refType: ReferenceType) {
     val sigIndex = methodName.indexOf('(')
     if (sigIndex >= 0) {
       // Method name contains signature
-      methodsByNameAndSig.get(methodName.splitAt(sigIndex)).flatMap(_.headOption) match {
+      referenceTypeData.methodsByNameAndSig.get(methodName.splitAt(sigIndex)).flatMap(_.headOption) match {
         case Some(method) => Right(method)
         case None => Left(Seq.empty)
       }
     } else {
       // Only a method name
-      methodsByName.get(methodName).map(_.filter(_.argumentTypeNames().size() == argCount)).map(_.toList) match {
+      referenceTypeData.methodsByName.get(methodName).map(_.filter(_.argumentTypeNames().size() == argCount)).map(_.toList) match {
         case Some(method :: Nil) => Right(method)
         case Some(methods) => Left(methods)
         case None => Left(Seq.empty)
@@ -111,7 +114,7 @@ abstract class Invoker(refType: ReferenceType) {
   }
 }
 
-class DynamicInvoker(objectReference: ObjectReference) extends Invoker(objectReference.referenceType()) with Dynamic {
+class DynamicInvoker(objectReference: ObjectReference, referenceTypeData: ReferenceTypeData) extends Invoker(referenceTypeData) with Dynamic {
   import scala.collection.JavaConverters._
   import VirtualMachineExtensions._
 
@@ -128,7 +131,7 @@ class DynamicInvoker(objectReference: ObjectReference) extends Invoker(objectRef
   }
 }
 
-class StaticInvoker(classType: ClassType) extends Invoker(classType) with Dynamic {
+class StaticInvoker(classType: ClassType, referenceTypeData: ReferenceTypeData) extends Invoker(referenceTypeData) with Dynamic {
   import scala.collection.JavaConverters._
   import VirtualMachineExtensions._
 
