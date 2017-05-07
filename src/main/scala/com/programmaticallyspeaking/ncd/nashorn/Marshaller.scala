@@ -39,6 +39,10 @@ trait MappingRegistry {
   def register(value: Value, valueNode: ComplexNode, extraProperties: Map[String, ValueNode]): Unit
 }
 
+object MarshallerCache {
+  val global = new MarshallerCache
+}
+
 class MarshallerCache {
   private val inheritorCache = mutable.Map[(String, String), Boolean]()
 
@@ -53,7 +57,7 @@ class MarshallerCache {
   }
 }
 
-class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = new MarshallerCache)(implicit val thread: ThreadReference) {
+class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = MarshallerCache.global)(implicit val thread: ThreadReference) {
   import Marshaller._
 
   import scala.collection.JavaConverters._
