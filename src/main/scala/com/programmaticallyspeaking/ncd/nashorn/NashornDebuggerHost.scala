@@ -170,6 +170,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   private val objectReferencesWithDisabledGC = ListBuffer[ObjectReference]()
 
+  private val objectReferencesWithDisabledGCForTheEntireSession = ListBuffer[ObjectReference]()
+
   /**
     * Keeps track of the stack frame location for a given locals object that we have created to host local variable
     * values. This allows us to update local variables for the correct stack frame (based on its location). We cannot
@@ -373,6 +375,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     retryInitLater()
   }
 
+  //TODO: This method is never called, because there's no graceful way to stop NCDbg ATM.
+  def prepareForExit(): Unit = {
+    try {
+      objectReferencesWithDisabledGCForTheEntireSession.foreach(_.enableCollection())
+    } catch {
+      case NonFatal(t) =>
+        log.error("Failed to enable collection for one or more object references.", t)
+    }
+  }
 
   private def doInitialize(): Unit = {
     val referenceTypes = virtualMachine.allClasses()
@@ -817,11 +828,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     objectReferencesWithDisabledGC.clear()
   }
 
-  private def disableGarbageCollectionFor(value: Value): Unit = value match {
+  private def disableGarbageCollectionFor(value: Value, entireSession: Boolean = false): Unit = value match {
     case objRef: ObjectReference =>
       // Disable and track the reference so we can enable when we resume
       objRef.disableCollection()
-      objectReferencesWithDisabledGC += objRef
+      val targetList = if (entireSession) objectReferencesWithDisabledGCForTheEntireSession else objectReferencesWithDisabledGC
+      targetList += objRef
     case _ =>
   }
 
@@ -1349,8 +1361,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     maybeScriptBasedPropertyHolderFactory match {
       case Some(f) => f
       case None =>
-        //TODO: Prevent GC of the function
-        val codeEval: (String) => Value = src => DebuggerSupport_eval_custom(null, null, src)
+        val codeEval: (String) => Value = src => {
+          val v = DebuggerSupport_eval_custom(null, null, src)
+          disableGarbageCollectionFor(v, entireSession = true)
+          v
+        }
         val funExec: (Value, Seq[Any]) => Value = (fun, args) => {
           foundWantedTypes.get(NIR_ScriptRuntime) match {
             case Some(ct) =>

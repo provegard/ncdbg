@@ -19,6 +19,8 @@ trait NashornScriptHost extends ScriptHost {
 
   def initialize(): Unit
 
+  def prepareForExit(): Unit
+
   val virtualMachine: VirtualMachine
 
   // For testing
