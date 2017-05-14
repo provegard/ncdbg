@@ -1,8 +1,8 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
-import com.sun.jdi.{ArrayReference, Method, ObjectReference, ThreadReference}
+import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
+import com.sun.jdi._
 
 import scala.collection.mutable
 
@@ -142,5 +142,145 @@ class HashtablePropertyHolder(table: ObjectReference)(implicit marshaller: Marsh
       result += keyAsString -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, true, true, Some(value), None, None)
     }
     result.toMap
+  }
+}
+
+trait Extractor {
+  def extract(target: Value, onlyOwn: Boolean, onlyAccessors: Boolean): Value
+}
+
+class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (Value, Seq[Any]) => Value) {
+  // Note: Java.to doesn't wrap a ScriptObject in a ScriptObjectMirror when the target type is an array type. This is
+  // good, since we don't want the __proto__ value to be mirrored, since that has negative consequences:
+  // - a new mirror is created each time, which breaks the object properties cache
+  // - the object properties proto test end up in infinite recursion (this one can be fixed though...)
+  private val extractorFunctionSource =
+    """(function () {
+      |  var hasJava = !!Java;
+      |  return function __getprops(target, isNative, onlyOwn, onlyAccessors) {
+      |    var result = [], proto;
+      |    if (isNative) {
+      |      var current = target, own = true;
+      |      while (current) {
+      |        var names = Object.getOwnPropertyNames(current);
+      |        for (var i = 0, j = names.length; i < j; i++) {
+      |          var k = names[i];
+      |          var desc = Object.getOwnPropertyDescriptor(current, k);
+      |          if (onlyAccessors && !desc.get && !desc.set) continue;
+      |          var f_c = desc.configurable ? "c" : "";
+      |          var f_e = desc.enumerable ? "e" : "";
+      |          var f_w = desc.writable ? "w" : "";
+      |          var f_o = own ? "o" : "";
+      |          result.push(k);
+      |          result.push((f_c + f_e + f_w + f_o).toString()); // ConsString -> String when Java.to not available
+      |          result.push(desc.value);
+      |          result.push(desc.get);
+      |          result.push(desc.set);
+      |        }
+      |        if (own && !onlyAccessors && (proto = safeGetProto(current))) {
+      |          result.push("__proto__");
+      |          result.push("wo"); // writable + own (not sure about configurable and enumerable)
+      |          result.push(proto);
+      |          result.push(null);
+      |          result.push(null);
+      |        }
+      |        if (own && onlyOwn) current = null; else {
+      |          current = current.__proto__;
+      |          own = false;
+      |        }
+      |      }
+      |    } else if (!onlyAccessors) {
+      |      for (var k in target) {
+      |        result.push(k.toString());
+      |        result.push("wo"); // writable (correct?) + own
+      |        result.push(target[k]);
+      |        result.push(null);
+      |        result.push(null);
+      |      }
+      |    }
+      |    return hasJava ? Java.to(result, "java.lang.Object[]") : result;
+      |  };
+      |  function safeGetProto(x) {
+      |    try {
+      |      return x.__proto__;
+      |    } catch (e) {
+      |      return null;
+      |    }
+      |  }
+      |})();
+    """.stripMargin
+
+  private val extractorFunction = codeEval(extractorFunctionSource)
+
+  def create(obj: ObjectReference, isNative: Boolean)(implicit marshaller: Marshaller): PropertyHolder = {
+    if (extractorFunction.isInstanceOf[ThrownExceptionReference]) {
+      val ev = marshaller.marshal(extractorFunction).asInstanceOf[ErrorValue]
+      throw new RuntimeException(ev.data.stackIncludingMessage.getOrElse(ev.data.message))
+    }
+    new ScriptBasedPropertyHolder(obj, (target: Value, onlyOwn: Boolean, onlyAccessors: Boolean) => {
+      // Pass strings to avoid the need for boxing
+      executor(extractorFunction, Seq(target, asString(isNative), asString(onlyOwn), asString(onlyAccessors)))
+    })
+  }
+
+  // Converts the Boolean to a string that evaluates to true or false in JS.
+  private def asString(b: Boolean) = if (b) "true" else ""
+}
+
+class ScriptBasedPropertyHolder(obj: ObjectReference, extractor: Extractor)(implicit marshaller: Marshaller) extends PropertyHolder {
+  import scala.collection.JavaConverters._
+
+  private def toOption(vn: ValueNode) = vn match {
+    case EmptyNode | SimpleValue(Undefined) => None
+    case other => Some(other)
+  }
+  private def populateFromArray(arr: ArrayReference, map: mutable.Map[String, ObjectPropertyDescriptor]): Unit = {
+    val values = arr.getValues.asScala
+    values.grouped(5).map(_.toList).foreach {
+      case (key: StringReference) :: (flags: StringReference) :: value :: getter :: setter :: Nil =>
+        val keyStr = key.value()
+        val flagsStr = flags.value()
+        var vn = toOption(marshaller.marshal(value))
+        val gn = toOption(marshaller.marshal(getter))
+        val sn = toOption(marshaller.marshal(setter))
+        if (vn.isEmpty && gn.isEmpty && sn.isEmpty)
+          vn = Some(SimpleValue(Undefined))
+        val descType = if (gn.isDefined || sn.isDefined) PropertyDescriptorType.Accessor else PropertyDescriptorType.Data
+        val isConfigurable = flagsStr.contains('c')
+        val isEnumerable = flagsStr.contains('e')
+        val isWritable = flagsStr.contains('w')
+        val isOwn = flagsStr.contains('o')
+        map(keyStr) = ObjectPropertyDescriptor(descType, isConfigurable, isEnumerable, isWritable, isOwn, vn, gn, sn)
+      case other =>
+        throw new RuntimeException("Unexpected result from the extractor function: " + other)
+    }
+  }
+
+
+  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+    implicit val thread = marshaller.thread
+    val ret = extractor.extract(obj, onlyOwn, onlyAccessors)
+
+    val map = mutable.Map[String, ObjectPropertyDescriptor]()
+    ret match {
+      case arr: ArrayReference => populateFromArray(arr, map)
+      case obj: ObjectReference =>
+        val inv = Invokers.shared.getDynamic(obj)
+        // Call NativeArray.asObjectArray()
+        inv.asObjectArray() match {
+          case arr: ArrayReference => populateFromArray(arr, map)
+          case other =>
+            throw new RuntimeException("Not an array from NativeArray.asObjectArray: " + other)
+        }
+      case err: ThrownExceptionReference =>
+        marshaller.marshal(err) match {
+          case ErrorValue(data, _, _) =>
+            throw new RuntimeException("Error from object property extraction: " + data.stackIncludingMessage.getOrElse(data.message))
+          case other => throw new RuntimeException("Thrown exception, but marshalled to: " + other)
+        }
+      case other =>
+        throw new RuntimeException("Object property extractor returned unknown: " + other)
+    }
+    map.toMap
   }
 }

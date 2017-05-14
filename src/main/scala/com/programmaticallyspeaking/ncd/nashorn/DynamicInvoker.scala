@@ -41,6 +41,7 @@ class Invokers {
 }
 
 abstract class Invoker(referenceTypeData: ReferenceTypeData) {
+  import scala.collection.JavaConverters._
 
   protected def toValue(x: Any)(implicit thread: ThreadReference): Value = x match {
     case v: Value => v
@@ -53,6 +54,21 @@ abstract class Invoker(referenceTypeData: ReferenceTypeData) {
     case s: Short => thread.virtualMachine().mirrorOf(s)
     case l: Long => thread.virtualMachine().mirrorOf(l)
     case s: String => thread.virtualMachine().mirrorOf(s)
+    case arr: Array[_] =>
+      //TODO: Cache this
+      thread.virtualMachine().classesByName("java.lang.Object[]").asScala.headOption match {
+        case Some(array: ArrayType) =>
+          val arrayRef = array.newInstance(arr.length)
+          for (i <- arr.indices) {
+            // Note: This will fail if the value is primitive, because there's no auto-boxing going on.
+            arrayRef.setValue(i, toValue(arr(i)))
+          }
+
+          arrayRef
+        case Some(other) => throw new IllegalStateException("java.lang.Object[] is not an ArrayType, found: " + other)
+        case None => throw new IllegalStateException("java.lang.Object[] wasn't found in the VM")
+      }
+
     case z if z == null => null
     case other => throw new IllegalArgumentException("Don't know how to mirror: " + other)
   }

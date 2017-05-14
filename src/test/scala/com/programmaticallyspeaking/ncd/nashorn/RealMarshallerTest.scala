@@ -349,7 +349,7 @@ class OnlySlotBasedArrayJSObject extends IsArrayBasedArrayJSObject {
 
 class SlotBasedArrayJSObjectThatMisbehavesForGetMember extends IsArrayBasedArrayJSObject {
   override def getMember(name: String): AnyRef = {
-    if (name == "length") super.getMember("length") else throw new RuntimeException("oops")
+    if (name == "length") super.getMember("length") else throw new RuntimeException("getMember not supported for: " + name)
   }
 }
 

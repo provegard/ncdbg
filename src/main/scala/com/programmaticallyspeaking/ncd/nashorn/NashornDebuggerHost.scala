@@ -212,6 +212,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private var profiling: Option[OngoingProfiling] = None
   private lazy val profilingExecutor = Executors.newSingleThreadScheduledExecutor()
 
+  private var maybeScriptBasedPropertyHolderFactory: Option[ScriptBasedPropertyHolderFactory] = None
+
   private def addBreakableLocations(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
     breakableLocationsByScriptUrl.getOrElseUpdate(script.url.toString, ListBuffer.empty) ++= breakableLocations
   }
@@ -1291,7 +1293,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           val newDescriptor = desc.copy(descriptorType = PropertyDescriptorType.Data,
             getter = None,
             setter = None,
-            value = Some(vn)
+            value = Some(vn),
+            isWritable = desc.setter.isDefined
           )
           (prop._1, newDescriptor)
 
@@ -1304,40 +1307,71 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
   private def createPropertyHolder(objectId: ObjectId, objectDescriptor: ObjectDescriptor, includeProto: Boolean)(implicit marshaller: Marshaller): Option[PropertyHolder] = {
     val cache = pausedData.get.propertyHolderCache
+    implicit val thread = marshaller.thread
+
+    def scriptObjectHolder(ref: ObjectReference) = {
+      val factory = scriptBasedPropertyHolderFactory()
+      val holder = factory.create(ref, isNative = true)
+      new PropertyHolder {
+        override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+          holder.properties(onlyOwn, onlyAccessors).toSeq.filter(e => shouldIncludeProperty(e._1)).map(accessorToDataForLocals(objectId)).toMap
+        }
+
+        //TODO: Take care of inside the script
+        private def shouldIncludeProperty(propName: String) = {
+          // Don't include hidden properties that we add in scopeWithFreeVariables
+          if (propName.startsWith(hiddenPrefix)) false
+          else if (propName == ScriptObjectMirror.protoName) includeProto
+          else true
+        }
+      }
+    }
 
     cache.getOrElseUpdate(objectId, {
       objectDescriptor.native collect {
         case ref: ObjectReference if marshaller.isScriptObject(ref) =>
-          new ScriptObjectMirror(ref) {
-
-            override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
-              // For a local scope object, properties are accessors, but we want them to appear as regular
-              // properties to DevTools. The fact that they are accessors is an implementation detail.
-              super.properties(onlyOwn, onlyAccessors).map(accessorToDataForLocals(objectId))
-            }
-
-            override protected def shouldIncludeProperty(propName: String) = {
-              // Don't include hidden properties that we add in scopeWithFreeVariables
-              if (propName.startsWith(hiddenPrefix)) false
-              else if (propName == ScriptObjectMirror.protoName) includeProto
-              else true
-            }
-          }
+          scriptObjectHolder(ref)
+//        case ref: ObjectReference if marshaller.isScriptObjectMirror(ref) =>
+//          scriptObjectHolder(ref)
         case ref: ObjectReference if marshaller.isJSObject(ref) =>
           new JSObjectMirror(ref)
         case ref: ArrayReference =>
           new ArrayPropertyHolder(ref)
         case obj: ObjectReference if marshaller.isHashtable(obj) =>
-          new HashtablePropertyHolder(obj)
+          val factory = scriptBasedPropertyHolderFactory()
+          factory.create(obj, isNative = false)
         case obj: ObjectReference =>
           new ArbitraryObjectPropertyHolder(obj)
       }
     })
   }
 
+  private def scriptBasedPropertyHolderFactory()(implicit threadReference: ThreadReference): ScriptBasedPropertyHolderFactory = {
+    maybeScriptBasedPropertyHolderFactory match {
+      case Some(f) => f
+      case None =>
+        //TODO: Prevent GC of the function
+        val codeEval: (String) => Value = src => DebuggerSupport_eval_custom(null, null, src)
+        val funExec: (Value, Seq[Any]) => Value = (fun, args) => {
+          foundWantedTypes.get(NIR_ScriptRuntime) match {
+            case Some(ct) =>
+              val invoker = Invokers.shared.getStatic(ct)
+              // Object apply(ScriptFunction target, Object self, Object... args) {
+              invoker.apply(fun, null, args.toArray)
+
+            case None => throw new RuntimeException("ScriptRuntime wasn't found")
+          }
+        }
+        val f = new ScriptBasedPropertyHolderFactory(codeEval, funExec)
+        maybeScriptBasedPropertyHolderFactory = Some(f)
+        f
+    }
+  }
+
   override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = pausedData match {
     case Some(pd) =>
       implicit val marshaller = pd.marshaller
+      implicit val thread = marshaller.thread
 
       val scopeObjectIds: Seq[ObjectId] = pd.stackFrames.flatMap(_.scopeChain).map(_.value).collect{case o: ObjectNode => o.objectId}
       val isScopeObject = scopeObjectIds.contains(objectId)
