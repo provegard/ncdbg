@@ -872,7 +872,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         true
       case Some(holder) =>
         if (holder.isAtDebuggerStatement) log.debug("Breakpoint is at JavaScript 'debugger' statement")
-        val didPause = doPause(thread, stackFrames.flatMap(_.stackFrame), holder.location)
+        val didPause = doPause(thread, stackFrames.flatMap(_.stackFrame))
         // Resume will be controlled externally
         !didPause // false
       case None =>
@@ -882,7 +882,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame], location: Option[Location])(implicit marshaller: Marshaller): Boolean = {
+  private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame])(implicit marshaller: Marshaller): Boolean = {
     stackFrames.headOption.collect { case sf: StackFrameImpl => sf } match {
       case Some(topStackFrame) =>
         val breakpoint = topStackFrame.breakpoint
@@ -918,8 +918,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         }
         conditionIsTrue
       case None =>
-        log.debug(s"Won't pause at $location since there are no stack frames at all.")
-        false
+        throw new IllegalStateException("Unexpected - no stack frame head")
     }
   }
 
