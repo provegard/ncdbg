@@ -177,13 +177,6 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
     case _ => false
   }
 
-  def isScriptObjectMirror(value: Value): Boolean = value match {
-    case objRef: ObjectReference =>
-      val typeName = value.`type`().name()
-      typeName == "jdk.nashorn.api.scripting.ScriptObjectMirror"
-    case _ => false
-  }
-
   def isScriptObject(value: Value): Boolean = value match {
     case objRef: ObjectReference =>
       val typeName = value.`type`().name()

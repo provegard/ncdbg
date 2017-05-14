@@ -1327,12 +1327,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       }
     }
 
+    //TODO: We can use scriptObjectHolder for ScriptObjectMirror also, but when do we one of those?
     cache.getOrElseUpdate(objectId, {
       objectDescriptor.native collect {
         case ref: ObjectReference if marshaller.isScriptObject(ref) =>
           scriptObjectHolder(ref)
-//        case ref: ObjectReference if marshaller.isScriptObjectMirror(ref) =>
-//          scriptObjectHolder(ref)
         case ref: ObjectReference if marshaller.isJSObject(ref) =>
           new JSObjectMirror(ref)
         case ref: ArrayReference =>
