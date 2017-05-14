@@ -189,6 +189,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   // Data that are defined when the VM has paused on a breakpoint or encountered a step event
   private var pausedData: Option[PausedData] = None
 
+  private var objectPropertiesCacheEnabled = true
+
   /**
     * Configure what we do when we encounter one of the wanted types.
     */
@@ -1351,9 +1353,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         case Some(desc: ObjectDescriptor) =>
           // Get object properties, via a cache.
           val cacheKey = ObjectPropertiesKey(objectId, actualOnlyOwn, onlyAccessors)
-          val objectProperties = pausedData.get.objectPropertiesCache.getOrElseUpdate(cacheKey, {
-            createPropertyHolder(objectId, desc, includeProto).map(_.properties(actualOnlyOwn, onlyAccessors)).getOrElse(Map.empty)
-          })
+          def getProperties = createPropertyHolder(objectId, desc, includeProto).map(_.properties(actualOnlyOwn, onlyAccessors)).getOrElse(Map.empty)
+          val objectProperties = if (objectPropertiesCacheEnabled)
+            pausedData.get.objectPropertiesCache.getOrElseUpdate(cacheKey, getProperties)
+          else getProperties
 
           // In addition, the node may contain extra entries that typically do not come from Nashorn. One example is
           // the Java stack we add if we detect a Java exception.
@@ -1521,6 +1524,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     case None =>
       log.warn("Cannot collect a profiling sample - no ongoing profiling!")
   }
+
+  override def disableObjectPropertiesCache(): Unit = objectPropertiesCacheEnabled = false
 }
 
 case class OngoingProfiling(schedule: ScheduledFuture[_], samples: ListBuffer[Sample], startNanos: Long)

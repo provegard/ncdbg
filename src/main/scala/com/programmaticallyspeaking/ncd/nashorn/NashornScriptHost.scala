@@ -20,4 +20,7 @@ trait NashornScriptHost extends ScriptHost {
   def initialize(): Unit
 
   val virtualMachine: VirtualMachine
+
+  // For testing
+  def disableObjectPropertiesCache(): Unit
 }
