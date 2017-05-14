@@ -113,38 +113,6 @@ object ArbitraryObjectPropertyHolder {
   }
 }
 
-class HashtablePropertyHolder(table: ObjectReference)(implicit marshaller: Marshaller) extends PropertyHolder {
-  import com.programmaticallyspeaking.ncd.nashorn.mirrors.Mirrors._
-  private implicit val thread: ThreadReference = marshaller.thread
-  private val tableInvoker = Invokers.shared.getDynamic(table)
-
-  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
-    if (onlyAccessors) return Map.empty // Hashtable cannot have accessor properties
-
-    val enumeration = tableInvoker.keys()
-    val enumInvoker = Invokers.shared.getDynamic(enumeration.asInstanceOf[ObjectReference])
-    val result = mutable.Map[String, ObjectPropertyDescriptor]()
-    while (enumInvoker.hasMoreElements().asBool(false)) {
-      val keyValue = enumInvoker.next()
-      val marshalledKey = marshaller.marshal(keyValue)
-
-      // Keys in a JS object are strings
-      val keyAsString = marshalledKey match {
-        case SimpleValue(something) => something.toString
-        case _ if keyValue.isInstanceOf[ObjectReference] =>
-          val keyInvoker = Invokers.shared.getDynamic(keyValue.asInstanceOf[ObjectReference])
-          keyInvoker.applyDynamic("toString")().asString
-        case _ => throw new RuntimeException("Unknown Hashtable key: " + keyValue)
-      }
-
-      val value: ValueNode = tableInvoker.get(keyValue)
-
-      result += keyAsString -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, true, true, Some(value), None, None)
-    }
-    result.toMap
-  }
-}
-
 trait Extractor {
   def extract(target: Value, onlyOwn: Boolean, onlyAccessors: Boolean): Value
 }
