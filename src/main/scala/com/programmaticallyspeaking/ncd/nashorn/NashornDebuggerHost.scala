@@ -134,6 +134,8 @@ object NashornDebuggerHost {
   // clash with the name of a real local variable.
   val hiddenPrefix = "||"
 
+  val hiddenPrefixEscapedForUseInJavaScriptRegExp = "[|][|]"
+
   val localScopeObjectIdPrefix = "$$locals-"
 
   case class ObjectDescriptor(native: Option[Value], marshalled: ComplexNode, extras: Map[String, ValueNode])
@@ -1322,19 +1324,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     implicit val thread = marshaller.thread
 
     def scriptObjectHolder(ref: ObjectReference) = {
+      var blacklistParts = Seq(hiddenPrefixEscapedForUseInJavaScriptRegExp + ".+")
+      if (!includeProto) blacklistParts +:= "__proto__"
+      val propBlacklistRegex = blacklistParts.map("(" + _ + ")").mkString("^", "|", "$")
       val factory = scriptBasedPropertyHolderFactory()
-      val holder = factory.create(ref, isNative = true)
+      val holder = factory.create(ref, propBlacklistRegex, isNative = true)
       new PropertyHolder {
         override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
-          holder.properties(onlyOwn, onlyAccessors).toSeq.filter(e => shouldIncludeProperty(e._1)).map(accessorToDataForLocals(objectId)).toMap
-        }
-
-        //TODO: Take care of inside the script
-        private def shouldIncludeProperty(propName: String) = {
-          // Don't include hidden properties that we add in scopeWithFreeVariables
-          if (propName.startsWith(hiddenPrefix)) false
-          else if (propName == ScriptObjectMirror.protoName) includeProto
-          else true
+          holder.properties(onlyOwn, onlyAccessors).map(accessorToDataForLocals(objectId))
         }
       }
     }
@@ -1350,7 +1347,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           new ArrayPropertyHolder(ref)
         case obj: ObjectReference if marshaller.isHashtable(obj) =>
           val factory = scriptBasedPropertyHolderFactory()
-          factory.create(obj, isNative = false)
+          factory.create(obj, "", isNative = false)
         case obj: ObjectReference =>
           new ArbitraryObjectPropertyHolder(obj)
       }

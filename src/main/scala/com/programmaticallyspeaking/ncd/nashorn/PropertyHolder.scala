@@ -118,21 +118,26 @@ trait Extractor {
 }
 
 class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (Value, Seq[Any]) => Value) {
-  // Note: Java.to doesn't wrap a ScriptObject in a ScriptObjectMirror when the target type is an array type. This is
+  // Note 1: Java.to doesn't wrap a ScriptObject in a ScriptObjectMirror when the target type is an array type. This is
   // good, since we don't want the __proto__ value to be mirrored, since that has negative consequences:
   // - a new mirror is created each time, which breaks the object properties cache
   // - the object properties proto test end up in infinite recursion (this one can be fixed though...)
+
+  // Note 2: The property blacklist RegExp is currently only used for a native ScriptObject.
   private val extractorFunctionSource =
     """(function () {
       |  var hasJava = !!Java;
-      |  return function __getprops(target, isNative, onlyOwn, onlyAccessors) {
+      |  return function __getprops(target, isNative, onlyOwn, onlyAccessors, strPropertyBlacklistRegExp) {
       |    var result = [], proto;
       |    if (isNative) {
+      |      var blacklistRegExp = strPropertyBlacklistRegExp ? new RegExp(strPropertyBlacklistRegExp) : null;
+      |      var includeProp = function (prop) blacklistRegExp ? !prop.match(blacklistRegExp) : true
       |      var current = target, own = true;
       |      while (current) {
       |        var names = Object.getOwnPropertyNames(current);
       |        for (var i = 0, j = names.length; i < j; i++) {
       |          var k = names[i];
+      |          if (!includeProp(k)) continue;
       |          var desc = Object.getOwnPropertyDescriptor(current, k);
       |          if (onlyAccessors && !desc.get && !desc.set) continue;
       |          var f_c = desc.configurable ? "c" : "";
@@ -145,7 +150,7 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |          result.push(desc.get);
       |          result.push(desc.set);
       |        }
-      |        if (own && !onlyAccessors && (proto = safeGetProto(current))) {
+      |        if (own && !onlyAccessors && includeProp("__proto__") && (proto = safeGetProto(current))) {
       |          result.push("__proto__");
       |          result.push("wo"); // writable + own (not sure about configurable and enumerable)
       |          result.push(proto);
@@ -180,14 +185,14 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
 
   private val extractorFunction = codeEval(extractorFunctionSource)
 
-  def create(obj: ObjectReference, isNative: Boolean)(implicit marshaller: Marshaller): PropertyHolder = {
+  def create(obj: ObjectReference, propertyBlacklistRegExp: String, isNative: Boolean)(implicit marshaller: Marshaller): PropertyHolder = {
     extractorFunction match {
       case err: ThrownExceptionReference =>
         marshaller.throwError(err)
       case _ =>
         new ScriptBasedPropertyHolder(obj, (target: Value, onlyOwn: Boolean, onlyAccessors: Boolean) => {
           // Pass strings to avoid the need for boxing
-          executor(extractorFunction, Seq(target, asString(isNative), asString(onlyOwn), asString(onlyAccessors)))
+          executor(extractorFunction, Seq(target, asString(isNative), asString(onlyOwn), asString(onlyAccessors), propertyBlacklistRegExp))
         })
     }
   }
