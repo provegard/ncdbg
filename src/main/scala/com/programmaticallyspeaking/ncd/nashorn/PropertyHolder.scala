@@ -213,14 +213,15 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
   private val extractorFunction = codeEval(extractorFunctionSource)
 
   def create(obj: ObjectReference, isNative: Boolean)(implicit marshaller: Marshaller): PropertyHolder = {
-    if (extractorFunction.isInstanceOf[ThrownExceptionReference]) {
-      val ev = marshaller.marshal(extractorFunction).asInstanceOf[ErrorValue]
-      throw new RuntimeException(ev.data.stackIncludingMessage.getOrElse(ev.data.message))
+    extractorFunction match {
+      case err: ThrownExceptionReference =>
+        marshaller.throwError(err)
+      case _ =>
+        new ScriptBasedPropertyHolder(obj, (target: Value, onlyOwn: Boolean, onlyAccessors: Boolean) => {
+          // Pass strings to avoid the need for boxing
+          executor(extractorFunction, Seq(target, asString(isNative), asString(onlyOwn), asString(onlyAccessors)))
+        })
     }
-    new ScriptBasedPropertyHolder(obj, (target: Value, onlyOwn: Boolean, onlyAccessors: Boolean) => {
-      // Pass strings to avoid the need for boxing
-      executor(extractorFunction, Seq(target, asString(isNative), asString(onlyOwn), asString(onlyAccessors)))
-    })
   }
 
   // Converts the Boolean to a string that evaluates to true or false in JS.
@@ -273,11 +274,7 @@ class ScriptBasedPropertyHolder(obj: ObjectReference, extractor: Extractor)(impl
             throw new RuntimeException("Not an array from NativeArray.asObjectArray: " + other)
         }
       case err: ThrownExceptionReference =>
-        marshaller.marshal(err) match {
-          case ErrorValue(data, _, _) =>
-            throw new RuntimeException("Error from object property extraction: " + data.stackIncludingMessage.getOrElse(data.message))
-          case other => throw new RuntimeException("Thrown exception, but marshalled to: " + other)
-        }
+        marshaller.throwError(err)
       case other =>
         throw new RuntimeException("Object property extractor returned unknown: " + other)
     }

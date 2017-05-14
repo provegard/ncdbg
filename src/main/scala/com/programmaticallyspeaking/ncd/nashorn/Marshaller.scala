@@ -74,6 +74,12 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
     result.valueNode
   }
 
+  def throwError(err: ThrownExceptionReference): Nothing = marshal(err) match {
+    case ErrorValue(data, _, _) =>
+      throw new RuntimeException("Error from object property extraction: " + data.stackIncludingMessage.getOrElse(data.message))
+    case other => throw new RuntimeException("Thrown exception, but marshalled to: " + other)
+  }
+
   /**
     * Generate an ID for an object. If possible, we generate an ID based on the unique ID of the object reference,
     * so that two references to the same object get the same ID.
