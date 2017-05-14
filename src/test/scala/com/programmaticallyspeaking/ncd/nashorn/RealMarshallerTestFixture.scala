@@ -6,6 +6,7 @@ import com.programmaticallyspeaking.ncd.testing.UnitTest
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Promise}
+import scala.util.control.NonFatal
 
 trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
@@ -26,7 +27,13 @@ trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixtu
               val maybeResultLocal = sf.scopeChain.find(_.scopeType == ScopeType.Local).flatMap(s => {
                 s.value match {
                   case obj: ObjectNode =>
-                    getHost.getObjectProperties(obj.objectId, true, false).find(_._1 == "result").flatMap(_._2.value)
+                    try {
+                      getHost.getObjectProperties(obj.objectId, true, false).find(_._1 == "result").flatMap(_._2.value)
+                    } catch {
+                      case NonFatal(t) =>
+                        resultPromise.tryFailure(t)
+                        None
+                    }
 
                   case _ => None
                 }
