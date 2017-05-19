@@ -43,6 +43,21 @@ class StepTest extends StepTestFixture {
       }
     }
 
+    "steps into a function after step over" in {
+      val script =
+        """var fun = function() {
+          |  return 42;
+          |};
+          |fun(); // force compilation of 'fun'
+          |debugger;
+          |var f = fun;
+          |f();
+        """.stripMargin
+      stepInScript(script, Seq(StepOver, StepOver, StepInto)) { bp =>
+        bp.location.lineNumber1Based should be (2)
+      }
+    }
+
     "steps out of a function via step-over" in {
       val script =
         """var fun = function() {
@@ -53,6 +68,23 @@ class StepTest extends StepTestFixture {
         """.stripMargin
       stepInScript(script, Seq(StepOver)) { bp =>
         bp.location.lineNumber1Based should be (5)
+      }
+    }
+
+    "steps out of two functions via step-over" in {
+      val script =
+        """var foo = function() {
+          |  debugger;
+          |  return 42;
+          |};
+          |var bar = function() {
+          |  return foo();
+          |};
+          |bar();
+          |bar.toString();
+        """.stripMargin
+      stepInScript(script, Seq(StepOver, StepOver)) { bp =>
+        bp.location.lineNumber1Based should be (9)
       }
     }
 

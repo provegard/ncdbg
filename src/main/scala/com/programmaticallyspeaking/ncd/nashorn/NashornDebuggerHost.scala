@@ -10,7 +10,7 @@ import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.{JSObjectMirror, ScriptObjectMirror}
 import com.sun.jdi.event._
-import com.sun.jdi.request.{EventRequest, ExceptionRequest}
+import com.sun.jdi.request.{EventRequest, ExceptionRequest, StepRequest}
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
@@ -107,7 +107,8 @@ object NashornDebuggerHost {
 
   case object PostponeInitialize extends NashornScriptOperation
 
-  private[NashornDebuggerHost] class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame], val marshaller: Marshaller) {
+  private[NashornDebuggerHost] class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame],
+                                                val marshaller: Marshaller, val isAtDebuggerStatement: Boolean) {
     def clearCaches(): Unit = {
       objectPropertiesCache.clear()
       propertyHolderCache.clear()
@@ -144,6 +145,20 @@ object NashornDebuggerHost {
 
   def isInfrastructureThread(t: ThreadReference) = infrastructureThreadNames.contains(t.name().toLowerCase)
   def isRunningThread(t: ThreadReference) = t.status() == ThreadReference.THREAD_STATUS_RUNNING
+
+  val IL_POP = 0x57     // pop result after function return
+  val IL_ARETURN = 0xb0 // return reference from function
+  val IlCodesToIgnoreOnStepEvent = Set(IL_POP, IL_ARETURN)
+
+  /**
+    * Information used to determine if a breakpoint request event is in the exact same location as the previous step
+    * event. When we do expensive step into after stepping using a StepRequest, it seems as if the BreakpointRequest
+    * is hit in the current location right away.
+    */
+  case class StepLocationInfo(location: Location, stackSize: Int)
+  object StepLocationInfo {
+    def from(ev: LocatableEvent) = StepLocationInfo(ev.location(), ev.thread().frameCount())
+  }
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any]) extends NashornScriptHost with Logging {
@@ -173,6 +188,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private val objectReferencesWithDisabledGC = ListBuffer[ObjectReference]()
 
   private val objectReferencesWithDisabledGCForTheEntireSession = ListBuffer[ObjectReference]()
+
+  private var infoAboutLastStep: Option[StepLocationInfo] = None
 
   /**
     * Keeps track of the stack frame location for a given locals object that we have created to host local variable
@@ -434,6 +451,17 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     case e: VMDisconnectEvent => e
   }.nonEmpty
 
+  private def removeAnyStepRequest(): Unit = {
+    val erm = virtualMachine.eventRequestManager()
+    erm.deleteEventRequests(erm.stepRequests())
+  }
+
+  private def byteCodeFromLocation(location: Location): Int =  {
+    val methodByteCodes = location.method().bytecodes()
+    var bc = methodByteCodes(location.codeIndex().toInt).toInt
+    if (bc < 0) bc + 256 else bc
+  }
+
   def handleOperation(eventQueueItem: NashornScriptOperation): Unit = eventQueueItem match {
     case NashornEventSet(es) if hasDeathOrDisconnectEvent(es) =>
       signalComplete()
@@ -442,15 +470,32 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       eventSet.asScala.foreach { ev =>
         try {
           ev match {
+            case ev: StepEvent =>
+              virtualMachine.eventRequestManager().deleteEventRequest(ev.request())
+              var bc = byteCodeFromLocation(ev.location())
+              if (IlCodesToIgnoreOnStepEvent.contains(bc)) {
+                // We most likely hit an "intermediate" location after returning from a function.
+                createEnabledStepOverRequest(ev.thread(), false)
+              } else {
+                doResume = handleBreakpoint(ev)
+                if (!doResume) infoAboutLastStep = Some(StepLocationInfo.from(ev))
+              }
+
             case ev: BreakpointEvent if pausedData.isEmpty =>
+              infoAboutLastStep match {
+                case Some(info) if info == StepLocationInfo.from(ev) =>
+                  // We stopped in the same location. Continue!
+                case _ =>
+                  removeAnyStepRequest()
+                  attemptToResolveSourceLessReferenceTypes()
 
-              attemptToResolveSourceLessReferenceTypes()
+                  // Disable breakpoints that were enabled once
+                  oneTimeEnabledBreakableLocations.foreach(_.disable())
+                  oneTimeEnabledBreakableLocations.clear()
 
-              // Disable breakpoints that were enabled once
-              oneTimeEnabledBreakableLocations.foreach(_.disable())
-              oneTimeEnabledBreakableLocations.clear()
+                  doResume = handleBreakpoint(ev)
 
-              doResume = handleBreakpoint(ev)
+              }
 
             case ev: ClassPrepareEvent =>
               if (isInitialized) {
@@ -475,6 +520,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
             case other =>
               log.warn("Unknown event: " + other)
+          }
+          // Clear info about the last step as soon as we see a non-step event.
+          if (!ev.isInstanceOf[StepEvent]) {
+            infoAboutLastStep = None
           }
         } catch {
           case ex: Exception =>
@@ -872,7 +921,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         true
       case Some(holder) =>
         if (holder.isAtDebuggerStatement) log.debug("Breakpoint is at JavaScript 'debugger' statement")
-        val didPause = doPause(thread, stackFrames.flatMap(_.stackFrame))
+        val didPause = doPause(thread, stackFrames.flatMap(_.stackFrame), holder.isAtDebuggerStatement)
         // Resume will be controlled externally
         !didPause // false
       case None =>
@@ -882,7 +931,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame])(implicit marshaller: Marshaller): Boolean = {
+  private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame], atDebugger: Boolean)(implicit marshaller: Marshaller): Boolean = {
     stackFrames.headOption.collect { case sf: StackFrameImpl => sf } match {
       case Some(topStackFrame) =>
         val breakpoint = topStackFrame.breakpoint
@@ -906,7 +955,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
         if (conditionIsTrue) {
           // Indicate that we're paused
-          pausedData = Some(new PausedData(thread, stackFrames, marshaller))
+          pausedData = Some(new PausedData(thread, stackFrames, marshaller, atDebugger))
 
           scriptById(breakpoint.scriptId).foreach { s =>
             val line = s.sourceLine(breakpoint.location.lineNumber1Based).getOrElse("<unknown line>")
@@ -1109,26 +1158,17 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  private def stepOver(pd: PausedData): Unit = {
-    // For step over, we set breakpoints in the top stackframe _and_ the parent stack frame
-    val breakpointCount = pd.stackFrames.take(2).map(setTemporaryBreakpointsInStackFrame).sum
-    if (breakpointCount > 0) {
-      log.debug(s"Performing step-over by one-off-enabling $breakpointCount breakpoints in the current and parent stack frames.")
-    } else {
-      log.warn("Turning step-over request to normal resume since no breakable locations were found in the current and parent script frames.")
-    }
-  }
-
   override def step(stepType: StepType): Unit = pausedData match {
     case Some(pd) =>
       log.info(s"Stepping with type $stepType")
+
       // Note that we don't issue normal step requests to the remove VM, because a script line != a Java line, so if we
       // were to request step out, for example, we might end up in some method that acts as a script bridge.
       stepType match {
         case StepInto =>
           expensiveStepInto()
         case StepOver =>
-          stepOver(pd)
+          createEnabledStepOverRequest(pd.thread, pd.isAtDebuggerStatement)
         case StepOut =>
           stepOut(pd)
       }
@@ -1136,6 +1176,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       resumeWhenPaused()
     case None =>
       throw new IllegalStateException("A breakpoint must be active for stepping to work")
+  }
+
+  private def createEnabledStepOverRequest(thread: ThreadReference, isAtDebuggerStatement: Boolean): Unit = {
+    val sr = virtualMachine.eventRequestManager().createStepRequest(thread, StepRequest.STEP_LINE, StepRequest.STEP_OVER)
+    sr.addClassFilter("jdk.nashorn.internal.scripts.*")
+    if (isAtDebuggerStatement) sr.addCountFilter(2)
+    sr.enable()
   }
 
   private def evaluateOnStackFrame(pd: PausedData, stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): ValueNode = {
