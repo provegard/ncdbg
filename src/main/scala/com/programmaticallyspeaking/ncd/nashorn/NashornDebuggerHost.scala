@@ -159,6 +159,9 @@ object NashornDebuggerHost {
   object StepLocationInfo {
     def from(ev: LocatableEvent) = StepLocationInfo(ev.location(), ev.thread().frameCount())
   }
+
+  // Filter for step requests for stopping in a script
+  val StepRequestClassFilter = "jdk.nashorn.internal.scripts.*"
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any]) extends NashornScriptHost with Logging {
@@ -1127,24 +1130,24 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       throw new IllegalStateException("A breakpoint must be active for stepping to work")
   }
 
-  private def createEnabledStepIntoRequest(thread: ThreadReference): Unit = {
-    val sr = virtualMachine.eventRequestManager().createStepRequest(thread, StepRequest.STEP_LINE, StepRequest.STEP_INTO)
-    sr.addClassFilter("jdk.nashorn.internal.scripts.*")
+  private def createEnabledStepRequest(thread: ThreadReference, depth: Int, count: Int): Unit = {
+    val sr = virtualMachine.eventRequestManager().createStepRequest(thread, StepRequest.STEP_LINE, depth)
+    sr.addClassFilter(StepRequestClassFilter)
+    if (count > 0) sr.addCountFilter(count)
     sr.enable()
+  }
+
+  private def createEnabledStepIntoRequest(thread: ThreadReference): Unit = {
+    createEnabledStepRequest(thread, StepRequest.STEP_INTO, -1)
   }
 
   private def createEnabledStepOverRequest(thread: ThreadReference, isAtDebuggerStatement: Boolean): Unit = {
-    val sr = virtualMachine.eventRequestManager().createStepRequest(thread, StepRequest.STEP_LINE, StepRequest.STEP_OVER)
-    sr.addClassFilter("jdk.nashorn.internal.scripts.*")
-    if (isAtDebuggerStatement) sr.addCountFilter(2)
-    sr.enable()
+    createEnabledStepRequest(thread, StepRequest.STEP_OVER, if (isAtDebuggerStatement) 2 else -1)
   }
 
   private def createEnabledStepOutRequest(thread: ThreadReference, isAtDebuggerStatement: Boolean): Unit = {
-    val sr = virtualMachine.eventRequestManager().createStepRequest(thread, StepRequest.STEP_LINE, StepRequest.STEP_OUT)
-    sr.addClassFilter("jdk.nashorn.internal.scripts.*")
-    if (isAtDebuggerStatement) sr.addCountFilter(3) //TODO: Why 3 and not 2??
-    sr.enable()
+    //TODO: Why 3 and not 2??
+    createEnabledStepRequest(thread, StepRequest.STEP_OUT, if (isAtDebuggerStatement) 3 else -1)
   }
 
   private def evaluateOnStackFrame(pd: PausedData, stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): ValueNode = {
