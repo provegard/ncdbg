@@ -133,7 +133,7 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
             case Failure(t) => vmRunningPromise.tryFailure(t)
           }
         case other =>
-          reportProgress("Unknown event: " + other)
+          reportProgress("Dispatching to event observers: " + other)
           eventSubject.onNext(other)
       }
     })
