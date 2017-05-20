@@ -75,6 +75,8 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
   // Tracks progress for better timeout failure reporting
   private val progress = new ConcurrentLinkedQueue[String]()
 
+  private var logSubscription: Subscription = _
+
   protected val eventSubject = new SerializedSubject[ScriptEvent]
 
   private def nowString = ZonedDateTime.now().format(DateTimeFormatter.ISO_INSTANT)
@@ -91,7 +93,7 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
     vmRunningPromise = Promise[NashornScriptHost]()
     vmReadyPromise = Promise[Unit]()
 
-    MemoryAppender.logEvents.subscribe(Observer.from {
+    logSubscription = MemoryAppender.logEvents.subscribe(Observer.from {
       case event if event.getLoggerName == classOf[NashornDebuggerHost].getName =>
         reportProgress(s"[NashornDebuggerHost][${event.getLevel}]: ${event.getMessage}")
     })
@@ -138,7 +140,10 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
     host.pauseOnBreakpoints()
   }
 
-  override def afterAllTests(): Unit = vm.process().destroy()
+  override def afterAllTests(): Unit = {
+    vm.process().destroy()
+    Option(logSubscription).foreach(_.unsubscribe())
+  }
 
   protected def getHost = Option(host).getOrElse(throw new IllegalStateException("Host not set"))
 
