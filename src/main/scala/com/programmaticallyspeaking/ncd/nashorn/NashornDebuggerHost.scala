@@ -173,7 +173,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   private val breakableLocationsByScriptUrl = mutable.Map[String, ListBuffer[BreakableLocation]]()
 
   private val enabledBreakpoints = mutable.Map[String, ActiveBreakpoint]()
-  private val oneTimeEnabledBreakableLocations = ListBuffer[BreakableLocation]()
 
   private val scriptIdGenerator = new IdGenerator("nds")
   private val breakpointIdGenerator = new IdGenerator("ndb")
@@ -492,12 +491,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
                   removeAnyStepRequest()
                   attemptToResolveSourceLessReferenceTypes()
 
-                  // Disable breakpoints that were enabled once
-                  oneTimeEnabledBreakableLocations.foreach(_.disable())
-                  oneTimeEnabledBreakableLocations.clear()
-
                   doResume = handleBreakpoint(ev)
-
               }
 
             case ev: ClassPrepareEvent =>
@@ -1113,37 +1107,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  private def enableBreakpointOnce(bl: BreakableLocation): Unit = {
-    if (!bl.isEnabled) {
-      bl.enable()
-      oneTimeEnabledBreakableLocations += bl
-    }
-  }
-
-  private def expensiveStepInto(): Unit = {
-    // Creating a step request with STEP_INTO didn't work well in my testing, since the VM seems to end up in some
-    // sort of call site method. Therefore we do this one a bit differently.
-    log.debug("Performing expensive step-into by one-off-enabling all breakpoints.")
-    // Do a one-off enabling of non-enabled breakpoints
-    breakableLocationsByScriptUrl.flatMap(_._2).withFilter(!_.isEnabled).foreach(enableBreakpointOnce)
-  }
-
-  private def setTemporaryBreakpointsInStackFrame(stackFrame: StackFrame): Int = stackFrame match {
-    case sf: StackFrameImpl =>
-      // Set one-off breakpoints in all locations of the method of this stack frame
-      val breakableLocation = sf.activeBreakpoint.firstBreakableLocation
-      val scriptUri = breakableLocation.script.url
-      val allBreakableLocations = breakableLocationsByScriptUrl(scriptUri.toString)
-      val sfMethod = breakableLocation.location.method()
-      val sfLineNumber = breakableLocation.location.lineNumber()
-      val relevantBreakableLocations = allBreakableLocations.filter(bl => bl.location.method() == sfMethod && bl.location.lineNumber() > sfLineNumber)
-      relevantBreakableLocations.foreach(enableBreakpointOnce)
-      relevantBreakableLocations.size
-    case other =>
-      log.warn("Unknown stack frame type: " + other)
-      0
-  }
-
   override def step(stepType: StepType): Unit = pausedData match {
     case Some(pd) =>
       log.info(s"Stepping with type $stepType")
@@ -1152,7 +1115,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       // were to request step out, for example, we might end up in some method that acts as a script bridge.
       stepType match {
         case StepInto =>
-          expensiveStepInto()
+          createEnabledStepIntoRequest(pd.thread)
         case StepOver =>
           createEnabledStepOverRequest(pd.thread, pd.isAtDebuggerStatement)
         case StepOut =>
@@ -1162,6 +1125,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       resumeWhenPaused()
     case None =>
       throw new IllegalStateException("A breakpoint must be active for stepping to work")
+  }
+
+  private def createEnabledStepIntoRequest(thread: ThreadReference): Unit = {
+    val sr = virtualMachine.eventRequestManager().createStepRequest(thread, StepRequest.STEP_LINE, StepRequest.STEP_INTO)
+    sr.addClassFilter("jdk.nashorn.internal.scripts.*")
+    sr.enable()
   }
 
   private def createEnabledStepOverRequest(thread: ThreadReference, isAtDebuggerStatement: Boolean): Unit = {
