@@ -60,6 +60,24 @@ class StepTest extends StepTestFixture {
           bp.location.lineNumber1Based should be (6)
         }
       }
+
+      "with a while loop" - {
+        val script =
+          """var z = 0;
+            |debugger;
+            |while (z < 2) {
+            |  z++;
+            |}
+            |z++;
+          """.stripMargin
+
+        "jumps back to the loop condition after the body" in {
+          stepInScript(script, Seq(StepOver, StepOver, StepOver)) { bp =>
+            bp.location.lineNumber1Based should be (3)
+          }
+        }
+      }
+
     }
 
     "out" - {

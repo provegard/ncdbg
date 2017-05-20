@@ -487,7 +487,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               infoAboutLastStep match {
                 case Some(info) if info == StepLocationInfo.from(ev) =>
                   // We stopped in the same location. Continue!
-                  //TODO: How does this work in a for loop for example??
+                  log.debug(s"Breakpoint event in the same location (${ev.location()}) as the previous step event. Ignoring!")
                 case _ =>
                   removeAnyStepRequest()
                   attemptToResolveSourceLessReferenceTypes()
