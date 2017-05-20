@@ -472,11 +472,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           ev match {
             case ev: StepEvent =>
               virtualMachine.eventRequestManager().deleteEventRequest(ev.request())
-              var bc = byteCodeFromLocation(ev.location())
+              val bc = byteCodeFromLocation(ev.location())
               if (IlCodesToIgnoreOnStepEvent.contains(bc)) {
                 // We most likely hit an "intermediate" location after returning from a function.
-                createEnabledStepOverRequest(ev.thread(), false)
+                log.trace(s"Skipping step event at ${ev.location()} because byte code is ignored: 0x${bc.toHexString}")
+                createEnabledStepOverRequest(ev.thread(), isAtDebuggerStatement = false)
               } else {
+                log.trace(s"Considering step event at ${ev.location()} with byte code: 0x${bc.toHexString}")
                 doResume = handleBreakpoint(ev)
                 if (!doResume) infoAboutLastStep = Some(StepLocationInfo.from(ev))
               }
@@ -485,6 +487,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               infoAboutLastStep match {
                 case Some(info) if info == StepLocationInfo.from(ev) =>
                   // We stopped in the same location. Continue!
+                  //TODO: How does this work in a for loop for example??
                 case _ =>
                   removeAnyStepRequest()
                   attemptToResolveSourceLessReferenceTypes()
@@ -1141,23 +1144,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       0
   }
 
-  private def stepOut(pd: PausedData): Unit = {
-    // For step out, we set breakpoints in the parent stackframe (head of the tail)
-    pd.stackFrames.tail.headOption match {
-      case Some(sf) =>
-        val breakpointCount = setTemporaryBreakpointsInStackFrame(sf)
-        if (breakpointCount > 0) {
-          log.debug(s"Performing step-out by one-off-enabling $breakpointCount breakpoints in the parent stack frame.")
-        } else {
-          log.warn("Turning step-out request to normal resume since no breakable locations were found in the parent script frame.")
-        }
-
-      case None =>
-        log.info("Turning step-out request to normal resume since there is no parent script stack frame.")
-        // resumeWhenPaused is called by caller method (step)
-    }
-  }
-
   override def step(stepType: StepType): Unit = pausedData match {
     case Some(pd) =>
       log.info(s"Stepping with type $stepType")
@@ -1170,7 +1156,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         case StepOver =>
           createEnabledStepOverRequest(pd.thread, pd.isAtDebuggerStatement)
         case StepOut =>
-          stepOut(pd)
+          createEnabledStepOutRequest(pd.thread, pd.isAtDebuggerStatement)
       }
 
       resumeWhenPaused()
@@ -1182,6 +1168,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     val sr = virtualMachine.eventRequestManager().createStepRequest(thread, StepRequest.STEP_LINE, StepRequest.STEP_OVER)
     sr.addClassFilter("jdk.nashorn.internal.scripts.*")
     if (isAtDebuggerStatement) sr.addCountFilter(2)
+    sr.enable()
+  }
+
+  private def createEnabledStepOutRequest(thread: ThreadReference, isAtDebuggerStatement: Boolean): Unit = {
+    val sr = virtualMachine.eventRequestManager().createStepRequest(thread, StepRequest.STEP_LINE, StepRequest.STEP_OUT)
+    sr.addClassFilter("jdk.nashorn.internal.scripts.*")
+    if (isAtDebuggerStatement) sr.addCountFilter(3) //TODO: Why 3 and not 2??
     sr.enable()
   }
 

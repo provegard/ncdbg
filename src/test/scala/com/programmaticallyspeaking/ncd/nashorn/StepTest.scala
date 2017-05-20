@@ -63,7 +63,7 @@ class StepTest extends StepTestFixture {
     }
 
     "out" - {
-      "exits a function" in {
+      "exits a function from a debugger statement" in {
         val script =
           """var fun = function() {
             |  debugger;
@@ -73,6 +73,49 @@ class StepTest extends StepTestFixture {
           """.stripMargin
         stepInScript(script, Seq(StepOut)) { bp =>
           bp.location.lineNumber1Based should be (5)
+        }
+      }
+
+      "exits a function from a debugger statement followed by a regular statement" in {
+        val script =
+          """var fun = function() {
+            |  debugger;
+            |  while (this.dummy) fun();
+            |};
+            |fun();
+            |fun.toString();
+          """.stripMargin
+        stepInScript(script, Seq(StepOut)) { bp =>
+          bp.location.lineNumber1Based should be (6)
+        }
+      }
+
+      "exits a function from a non-debugger statement" in {
+        val script =
+          """var fun = function() {
+            |  debugger;
+            |  while (this.dummy) fun();
+            |};
+            |fun();
+            |fun.toString();
+          """.stripMargin
+        stepInScript(script, Seq(StepOver, StepOut)) { bp =>
+          bp.location.lineNumber1Based should be (6)
+        }
+      }
+
+      "exits a function from a non-debugger statement followed by another regular statement" in {
+        val script =
+          """var fun = function() {
+            |  debugger;
+            |  while (this.dummy1) fun();
+            |  while (this.dummy2) fun();
+            |};
+            |fun();
+            |fun.toString();
+          """.stripMargin
+        stepInScript(script, Seq(StepOver, StepOut)) { bp =>
+          bp.location.lineNumber1Based should be (7)
         }
       }
     }
