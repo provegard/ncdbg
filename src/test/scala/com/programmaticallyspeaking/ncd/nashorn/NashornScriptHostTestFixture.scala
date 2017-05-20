@@ -5,6 +5,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentLinkedQueue
 
+import ch.qos.logback.classic.Level
 import com.programmaticallyspeaking.ncd.host.ScriptEvent
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
 import com.programmaticallyspeaking.ncd.testing.{FreeActorTesting, MemoryAppender, StringUtils, UnitTest}
@@ -49,15 +50,13 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
   def logVirtualMachineOutput(output: String) = {
     // When we receive "ready", the VM is ready to listen for "go".
     if (output == Signals.ready) {
-      reportProgress("Got the ready signal from the VM")
+      log.info("Got the ready signal from the VM")
       vmReadyPromise.success(())
     } else {
-      reportProgress("VM output: " + output)
       log.info("VM output: " + output)
     }
   }
   def logVirtualMachineError(error: String) = {
-    reportProgress("VM error: " + error)
     log.error("VM error: " + error)
   }
 
@@ -80,7 +79,7 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
   protected val eventSubject = new SerializedSubject[ScriptEvent]
 
   private def nowString = ZonedDateTime.now().format(DateTimeFormatter.ISO_INSTANT)
-  protected def reportProgress(msg: String): Unit = progress.add(s"[$nowString] $msg")
+  private def reportProgress(msg: String): Unit = progress.add(s"[$nowString] $msg")
 
   protected def summarizeProgress() = progress.asScala.mkString("\n")
 
@@ -94,8 +93,9 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
     vmReadyPromise = Promise[Unit]()
 
     logSubscription = MemoryAppender.logEvents.subscribe(Observer.from {
-      case event if event.getLoggerName == classOf[NashornDebuggerHost].getName =>
-        reportProgress(s"[NashornDebuggerHost][${event.getLevel}]: ${event.getMessage}")
+      case event if event.getLevel.isGreaterOrEqual(Level.DEBUG) => // if event.getLoggerName == getClass.getName =>
+        val simpleLoggerName = event.getLoggerName.split('.').last
+        reportProgress(s"[$simpleLoggerName][${event.getLevel}]: ${event.getMessage}")
     })
 
     setupHost()
@@ -103,12 +103,12 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
 
   protected def sendToVm(data: String, encodeBase64: Boolean = false): Unit = {
     val dataToSend = if (encodeBase64) StringUtils.toBase64(data) else data
-    reportProgress("Sending to VM: " + dataToSend)
+    log.info("Sending to VM: " + dataToSend)
     vmStdinWriter.println(dataToSend)
   }
 
   protected def setupHost(): Unit = {
-    reportProgress("VM is running, setting up host")
+    log.info("VM is running, setting up host")
     host.events.subscribe(new Observer[ScriptEvent] {
       override def onError(error: Throwable): Unit = vmRunningPromise.tryFailure(error)
 
@@ -117,12 +117,12 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
       override def onNext(item: ScriptEvent): Unit = item match {
         case InitialInitializationComplete =>
           // Host initialization is complete, so let ScriptExecutor know that it can continue.
-          reportProgress("host initialization complete")
+          log.info("host initialization complete")
 
           // Wait until we observe that the VM is ready to receive the go command.
           vmReadyPromise.future.onComplete {
             case Success(_) =>
-              reportProgress("VM is ready!")
+              log.info("VM is ready!")
 
               sendToVm(Signals.go)
 
@@ -133,7 +133,7 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
             case Failure(t) => vmRunningPromise.tryFailure(t)
           }
         case other =>
-          reportProgress("Dispatching to event observers: " + other)
+          log.debug("Dispatching to event observers: " + other)
           eventSubject.onNext(other)
       }
     })
@@ -217,8 +217,8 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorT
     Option(observer).foreach(addObserver)
 
     val f = vmRunningPromise.future.flatMap { host =>
-      reportProgress(">>>>>> TEST START")
-      reportProgress("VM running, sending script")
+      log.info(">>>>>> TEST START")
+      log.info("VM running, sending script")
       sendToVm(script, encodeBase64 = true)
       handler(host)
     }
