@@ -68,9 +68,9 @@ object Debugger extends Logging {
 
   case class GetScriptSourceResult(scriptSource: String)
 
-  case class GetPossibleBreakpointsResult(locations: Seq[Location])
+  case class GetPossibleBreakpointsResult(locations: Seq[BreakLocation])
 
-  case class setBreakpointByUrl(lineNumber: Int, url: String, columnNumber: Int, condition: Option[String])
+  case class setBreakpointByUrl(lineNumber: Int, url: String, columnNumber: Option[Int], condition: Option[String])
 
   case class removeBreakpoint(breakpointId: String)
 
@@ -80,7 +80,15 @@ object Debugger extends Logging {
 
   case class SetBreakpointByUrlResult(breakpointId: String, locations: Seq[Location])
 
-  case class Location(scriptId: String, lineNumber: Int, columnNumber: Int)
+  case class Location(scriptId: String, lineNumber: Int, columnNumber: Option[Int])
+
+  /**
+    * @param scriptId Script identifier as reported in the Debugger.scriptParsed.
+    * @param lineNumber Line number in the script (0-based).
+    * @param columnNumber Column number in the script (0-based).
+    * @param `type` Allowed values: debuggerStatement, call, return.
+    */
+  case class BreakLocation(scriptId: String, lineNumber: Int, columnNumber: Option[Int], `type`: Option[String] = None)
 
   case class CallFrame(callFrameId: CallFrameId, location: Location, scopeChain: Seq[Scope], `this`: RemoteObject, functionName: String, returnValue: RemoteObject = null)
 
@@ -185,17 +193,16 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
           throw new IllegalArgumentException("Unknown script ID: " + scriptId)
       }
 
-    case Debugger.setBreakpointByUrl(lineNumberBase0, url, columnNumberBase0, condition) =>
-      val lineNumberBase1 = lineNumberBase0 + 1
+    case Debugger.setBreakpointByUrl(lineNumberBase0, url, maybeColumnNumberBase0, condition) =>
       // DevTools passes "" when the breakpoint isn't conditional
       val actualCondition = condition.filter(_ != "")
-      scriptHost.setBreakpoint(url, ScriptLocation(lineNumberBase0 + 1, columnNumberBase0 + 1), actualCondition) match {
+      val location = ScriptLocation(lineNumberBase0 + 1, maybeColumnNumberBase0.map(_ + 1))
+      scriptHost.setBreakpoint(url, location, actualCondition) match {
         case Some(bp) =>
-          // Echo the column number. Java/JDI doesn't care about column numbers (at least Location doesn't contain one),
-          // but it seems to be important for proper source map support.
-          SetBreakpointByUrlResult(bp.breakpointId, Seq(Location(bp.scriptId, bp.location.lineNumber1Based - 1, bp.location.columnNumber1Based - 1)))
+          SetBreakpointByUrlResult(bp.breakpointId, bp.locations.map(l => Location(bp.scriptId, l.lineNumber1Based - 1, l.columnNumber1Based.map(_ - 1))))
         case None =>
-          log.warn(s"Cannot identify breakpoint at $url:$lineNumberBase1")
+          val loc = lineNumberBase0 + maybeColumnNumberBase0.map(c => ":" + c).getOrElse("")
+          log.warn(s"Cannot identify breakpoint at $url:$loc")
           //TODO: Huh, should this be an error instead??
           SetBreakpointByUrlResult(null, Seq.empty)
       }
@@ -249,10 +256,9 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
 
     case Debugger.getPossibleBreakpoints(start, maybeEnd) =>
       // TODO: Unit test if works
-      val locations = scriptHost.getBreakpointLocations(start.scriptId, ScriptLocation(start.lineNumber + 1, start.columnNumber + 1),
-        maybeEnd.map(e => ScriptLocation(e.lineNumber + 1, e.columnNumber + 1)))
-        .map(loc => Location(start.scriptId, loc.lineNumber1Based - 1, loc.columnNumber1Based - 1))
-      //TODO: line numbers??
+      val locations = scriptHost.getBreakpointLocations(start.scriptId, ScriptLocation(start.lineNumber + 1, start.columnNumber.map(_ + 1)),
+        maybeEnd.map(e => ScriptLocation(e.lineNumber + 1, e.columnNumber.map(_ + 1))))
+        .map(loc => BreakLocation(start.scriptId, loc.lineNumber1Based - 1, loc.columnNumber1Based.map(_ - 1)))
       GetPossibleBreakpointsResult(locations)
 
     case Debugger.setVariableValue(scopeNum, varName, newValue, callFrameId) =>
@@ -315,7 +321,8 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
       val scopes = sf.scopeChain.map(s => Scope(scopeType(s), toRemoteObject(s.value)))
       val thisObj = toRemoteObject(sf.thisObj)
       // Reuse stack frame ID as call frame ID so that mapping is easier when we talk to the debugger
-      CallFrame(sf.id, Location(sf.breakpoint.scriptId, sf.breakpoint.location.lineNumber1Based - 1, sf.breakpoint.location.columnNumber1Based - 1), scopes, thisObj, sf.functionDetails.name)
+      val headLocation = sf.breakpoint.locations.head
+      CallFrame(sf.id, Location(sf.breakpoint.scriptId, headLocation.lineNumber1Based - 1, headLocation.columnNumber1Based.map(_ - 1)), scopes, thisObj, sf.functionDetails.name)
     }
   }
 

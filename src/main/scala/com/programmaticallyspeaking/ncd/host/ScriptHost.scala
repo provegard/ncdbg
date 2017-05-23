@@ -7,11 +7,14 @@ import com.programmaticallyspeaking.ncd.messaging.Observable
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
-case class ScriptLocation(lineNumber1Based: Int, columnNumber1Based: Int) {
-  override def toString: String = lineNumber1Based + ":" + columnNumber1Based
+case class ScriptLocation(lineNumber1Based: Int, columnNumber1Based: Option[Int]) {
+  override def toString: String = lineNumber1Based + columnNumber1Based.map(c => ":" + c).getOrElse("")
 }
 
-case class Breakpoint(breakpointId: String, scriptId: String, scriptURL: Option[ScriptURL], location: ScriptLocation)
+case class Breakpoint(breakpointId: String, scriptId: String, scriptURL: Option[ScriptURL], locations: Seq[ScriptLocation]) {
+  require(locations.nonEmpty, "A Breakpoint must have locations")
+  def location: ScriptLocation = locations.head //TODO: for tests, remove
+}
 
 sealed trait ScopeType
 object ScopeType {
@@ -86,7 +89,8 @@ trait ScriptHost {
     * Sets a breakpoint in the given script at the given line.
     *
     * @param scriptUri the URI of the script
-    * @param location the location in the script where the breakpoint should be set
+    * @param location the location of the breakpoint; if the column number isn't set, the returned breakpoint may
+    *                 refer to multiple locations.
     * @param condition optional condition to use for the breakpoint
     * @return a structure describing the breakpoint that was set
     */

@@ -7,6 +7,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.Promise
+import scala.util.Try
 
 class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyChecks {
 
@@ -111,7 +112,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
           |})();
         """.stripMargin
       waitForBreakpoint(script) { (_, breakpoint) =>
-        breakpoint.stackFrames.headOption.map(_.breakpoint.location.columnNumber1Based) should be (Some(5))
+        breakpoint.stackFrames.headOption.flatMap(_.breakpoint.location.columnNumber1Based) should be (Some(5))
       }
     }
 
@@ -243,39 +244,81 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         |debugger; // where we will set breakpoints
         |fun()();  // two calls, should hit two breakpoints...
       """.stripMargin
-    "a breakpoint set on that line will get hit twice" in {
 
-      val donePromise = Promise[Unit]()
+    def createObserver(handler: ((MultiBreakpointsData) => Unit)): Observer[ScriptEvent] = {
       var breakpointsHitSoFar = 0
-      val breakpointIds = ListBuffer[String]()
       val observer = Observer.from[ScriptEvent] {
         case bp: HitBreakpoint =>
           breakpointsHitSoFar += 1
-
-          val scriptId = bp.stackFrames.head.breakpoint.scriptId
-          val breakpointId = bp.stackFrames.head.breakpoint.breakpointId
-
-          if (breakpointsHitSoFar == 1) {
-            // debugger
-            (for {
-              s <- getHost.scriptById(scriptId)
-              bp <- getHost.setBreakpoint(s.url.toString, ScriptLocation(2, 3), None)
-            } yield bp) match {
-              case Some(bps) => breakpointIds += bps.breakpointId
-              case None => donePromise.failure(new Exception("No script or breakpoint"))
-            }
-          } else breakpointIds += breakpointId
-
-          if (breakpointsHitSoFar == 3) {
-            // should be done!
-            if (breakpointIds.distinct.size == 1) {
-              donePromise.success(())
-            } else {
-              donePromise.failure(new Exception(s"Breakpoint ID mismatch, ${breakpointIds.mkString(", ")}"))
-            }
-          } else getHost.resume()
-
+          handler(MultiBreakpointsData(bp, breakpointsHitSoFar))
         case _ => // ignore
+      }
+      observer
+    }
+
+    def testSetBreakpoint(line: Int, col: Option[Int])(handler: (Option[Breakpoint]) => Unit): Unit = {
+      val donePromise = Promise[Unit]()
+      val observer = createObserver { data =>
+        val scriptId = data.bp.stackFrames.head.breakpoint.scriptId
+        val maybeBreakpoint = for {
+          s <- getHost.scriptById(scriptId)
+          bp <- getHost.setBreakpoint(s.url.toString, ScriptLocation(line, col), None)
+        } yield bp
+
+        donePromise.complete(Try(handler(maybeBreakpoint)))
+        maybeBreakpoint.foreach(b => getHost.removeBreakpointById(b.breakpointId))
+      }
+      observeAndRunScriptAsync(script, observer) { _ =>
+        donePromise.future
+      }
+    }
+
+    "setting a breakpoint with no column returns all locations" in {
+      testSetBreakpoint(2, None) { bp =>
+        val columnNumbers = bp.map(_.locations.flatMap(_.columnNumber1Based))
+        columnNumbers should be (Some(Seq(3, 26)))
+      }
+    }
+
+    "setting a breakpoint with a column returns a single location" in {
+      testSetBreakpoint(2, Some(3)) { bp =>
+        val columnNumbers = bp.map(_.locations.flatMap(_.columnNumber1Based))
+        columnNumbers should be (Some(Seq(3)))
+      }
+    }
+
+    "setting a breakpoint with an incorrect column returns no breakpoint" in {
+      testSetBreakpoint(2, Some(7)) { bp =>
+        bp should be ('empty)
+      }
+    }
+
+    "a breakpoint set for all locations on that line will get hit twice" in {
+      val donePromise = Promise[Unit]()
+      val breakpointIds = ListBuffer[String]()
+      val observer = createObserver { data =>
+        val scriptId = data.bp.stackFrames.head.breakpoint.scriptId
+        val breakpointId = data.bp.stackFrames.head.breakpoint.breakpointId
+
+        if (data.hitsSoFar == 1) {
+          // debugger
+          (for {
+            s <- getHost.scriptById(scriptId)
+            bp <- getHost.setBreakpoint(s.url.toString, ScriptLocation(2, None), None)
+          } yield bp) match {
+            case Some(bps) => breakpointIds += bps.breakpointId
+            case None => donePromise.failure(new Exception("No script or breakpoint"))
+          }
+        } else breakpointIds += breakpointId
+
+        if (data.hitsSoFar == 3) {
+          // should be done!
+          if (breakpointIds.distinct.size == 1) {
+            donePromise.success(())
+          } else {
+            donePromise.failure(new Exception(s"Breakpoint ID mismatch, ${breakpointIds.mkString(", ")}"))
+          }
+        } else getHost.resume()
       }
       observeAndRunScriptAsync(script, observer) { _ =>
         donePromise.future
@@ -291,4 +334,5 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     })
   }
 
+  case class MultiBreakpointsData(bp: HitBreakpoint, hitsSoFar: Int)
 }

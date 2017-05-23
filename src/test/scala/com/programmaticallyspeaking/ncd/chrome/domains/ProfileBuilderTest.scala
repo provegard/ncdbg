@@ -6,11 +6,11 @@ import com.programmaticallyspeaking.ncd.infra.ScriptURL
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 
 trait ProfilerTesting {
-  def emptyRootNode = ProfileNode(1, Runtime.CallFrame("(root)", "0", "", -1, -1), 0, Seq.empty)
+  def emptyRootNode = ProfileNode(1, Runtime.CallFrame("(root)", "0", "", -1, None), 0, Seq.empty)
   def createStackFrame(scriptId: String, url: String, functionName: String, lineNo1: Int, colNo1: Int) = new StackFrame {
     override val functionDetails: FunctionDetails = FunctionDetails(functionName)
     override val scopeChain: Seq[Scope] = Seq.empty
-    override val breakpoint: Breakpoint = Breakpoint("xx", scriptId, Some(ScriptURL.create(url)), ScriptLocation(lineNo1, colNo1))
+    override val breakpoint: Breakpoint = Breakpoint("xx", scriptId, Some(ScriptURL.create(url)), Seq(ScriptLocation(lineNo1, Some(colNo1))))
     override val id: String = scriptId
     override val thisObj: ValueNode = null
   }
@@ -59,7 +59,7 @@ class ProfileBuilderTest extends UnitTest with ProfilerTesting {
         }
 
         "associates the resulting node with the correct call frame" in {
-          findProfileNode.callFrame should be (Runtime.CallFrame("myFun", "a", "file:///some/script.js", 0, 0))
+          findProfileNode.callFrame should be (Runtime.CallFrame("myFun", "a", "file:///some/script.js", 0, Some(0)))
         }
       }
 
@@ -122,7 +122,7 @@ class ProfileBuilderTest extends UnitTest with ProfilerTesting {
         def findProfileNode = result.nodes.find(_.children.isEmpty).getOrElse(throw new RuntimeException("Failed to find the profile node"))
 
         "associates the resulting node with the correct call frame" in {
-          findProfileNode.callFrame should be (Runtime.CallFrame("(program)", "0", "", -1, -1))
+          findProfileNode.callFrame should be (Runtime.CallFrame("(program)", "0", "", -1, None))
         }
       }
 
@@ -134,7 +134,7 @@ class ProfileBuilderTest extends UnitTest with ProfilerTesting {
         def findProfileNode = result.nodes.find(_.children.isEmpty).getOrElse(throw new RuntimeException("Failed to find the profile node"))
 
         "associates the resulting node with the correct call frame" in {
-          findProfileNode.callFrame should be (Runtime.CallFrame("(idle)", "0", "", -1, -1))
+          findProfileNode.callFrame should be (Runtime.CallFrame("(idle)", "0", "", -1, None))
         }
       }
     }

@@ -291,12 +291,47 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
+  private def guessColumns(script: Script): Unit = {
+    breakableLocationsByScriptUrl.get(script.url.toString) match {
+      case Some(locations) =>
+        locations.groupBy(_.scriptLocation.lineNumber1Based).foreach {
+          case (lineNo, locs) if locs.size > 1 =>
+            val sortedLocs = locs.sortWith((bl1, bl2) => {
+              val bl1Method = bl1.location.method()
+              val bl2Method = bl2.location.method()
+
+              if (bl1Method == bl2Method) {
+                val line = script.sourceLine(bl1.scriptLocation.lineNumber1Based)
+                throw new UnsupportedOperationException(s"Unexpected, multiple locations in the same method: $bl1 and $bl2, for line $line")
+              } else {
+                // Different methods
+                // # = CompilerConstants.NESTED_FUNCTION_SEPARATOR
+                val bl1MethodNameParts = bl1Method.name().split("#")
+                val bl2MethodNameParts = bl2Method.name().split("#")
+                bl2MethodNameParts.startsWith(bl1MethodNameParts)
+              }
+            })
+            val columns = script.statementColumnsForLine(lineNo)
+            sortedLocs.zip(columns).foreach {
+              case (bl, col) => bl.setColumn(col)
+            }
+          case _ => // single loc
+        }
+
+      case None => // noop
+    }
+  }
+
   private def registerScript(script: Script, scriptPath: String, locations: Seq[Location]): Unit = {
     val isKnownScript = breakableLocationsByScriptUrl.contains(script.url.toString)
 
     val erm = virtualMachine.eventRequestManager()
     val breakableLocations = locations.map(l => new BreakableLocation(script, erm, l))
     addBreakableLocations(script, breakableLocations)
+    try guessColumns(script) catch {
+      case NonFatal(t) =>
+        log.error(s"Column guessing failed for ${script.url}", t)
+    }
 
     if (isKnownScript) {
       log.debug(s"Reusing script with URI '${script.url}' for script path '$scriptPath'")
@@ -316,6 +351,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
       log.debug(s"Ignoring script because $msg")
       None
     case Failure(ex: FileNotFoundException) =>
+      //TODO: Remove, not used anymore
       log.warn(s"Script at path '$scriptPath' doesn't exist. Trying the source route...")
       handleScriptResult(Try(scriptFromEval(refType, scriptPath, attemptsLeft)), refType, scriptPath, locations, attemptsLeft)
     case Failure(t) =>
@@ -1028,31 +1064,48 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  override def setBreakpoint(scriptUri: String, scriptLocation: ScriptLocation, condition: Option[String]): Option[Breakpoint] = {
-    findBreakableLocations(scriptUri, scriptLocation).filter(_.nonEmpty).map { all =>
-      val newId = breakpointIdGenerator.next
-      val conditionDescription = condition.map(c => s" with condition ($c)").getOrElse("")
-      log.info(s"Setting a breakpoint with ID $newId for locations ${all.mkString(", ")} in $scriptUri$conditionDescription")
+  override def setBreakpoint(scriptUri: String, location: ScriptLocation, condition: Option[String]): Option[Breakpoint] = {
+    findBreakableLocationsAtLine(scriptUri, location.lineNumber1Based) match {
+      case Some(bls) =>
+        // If we have a column number, find exactly that location. Otherwise grab all locations
+        val candidates = location.columnNumber1Based match {
+          case Some(col) => bls.filter(_.scriptLocation.columnNumber1Based.contains(col))
+          case None => bls
+        }
+        if (candidates.nonEmpty) {
+          val newId = breakpointIdGenerator.next
+          val conditionDescription = condition.map(c => s" with condition ($c)").getOrElse("")
+          log.info(s"Setting a breakpoint with ID $newId for location(s) ${candidates.mkString(", ")} in $scriptUri$conditionDescription")
 
-      // Force boolean and handle that the condition contains a trailing comment
-      val wrapper = condition.map(c =>
-        s"""!!(function() {
-           |return $c
-           |})()
-         """.stripMargin)
+          // Force boolean and handle that the condition contains a trailing comment
+          val wrapper = condition.map(c =>
+            s"""!!(function() {
+               |return $c
+               |})()
+           """.stripMargin)
 
-      val activeBp = ActiveBreakpoint(newId, all, wrapper)
-      activeBp.enable()
-      enabledBreakpoints += (activeBp.id -> activeBp)
-      activeBp.toBreakpoint
+          val activeBp = ActiveBreakpoint(newId, candidates, wrapper)
+          activeBp.enable()
+          enabledBreakpoints += (activeBp.id -> activeBp)
+          Some(activeBp.toBreakpoint)
+        } else None
+
+      case None =>
+        log.trace(s"No breakable locations found for script $scriptUri at line ${location.lineNumber1Based}")
+        None
     }
   }
 
   private def findBreakableLocation(location: Location): Option[BreakableLocation] = {
     scriptByPath.get(scriptPathFromLocation(location)).flatMap { script =>
-      val sl = BreakableLocation.scriptLocationFromScriptAndLocation(script, location)
-      findBreakableLocations(script.url.toString, sl).flatMap(_.find(_.scriptLocation == sl))
+      // We cannot compare locations directly because the passed-in Location may have a code index that is
+      // different from the one stored in a BreakableLocation - so do a line comparison.
+      findBreakableLocationsAtLine(script.url.toString, location.lineNumber()).flatMap(_.find(bl => sameMethodAndLine(bl.location, location)))
     }
+  }
+
+  private def sameMethodAndLine(l1: Location, l2: Location): Boolean = {
+    l1.method() == l2.method() && l1.lineNumber() == l2.lineNumber()
   }
 
   private def findActiveBreakpoint(location: Location): Option[ActiveBreakpoint] = {
@@ -1064,9 +1117,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
-  private def findBreakableLocations(scriptUrl: String, scriptLocation: ScriptLocation): Option[Seq[BreakableLocation]] = {
+  private def findBreakableLocationsAtLine(scriptUrl: String, lineNumber: Int): Option[Seq[BreakableLocation]] = {
     breakableLocationsByScriptUrl.get(scriptUrl).map { breakableLocations =>
-      breakableLocations.filter(_.scriptLocation.lineNumber1Based == scriptLocation.lineNumber1Based)
+      breakableLocations.filter(_.scriptLocation.lineNumber1Based == lineNumber)
     }
   }
 
@@ -1442,10 +1495,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
           sloc.lineNumber1Based >= from.lineNumber1Based && to.forall(sloc.lineNumber1Based < _.lineNumber1Based)
         }
 
+        //TODO: Update doc
         // Filter so that we end up with one location per line, max. Since ScriptLocation is a case class and all
         // column numbers on the same line will be the same (again, since Nashorn/Java doesn't report column numbers),
         // it's sufficient to get the unique locations.
-        candidates.distinct
+        candidates.distinct.sortBy(_.columnNumber1Based)
 
       case None => throw new IllegalArgumentException("Unknown script ID: " + scriptId)
     }
@@ -1597,11 +1651,13 @@ object InitialInitializationComplete extends ScriptEvent
   */
 case class ActiveBreakpoint(id: String, breakableLocations: Seq[BreakableLocation], condition: Option[String]) {
   assert(breakableLocations.nonEmpty, "An active breakpoint needs at least one breakable location")
-  assert(breakableLocations.map(_.scriptLocation.columnNumber1Based).distinct.size == 1, "Unexpected different column numbers in breakable locations!")
 
   val firstBreakableLocation = breakableLocations.head
 
-  def toBreakpoint = firstBreakableLocation.toBreakpoint(id)
+  def toBreakpoint: Breakpoint = {
+    val script = firstBreakableLocation.script
+    Breakpoint(id, script.id, Some(script.url), breakableLocations.map(_.scriptLocation))
+  }
 
   def disable(): Unit = breakableLocations.foreach(_.disable())
   def enable(): Unit = breakableLocations.foreach(_.enable())

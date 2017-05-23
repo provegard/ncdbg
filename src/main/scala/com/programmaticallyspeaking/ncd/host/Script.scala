@@ -13,6 +13,8 @@ trait Script {
 
   def sourceLine(lineNumber1Based: Int): Option[String]
 
+  def statementColumnsForLine(lineNumber1Based: Int): Seq[Int]
+
   def contentsHash(): String
 
   def sourceMapUrl(): Option[ScriptURL]
@@ -31,4 +33,5 @@ class ProxyScript(inner: Script) extends Script {
   override def contentsHash(): String = inner.contents
   override def sourceMapUrl(): Option[ScriptURL] = inner.sourceMapUrl()
   override def sourceUrl(): Option[ScriptURL] = inner.sourceUrl()
+  override def statementColumnsForLine(lineNumber1Based: Int): Seq[Int] = inner.statementColumnsForLine(lineNumber1Based)
 }

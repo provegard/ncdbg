@@ -6,7 +6,7 @@ import java.nio.charset.Charset
 
 import akka.actor.{ActorRef, PoisonPill}
 import akka.testkit.TestProbe
-import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{Location, PausedEventParams, ScriptParsedEventParams}
+import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{BreakLocation, Location, PausedEventParams, ScriptParsedEventParams}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
 import com.programmaticallyspeaking.ncd.chrome.net.FilePublisher
 import com.programmaticallyspeaking.ncd.host._
@@ -44,14 +44,16 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     override def sourceUrl(): Option[ScriptURL] = None
 
     override def sourceLine(lineNumber1Based: Int): Option[String] = None
+
+    override def statementColumnsForLine(lineNumber1Based: Int): Seq[Int] = Seq.empty
   }
 
   private val objectProperties = mutable.Map[ObjectId, Map[String, Any]]()
 
   def setProperties(c: ComplexNode, props: Map[String, Any]): Unit = objectProperties += (c.objectId -> props)
 
-  def location(ln: Int) = ScriptLocation(ln, 1)
-  def location(ln: Int, cn: Int) = ScriptLocation(ln, cn)
+  def location(ln: Int) = ScriptLocation(ln, None)
+  def location(ln: Int, cn: Int) = ScriptLocation(ln, Some(cn))
 
   val setPauseOnExceptionsCases = Table(
     ("state", "expected"),
@@ -150,7 +152,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val debugger = newActorInstance[Debugger]
 
         debugger ! Messages.Request("1", Domain.enable)
-        inside(requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(lineNumber, scriptUri, 0, condition))) {
+        inside(requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(lineNumber, scriptUri, None, condition))) {
           case result: Debugger.SetBreakpointByUrlResult => result
         }
       }
@@ -197,7 +199,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val debugger = newActorInstance[Debugger]
         debugger ! Messages.Request("1", Domain.enable)
 
-        val result = requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(5, "a", 0, None)) match {
+        val result = requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(5, "a", None, None)) match {
           case result: Debugger.SetBreakpointByUrlResult => result
           case other => fail("Unexpected: " + other)
         }
@@ -213,7 +215,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       def setup: ActorRef = {
         when(currentScriptHost.getBreakpointLocations(any[String], any[ScriptLocation], any[Option[ScriptLocation]]))
-          .thenReturn(Seq(location(1), location(2), location(3)))
+          .thenReturn(Seq(location(1, 1), location(2, 1), location(3, 1)))
 
         val debugger = newActorInstance[Debugger]
         debugger ! Messages.Request("1", Domain.enable)
@@ -222,25 +224,25 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       "should invoke ScriptHost, converting Chrome line/column numbers (0-based) to Nashorn line/column numbers (1-based)" in {
         val debugger = setup
-        val start = Location("a", 1, 2)
-        val end = Location("a", 5, 3)
+        val start = Location("a", 1, Some(2))
+        val end = Location("a", 5, Some(3))
 
         requestAndReceiveResponse(debugger, "2", Debugger.getPossibleBreakpoints(start, Some(end)))
 
         verify(currentScriptHost).getBreakpointLocations("a", location(2, 3), Some(location(6, 4)))
       }
 
-      "should map resulting line numbers back to Chrome space" in {
+      "should map resulting line & column numbers back to Chrome space" in {
         val debugger = setup
-        val start = Location("a", 1, 0)
-        val end = Location("a", 5, 0)
+        val start = Location("a", 1, Some(0))
+        val end = Location("a", 5, Some(0))
 
         val result = requestAndReceiveResponse(debugger, "2", Debugger.getPossibleBreakpoints(start, Some(end))) match {
           case result: Debugger.GetPossibleBreakpointsResult => result
           case other => fail("Unexpected: " + other)
         }
 
-        result.locations should be (Seq(Location("a", 0, 0), Location("a", 1, 0), Location("a", 2, 0)))
+        result.locations should be (Seq(BreakLocation("a", 0, Some(0)), BreakLocation("a", 1, Some(0)), BreakLocation("a", 2, Some(0))))
       }
     }
 
@@ -305,7 +307,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
           val thisObj = objectWithId("$$this")
           val scopeObjectId = ObjectId("$$scope")
           val scopeObj = ObjectNode("Object", scopeObjectId)
-          val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), Breakpoint("bp1", "a", None, location(10)), "fun")
+          val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), Breakpoint("bp1", "a", None, Seq(location(10))), "fun")
           val ev = simulateHitBreakpoint(Seq(stackFrame))
           val params = getEventParams(ev)
 
@@ -321,7 +323,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       "with a scope object" - {
         val thisObj = objectWithId("$$this")
         val scopeObj = objectWithId("$$scope")
-        val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), Breakpoint("bp1", "a", None, location(10)), "fun")
+        val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), Breakpoint("bp1", "a", None, Seq(location(10))), "fun")
 
         "should result in a Debugger.paused event" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
@@ -356,7 +358,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       "without scopes" - {
         val thisObj = objectWithId("$$this")
-        val stackFrame = createStackFrame("sf1", thisObj, None, Breakpoint("bp1", "a", None, location(10)), "fun")
+        val stackFrame = createStackFrame("sf1", thisObj, None, Breakpoint("bp1", "a", None, Seq(location(10))), "fun")
 
         "should not have a scopes in the event params" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
@@ -505,13 +507,13 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     val host = super.createScriptHost()
 
     when(host.setBreakpoint(any[String], any[ScriptLocation], any[Option[String]])).thenAnswerWith({
-      case (uri: String) :: (scriptLoc : ScriptLocation) :: condition :: Nil =>
-        val id = "bp_" + scriptLoc.lineNumber1Based
+      case (uri: String) :: (location: ScriptLocation) :: _ :: Nil =>
+        val id = "bp_" + location.lineNumber1Based
         // Arbitrary test stuff. High line numbers don't exist!
-        if (scriptLoc.lineNumber1Based > 100) None
+        if (location.lineNumber1Based > 100) None
         else {
           activeBreakpoints += id
-          Some(Breakpoint(id, uri + "_id", None, scriptLoc))
+          Some(Breakpoint(id, uri + "_id", None, Seq(location)))
         }
     })
     when(host.removeBreakpointById(any[String])).thenAnswerWith({

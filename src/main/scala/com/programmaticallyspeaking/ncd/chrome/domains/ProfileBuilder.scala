@@ -28,7 +28,7 @@ object ProfileBuilder {
     //      "hitCount" : 0,
     //      "children" : [2, 3, 4, 6]
     //    }
-    private val tree = new Node(nextId, Runtime.CallFrame("(root)", "0", "", -1, -1), false)
+    private val tree = new Node(nextId, Runtime.CallFrame("(root)", "0", "", -1, Some(-1)), false)
 
     def profileNodes(): Seq[ProfileNode] = {
       val flatList = ListBuffer[ProfileNode]()
@@ -45,10 +45,11 @@ object ProfileBuilder {
     }
 
     private def stackFrameToCallFrame(sf: StackFrame): Runtime.CallFrame = {
+      val headLocation = sf.breakpoint.locations.head
       Runtime.CallFrame(sf.functionDetails.name, sf.breakpoint.scriptId,
         sf.breakpoint.scriptURL.map(_.toString).getOrElse(""),
-        sf.breakpoint.location.lineNumber1Based - 1,
-        sf.breakpoint.location.columnNumber1Based - 1)
+        headLocation.lineNumber1Based - 1,
+        headLocation.columnNumber1Based.map(_ - 1))
     }
 
     def addSample(sample: Sample): Int = {
@@ -58,9 +59,9 @@ object ProfileBuilder {
           // super clear (in DevTools, the default view is "top down", but the root isn't a top as in "stack top" frame.
           sample.stackFrames.reverse.map(stackFrameToCallFrame)
         case SampleType.Java =>
-          Seq(Runtime.CallFrame("(program)", "0", "", -1, -1))
+          Seq(Runtime.CallFrame("(program)", "0", "", -1, Some(-1)))
         case SampleType.Idle =>
-          Seq(Runtime.CallFrame("(idle)", "0", "", -1, -1))
+          Seq(Runtime.CallFrame("(idle)", "0", "", -1, Some(-1)))
         case other =>
           throw new RuntimeException("Unknown sample type: " + other)
       }

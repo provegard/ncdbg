@@ -104,22 +104,23 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
 
     lazy val f = testAddScriptWithWait(script, 500.millis)
 
-    "only one breakable location is reported, since Nashorn/Java doesn't store column numbers" in {
+    "multiple breakable locations are reported" in {
       whenReady(f) { scripts =>
         scripts.find(_.contents.contains("function fun")) match {
           case Some(s) =>
-            getHost.getBreakpointLocations(s.id, ScriptLocation(1, 1), Some(ScriptLocation(2, 1))) should be(Seq(ScriptLocation(1, 1)))
+            getHost.getBreakpointLocations(s.id, ScriptLocation(1, Some(1)), Some(ScriptLocation(2, Some(1)))) should
+              be(Seq(ScriptLocation(1, Some(1)), ScriptLocation(1, Some(18))))
 
           case None => fail("no script")
         }
       }
     }
 
-    "the column number is ignored when getting locations, since we cannot distinguish between column numbers anyway" in {
+    "the column number is ignored when getting locations, since a bad source map translation otherwise may make it hard to set an accurate breakpoint" in {
       whenReady(f) { scripts =>
         scripts.find(_.contents.contains("function fun")) match {
           case Some(s) =>
-            getHost.getBreakpointLocations(s.id, ScriptLocation(1, 3), Some(ScriptLocation(2, 1))) should have size (1)
+            getHost.getBreakpointLocations(s.id, ScriptLocation(1, Some(3)), Some(ScriptLocation(2, Some(1)))) should have size (2)
 
           case None => fail("no script")
         }
@@ -127,4 +128,26 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
     }
   }
 
+  "with multiple breakable locations on a line with an IIFE" - {
+    val script =
+      """function funnier(number) {
+        |  if (number % 2 === 0) return (function () { return 41; })();
+        |  return 42;
+        |}
+        |funnier(0);
+      """.stripMargin
+    lazy val f = testAddScriptWithWait(script, 1000.millis)
+
+    "multiple breakable locations are reported" in {
+      whenReady(f) { scripts =>
+        scripts.find(_.contents.contains("funnier")) match {
+          case Some(s) =>
+            getHost.getBreakpointLocations(s.id, ScriptLocation(2, Some(1)), Some(ScriptLocation(3, Some(1)))) should be(Seq(
+              ScriptLocation(2, Some(3)), ScriptLocation(2, Some(47))))
+
+          case None => fail("no script")
+        }
+      }
+    }
+  }
 }

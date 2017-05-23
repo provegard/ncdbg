@@ -88,7 +88,7 @@ class RealDebuggerTest extends E2ETestFixture with FreeActorTesting with ScalaFu
       })
     }
 
-    "should support a conditional breakpoint" in {
+    "should support a conditional breakpoint (with column number)" in {
       enableDebugger
       val script =
         """debugger;
@@ -102,7 +102,7 @@ class RealDebuggerTest extends E2ETestFixture with FreeActorTesting with ScalaFu
         withHead(callFrames) { cf =>
           getHost.scriptById(cf.location.scriptId) match {
             case Some(s) =>
-              sendRequest(Debugger.setBreakpointByUrl(3, s.url.toString, 3, Some("i>0")))
+              sendRequest(Debugger.setBreakpointByUrl(3, s.url.toString, Some(2), Some("i>0")))
             case None => fail("Unknown script: " + cf.location.scriptId)
           }
         }
@@ -158,7 +158,7 @@ class RealDebuggerTest extends E2ETestFixture with FreeActorTesting with ScalaFu
           // At 'debugger', set the initial breakpoint
           val scriptUrl = getHost.scriptById(cf.location.scriptId).map(_.url.toString).getOrElse(
             throw new IllegalArgumentException("No script with ID: " + cf.location.scriptId))
-          sendRequest(Debugger.setBreakpointByUrl(1, scriptUrl, 2, None))
+          sendRequest(Debugger.setBreakpointByUrl(1, scriptUrl, None, None))
           sendRequest(Debugger.resume)
         }
       }, callFrames => {

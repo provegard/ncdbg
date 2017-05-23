@@ -21,7 +21,7 @@ trait MultiThreadingTestFixture extends UnitTest with Logging with FreeActorTest
 }
 
 class MultiThreadingTest extends MultiThreadingTestFixture {
-  def location(ln: Int) = ScriptLocation(ln, 1)
+  def location(ln: Int) = ScriptLocation(ln, None)
 
   "Breakpoint requests from other threads should be ignore in a paused state" in {
     val scriptAddedPromise = Promise[Script]()
@@ -44,11 +44,11 @@ class MultiThreadingTest extends MultiThreadingTestFixture {
 
     whenReady(ready) { host =>
       whenReady(scriptAddedPromise.future) { script =>
-        val lineNumber = host.getBreakpointLocations(script.id, location(1), None).headOption match {
+        val scriptLocation = host.getBreakpointLocations(script.id, location(1), None).headOption match {
           case Some(l) => l
           case None => fail(s"No line numbers for script ${script.id}")
         }
-        host.setBreakpoint(script.url.toString, lineNumber, None)
+        host.setBreakpoint(script.url.toString, scriptLocation, None)
         whenReady(hitBreakpointPromise.future) { _ =>
           // Ugly, but wait for a while to see if the counter increases over 1 (which it shouldn't).
           Thread.sleep(200)

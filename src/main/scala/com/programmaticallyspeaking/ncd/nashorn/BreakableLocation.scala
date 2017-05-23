@@ -8,12 +8,8 @@ object BreakableLocation {
   // TODO: Move elsewhere
   def scriptLocationFromScriptAndLocation(script: Script, location: Location): ScriptLocation = {
     val lineNo = location.lineNumber()
-    var colNo = script.sourceLine(lineNo) match {
-      case Some(line) =>
-        // Use index of first non-whitespace
-        1 + line.takeWhile(_.isWhitespace).length
-      case None => 1 // assume first column
-    }
+    // Use index of first non-whitespace
+    val colNo = script.sourceLine(lineNo).map(line => 1 + line.indexWhere(!_.isWhitespace))
     ScriptLocation(lineNo, colNo)
   }
 }
@@ -27,9 +23,15 @@ object BreakableLocation {
   */
 class BreakableLocation(val script: Script, eventRequestManager: EventRequestManager, val location: Location) {
 
-  val scriptLocation: ScriptLocation = BreakableLocation.scriptLocationFromScriptAndLocation(script, location)
+  var _scriptLocation: ScriptLocation = BreakableLocation.scriptLocationFromScriptAndLocation(script, location)
+
+  def scriptLocation: ScriptLocation = _scriptLocation
 
   private var breakpointRequest: BreakpointRequest = _
+
+  def setColumn(column1Based: Int): Unit = {
+    _scriptLocation = _scriptLocation.copy(columnNumber1Based = Some(column1Based))
+  }
 
   def isEnabled = breakpointRequest != null
 
@@ -50,7 +52,7 @@ class BreakableLocation(val script: Script, eventRequestManager: EventRequestMan
     breakpointRequest = null
   }
 
-  def toBreakpoint(id: String) = Breakpoint(id, script.id, Some(script.url), scriptLocation)
+//  def toBreakpoint(id: String) = Breakpoint(id, script.id, Some(script.url), scriptLocation)
 
   override def toString: String = script.id + "/" + scriptLocation.toString
 }

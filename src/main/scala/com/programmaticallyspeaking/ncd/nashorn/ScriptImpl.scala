@@ -1,12 +1,12 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import java.io.{File, FileNotFoundException}
-import java.net.URI
-import java.nio.charset.{Charset, StandardCharsets}
-import java.nio.file.Files
+import java.nio.charset.StandardCharsets
 
 import com.programmaticallyspeaking.ncd.host.Script
 import com.programmaticallyspeaking.ncd.infra.{Hasher, ScriptURL}
+
+import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 class ScriptImpl(path: String, scriptData: Array[Byte], val id: String) extends Script {
   import ScriptImpl._
@@ -53,11 +53,25 @@ class ScriptImpl(path: String, scriptData: Array[Byte], val id: String) extends 
   override def sourceLine(lineNumber1Based: Int): Option[String] = {
     lines.lift(lineNumber1Based - 1)
   }
+
+  override def statementColumnsForLine(lineNumber1Based: Int): Seq[Int] = //statementCols.getOrElse(lineNumber1Based, Seq.empty)
+    lines.lift(lineNumber1Based - 1).map(statementColumnsBase1For).getOrElse(Seq.empty)
 }
 
 object ScriptImpl {
 
   private val UTF8 = StandardCharsets.UTF_8
+
+  // Nashorn supports extended function syntax: function sqrt(x) x * x
+  private val funcBodyRegex = "function[^(]*\\([^)]*\\)[ {]*".r
+
+  def statementColumnsBase1For(sourceLine: String): Seq[Int] = {
+    // Leftmost column
+    // + all function bodies
+    val nonWs = sourceLine.indexWhere(!_.isWhitespace)
+    if (nonWs < 0) Seq.empty else
+      Seq(1 + nonWs) ++ funcBodyRegex.findAllMatchIn(sourceLine).map(_.end(0) + 1)
+  }
 
   def fromSource(path: String, source: String, id: String): Script = {
     val bytes = source.getBytes(UTF8)
