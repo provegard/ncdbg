@@ -10,6 +10,8 @@
 * Include the __proto__ property for JS objects (issue #40)
 * Faster object properties by extracting properties in a script in the remote VM
 * Faster stepping by stepping natively instead of activating one-time breakpoints
+* Limited support for column numbers; on lines that contain one-liner functions, it's
+  possible to set individual breakpoints (issue #35)
 
 ## 0.4.0 (2017-04-24)
 
