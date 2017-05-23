@@ -350,10 +350,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     case Success(Left(msg)) =>
       log.debug(s"Ignoring script because $msg")
       None
-    case Failure(ex: FileNotFoundException) =>
-      //TODO: Remove, not used anymore
-      log.warn(s"Script at path '$scriptPath' doesn't exist. Trying the source route...")
-      handleScriptResult(Try(scriptFromEval(refType, scriptPath, attemptsLeft)), refType, scriptPath, locations, attemptsLeft)
     case Failure(t) =>
       log.error(s"Ignoring script at path '$scriptPath'", t)
       None
