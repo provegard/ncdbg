@@ -223,7 +223,7 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
     RegExpNode(mirror.actualToString, objectId(mirror.scriptObject))
   }
 
-  private def toObject(mirror: ScriptObjectMirror) = ObjectNode(mirror.className, objectId(mirror.scriptObject))
+  private def toObject(mirror: ScriptObjectMirror) = ObjectNode(mirror.typeOfObject(), objectId(mirror.scriptObject))
   private def toObject(mirror: JSObjectMirror) = ObjectNode(mirror.className, objectId(mirror.jsObject))
 
   private def toFunction(mirror: ScriptFunctionMirror) = {

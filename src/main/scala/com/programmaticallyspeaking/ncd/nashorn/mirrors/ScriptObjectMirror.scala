@@ -1,5 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn.mirrors
 
+import com.programmaticallyspeaking.ncd.host.FunctionNode
 import com.programmaticallyspeaking.ncd.nashorn.{Invokers, Marshaller}
 import com.sun.jdi._
 
@@ -11,6 +12,7 @@ import scala.language.implicitConversions
   * @param scriptObject the `ScriptObject` instance to interact with
   */
 class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller: Marshaller) {
+
   import Mirrors._
   import ScriptObjectMirror._
 
@@ -35,12 +37,26 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
 
   def actualToString: String = invoker.applyDynamic("toString")().asString
 
+  def typeOfObject(): String = {
+    val v = invoker.applyDynamic(getObjectSignature)("constructor")
+    // Marshalling via FunctionNode is expensive as it gets the source, so do this manually.
+    if (marshaller.isScriptObject(v)) {
+      val mirror = new ScriptObjectMirror(v.asInstanceOf[ObjectReference])
+      mirror.maybeAsFunction.map(_.name).getOrElse(className)
+    } else {
+      // Fallback to the class name
+      className
+    }
+  }
+
   override def toString = "ScriptObjectMirror (maybe you meant actualToString?)"
 
-  def asFunction = {
-    assert(className == "Function", "asFunction can only be called for a function")
-    new ScriptFunctionMirror(scriptObject)
+  def maybeAsFunction: Option[ScriptFunctionMirror] = {
+    if (className == "Function") Some(new ScriptFunctionMirror(scriptObject))
+    else None
   }
+
+  def asFunction = maybeAsFunction.getOrElse(throw new IllegalStateException("asFunction can only be called for a function"))
 
   def asArray = {
     assert(isArray, "asArray can only be called for an array")
