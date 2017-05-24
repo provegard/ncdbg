@@ -12,6 +12,7 @@
 * Faster stepping by stepping natively instead of activating one-time breakpoints
 * Limited support for column numbers; on lines that contain one-liner functions, it's
   possible to set individual breakpoints (issue #35)
+* When marshalling a newed JS object, use the constructor name as class name
 
 ## 0.4.0 (2017-04-24)
 
