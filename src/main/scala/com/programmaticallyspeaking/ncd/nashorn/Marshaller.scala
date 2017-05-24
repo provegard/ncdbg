@@ -186,6 +186,9 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
       if (typeName.startsWith("jdk.nashorn.internal.scripts.JO")) return true
       // JD classes as well. Saw these first with JDK 9!
       if (typeName.startsWith("jdk.nashorn.internal.scripts.JD")) return true
+      // Some shortcuts
+      if (typeName == "jdk.nashorn.internal.runtime.ScriptFunction" || typeName == "jdk.nashorn.internal.objects.NativeObject$Constructor") return true
+      // Check inheritance
       inherits(objRef, ScriptObjectClassName)
     case _ => false
   }
