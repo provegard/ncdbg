@@ -293,7 +293,7 @@ class StreamReadingThread(in: InputStream, appender: (String) => Unit) extends T
       case ex: InterruptedException =>
       // ok
       case ex: IOException =>
-        ex.printStackTrace(System.err)
+        if (ex.getMessage != "Stream closed") ex.printStackTrace(System.err)
     }
   }
 }
