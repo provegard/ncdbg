@@ -1529,7 +1529,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
               case None =>
                 throw new IllegalArgumentException("Unknown stack frame location: " + location)
             }
-          case _ => throw new IllegalArgumentException("Unknown stack frame ID: " + stackFrameId)
+          case _ =>
+            val availableIdsAsString = pd.stackFrames.map(_.id).mkString(", ")
+            throw new IllegalArgumentException(s"Stack frame ID '$stackFrameId' is unknown. Available: $availableIdsAsString")
         }
 
       case None =>
