@@ -3,7 +3,7 @@ package com.programmaticallyspeaking.ncd.e2e
 import akka.actor.{Actor, ActorRef, Props}
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, PausedEventParams}
 import com.programmaticallyspeaking.ncd.chrome.domains.Messages
-import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subject}
+import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject}
 import com.programmaticallyspeaking.ncd.nashorn.NashornScriptHostTestFixture
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 
@@ -18,8 +18,8 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   type Tester = (Seq[CallFrame]) => Unit
 
-  private val messageSubject = new SerializedSubject[Messages.DomainMessage]
-  private val requestor = system.actorOf(Props(new Requestor(messageSubject)), "E2E-Requestor")
+  private val domainEventSubject = new SerializedSubject[Messages.DomainMessage]
+  private val requestor = system.actorOf(Props(new Requestor), "E2E-Requestor")
   private var currentId: Int = 0
   private val promises = new TrieMap[String, Promise[Any]]()
 
@@ -43,37 +43,29 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
     val donePromise = Promise[Unit]()
     val testerQueue = mutable.Queue(testers: _*)
 
-    val subscription = messageSubject.subscribe(new Observer[Messages.DomainMessage] {
-      override def onError(error: Throwable): Unit = donePromise.tryFailure(error)
+    val eventSubscription = domainEventSubject.subscribe(Observer.from[Messages.DomainMessage] {
+      case Messages.Event(_, PausedEventParams(callFrames, _, _)) =>
 
-      override def onComplete(): Unit = donePromise.trySuccess(())
+        val tester = testerQueue.dequeue()
+        try {
+          tester(callFrames)
+          getHost.resume()
 
-      override def onNext(item: Messages.DomainMessage): Unit = item match {
-        case Messages.Event(_, PausedEventParams(callFrames, _, _)) =>
-
-          val tester = testerQueue.dequeue()
-          try {
-            tester(callFrames)
-            getHost.resume()
-
-            if (testerQueue.isEmpty) {
-              donePromise.trySuccess(())
-            }
-
-          } catch {
-            case NonFatal(t) =>
-              donePromise.tryFailure(t)
+          if (testerQueue.isEmpty) {
+            donePromise.trySuccess(())
           }
 
-        case _ => // ignore
-      }
+        } catch {
+          case NonFatal(t) =>
+            donePromise.tryFailure(t)
+        }
     })
-    donePromise.future.onComplete(_ => subscription.unsubscribe())
+    donePromise.future.onComplete(_ => eventSubscription.unsubscribe())
 
     observeAndRunScriptAsync(script) { _ => donePromise.future }
   }
 
-  class Requestor(subject: Subject[Messages.DomainMessage]) extends Actor {
+  class Requestor extends Actor {
     override def receive: Receive = {
       case msg: Messages.Accepted =>
         promises.remove(msg.id).foreach(_.trySuccess(()))
@@ -85,10 +77,9 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
         val msg = if (error == null) "<null>" else (if (error == "") "<unknown>" else error)
         val ex = new Exception(msg)
         promises.remove(id).foreach(_.tryFailure(ex))
-        Future { subject.onError(ex) }
 
-      case msg: Messages.DomainMessage =>
-        Future { subject.onNext(msg) }
+      case event: Messages.DomainMessage =>
+        Future { domainEventSubject.onNext(event) }
     }
   }
 }
