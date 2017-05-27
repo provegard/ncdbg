@@ -1402,7 +1402,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
         case ref: ObjectReference if marshaller.isScriptObject(ref) =>
           scriptObjectHolder(ref)
         case ref: ObjectReference if marshaller.isJSObject(ref) =>
-          new JSObjectMirror(ref)
+          val factory = scriptBasedPropertyHolderFactory()
+          factory.create(ref, "", isNative = false)
         case ref: ArrayReference =>
           new ArrayPropertyHolder(ref)
         case obj: ObjectReference if marshaller.isHashtable(obj) =>

@@ -163,12 +163,27 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |        }
       |      }
       |    } else if (!onlyAccessors) {
-      |      for (var k in target) {
-      |        result.push(k.toString());
-      |        result.push("wo"); // writable (correct?) + own
-      |        result.push(target[k]);
+      |      if (Array.isArray(target)) {
+      |        for (var i = 0; i < target.length; i++) {
+      |          result.push(i.toString());
+      |          result.push("wo"); // writable (correct?) + own
+      |          result.push(target[i]);
+      |          result.push(null);
+      |          result.push(null);
+      |        }
+      |        result.push("length");
+      |        result.push("o");
+      |        result.push(target.length);
       |        result.push(null);
       |        result.push(null);
+      |      } else {
+      |        for (var k in target) {
+      |          result.push(k.toString());
+      |          result.push("wo"); // writable (correct?) + own
+      |          result.push(target[k]);
+      |          result.push(null);
+        |        result.push(null);
+      |        }
       |      }
       |    }
       |    return hasJava ? Java.to(result, "java.lang.Object[]") : result;
