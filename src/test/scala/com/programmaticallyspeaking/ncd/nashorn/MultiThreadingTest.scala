@@ -5,7 +5,7 @@ import javax.script.Compilable
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.messaging.Observer
-import com.programmaticallyspeaking.ncd.testing.{FreeActorTesting, UnitTest}
+import com.programmaticallyspeaking.ncd.testing.{SharedInstanceActorTesting, UnitTest}
 import jdk.nashorn.api.scripting.NashornScriptEngineFactory
 import org.scalatest.concurrent.ScalaFutures
 import org.slf4s.Logging
@@ -13,7 +13,7 @@ import org.slf4s.Logging
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 
-trait MultiThreadingTestFixture extends UnitTest with Logging with FreeActorTesting with VirtualMachineLauncher with ScalaFutures with FairAmountOfPatience {
+trait MultiThreadingTestFixture extends UnitTest with Logging with SharedInstanceActorTesting with VirtualMachineLauncher with ScalaFutures with FairAmountOfPatience {
   override val scriptExecutor: ScriptExecutorBase = MultiThreadedScriptExecutor
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 

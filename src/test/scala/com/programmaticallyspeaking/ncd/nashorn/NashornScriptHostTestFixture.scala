@@ -8,7 +8,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import ch.qos.logback.classic.Level
 import com.programmaticallyspeaking.ncd.host.ScriptEvent
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
-import com.programmaticallyspeaking.ncd.testing.{FreeActorTesting, MemoryAppender, StringUtils, UnitTest}
+import com.programmaticallyspeaking.ncd.testing.{SharedInstanceActorTesting, MemoryAppender, StringUtils, UnitTest}
 import com.sun.jdi.connect.LaunchingConnector
 import com.sun.jdi.event.VMStartEvent
 import com.sun.jdi.{Bootstrap, VirtualMachine}
@@ -42,7 +42,7 @@ object Signals {
   val ready = "ready"
 }
 
-trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
+trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
   import scala.collection.JavaConverters._
 
   val scriptExecutor: ScriptExecutorBase
@@ -195,7 +195,7 @@ trait VirtualMachineLauncher { self: FreeActorTesting with Logging =>
 
 }
 
-trait NashornScriptHostTestFixture extends UnitTest with Logging with FreeActorTesting with VirtualMachineLauncher {
+trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInstanceActorTesting with VirtualMachineLauncher {
   implicit val executionContext: ExecutionContext
 
   override val scriptExecutor = ScriptExecutor

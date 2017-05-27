@@ -7,7 +7,7 @@ import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.infra.{ExecutorProxy, ObjectMapping}
 import com.programmaticallyspeaking.ncd.ioc.Container
 import com.programmaticallyspeaking.ncd.messaging.Subject
-import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, FreeActorTesting, UnitTest}
+import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, SharedInstanceActorTesting, UnitTest}
 import org.java_websocket.drafts.Draft_17
 import org.java_websocket.handshake.ServerHandshake
 import org.mockito.Mockito._
@@ -19,7 +19,7 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
 
-class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSugar with ScalaFutures with FreeActorTesting with ServerStarter[WebSocketServer] {
+class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSugar with ScalaFutures with SharedInstanceActorTesting with ServerStarter[WebSocketServer] {
 
   var domainFactory: CapturingDomainFactory = _
 

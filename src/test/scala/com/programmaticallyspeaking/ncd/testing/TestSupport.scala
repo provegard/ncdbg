@@ -86,9 +86,9 @@ trait ActorTesting extends BeforeAndAfterEach with OneInstancePerTest with Actor
 }
 
 /**
-  * Free as in less constraints than [[ActorTesting]], which mixes in [[OneInstancePerTest]]
+  * Unlike [[ActorTesting]], which mixes in [[OneInstancePerTest]]
   */
-trait FreeActorTesting extends BeforeAndAfterEach with BeforeAndAfterAll with ActorOperations { self: UnitTest =>
+trait SharedInstanceActorTesting extends BeforeAndAfterEach with BeforeAndAfterAll with ActorOperations { self: UnitTest =>
   val receiveTimeout = 1.second
 
   implicit val system: ActorSystem = createActorSystem
