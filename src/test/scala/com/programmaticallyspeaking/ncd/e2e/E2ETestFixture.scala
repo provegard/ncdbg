@@ -1,5 +1,7 @@
 package com.programmaticallyspeaking.ncd.e2e
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import akka.actor.{Actor, ActorRef, Props}
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, PausedEventParams}
 import com.programmaticallyspeaking.ncd.chrome.domains.Messages
@@ -20,14 +22,14 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   private val domainEventSubject = new SerializedSubject[Messages.DomainMessage]
   private val requestor = system.actorOf(Props(new Requestor), "E2E-Requestor")
-  private var currentId: Int = 0
+  private val currentId: AtomicInteger = new AtomicInteger(0)
   private val promises = new TrieMap[String, Promise[Any]]()
 
   protected def sendRequestAndWait(target: ActorRef, msg: AnyRef): Any = {
-    currentId += 1
+    val id = currentId.incrementAndGet()
     val promise = Promise[Any]()
-    promises += currentId.toString -> promise
-    target.tell(Messages.Request(currentId.toString, msg), requestor)
+    promises += id.toString -> promise
+    target.tell(Messages.Request(id.toString, msg), requestor)
     Await.result(promise.future, resultTimeout)
   }
 
