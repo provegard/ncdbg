@@ -13,6 +13,7 @@
 * Limited support for column numbers; on lines that contain one-liner functions, it's
   possible to set individual breakpoints (issue #35)
 * When marshalling a newed JS object, use the constructor name as class name
+* Handle that both scope and `this` are `null` (issue #43)
 
 ## 0.4.0 (2017-04-24)
 

@@ -732,6 +732,16 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     case None => Seq.empty
   }
 
+  private def getGlobal()(implicit thread: ThreadReference): Option[Value] = foundWantedTypes.get(NIR_Context) match {
+    case Some(context) =>
+      val invoker = Invokers.shared.getStatic(context)
+      val global = invoker.getGlobal()
+      Option(global)
+    case None =>
+      // No global found :-(
+      None
+  }
+
   private def createScopeChain(marshaller: Marshaller, originalScopeValue: Option[Value], thisValue: Value, marshalledThisNode: ValueNode, localNode: Option[ObjectNode]): Seq[Scope] = {
     implicit val thread: ThreadReference = marshaller.thread
     // Note: I tried to mimic how Chrome reports scopes, but it's a bit difficult. For example, if the current scope
@@ -739,19 +749,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     // block or if we're inside a with block inside a function.
     def toScope(v: Value) = Scope(marshaller.marshal(v), scopeTypeFromValueType(v))
     def findGlobalScope(): Option[Scope] = {
-      if (scopeTypeFromValueType(thisValue) == ScopeType.Global) {
+      if (Option(thisValue).map(scopeTypeFromValueType).contains(ScopeType.Global)) {
         // this == global, so no need to call Context.getGlobal().
         Some(Scope(marshalledThisNode, ScopeType.Global))
       } else {
-        foundWantedTypes.get(NIR_Context) match {
-          case Some(context) =>
-            val invoker = Invokers.shared.getStatic(context)
-            val global = invoker.getGlobal()
-            Option(global).map(toScope)
-          case None =>
-            // No global found :-(
-            None
-        }
+        getGlobal().map(toScope)
       }
     }
 
@@ -800,10 +802,17 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
 
             val thisObj = marshaller.marshal(originalThis)
 
+            // The scope may be missing, in which case we use 'this'. Which may be null (different from missing), in
+            // which case we use global as scope.
+            val scopeObject = originalScope
+              .orElse(Option(originalThis))
+              .orElse(getGlobal())
+              .getOrElse(throw new IllegalStateException("Failed to locate a scope object. Tried scope, this, global."))
+
             // If needed, create a scope object to hold the local variables as "free" variables - so that evaluated
             // code can refer to them.
             // If we don't have :scope, use :this - it's used as a parent object for the created scope object.
-            val localScope = scopeWithFreeVariables(originalScope.getOrElse(originalThis), localValues)
+            val localScope = scopeWithFreeVariables(scopeObject, localValues)
 
             // Create an artificial object node to hold the locals. Note that the object ID must be unique per stack
             // since we store object nodes in a map.

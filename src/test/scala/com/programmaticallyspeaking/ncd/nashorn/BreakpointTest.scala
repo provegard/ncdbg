@@ -68,7 +68,12 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         |  debugger;
         |  x.toString();
         |}).call({});
-      """.stripMargin, Seq("Local:x", "Global:.*"))
+      """.stripMargin, Seq("Local:x", "Global:.*")),
+    ("inside a scope-less function with this === null",
+      """(function () {
+        |  debugger;
+        |}).call(null);
+      """.stripMargin, Seq("Global:.*"))
   )
 
   val exceptionTests = Table(
