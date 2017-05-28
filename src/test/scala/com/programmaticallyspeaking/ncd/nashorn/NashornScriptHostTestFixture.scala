@@ -95,7 +95,14 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
     logSubscription = MemoryAppender.logEvents.subscribe(Observer.from {
       case event if event.getLevel.isGreaterOrEqual(Level.DEBUG) => // if event.getLoggerName == getClass.getName =>
         val simpleLoggerName = event.getLoggerName.split('.').last
-        reportProgress(s"[$simpleLoggerName][${event.getLevel}]: ${event.getMessage}")
+        var txt = s"[$simpleLoggerName][${event.getLevel}]: ${event.getMessage}"
+        Option(event.getThrowableProxy).foreach { proxy =>
+          txt += "\n" + proxy.getMessage
+          proxy.getStackTraceElementProxyArray.foreach { st =>
+            txt += "\n  " + st.toString
+          }
+        }
+        reportProgress(txt)
     })
 
     setupHost()
