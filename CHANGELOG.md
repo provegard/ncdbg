@@ -1,6 +1,6 @@
 # Changelog
 
-# Unreleased
+# 0.5.0 (2017-05-28)
 
 * Show a java.util.Hashtable as a JS object with properties, not as a native Java
   object (issue #36).
