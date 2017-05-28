@@ -1,6 +1,5 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import java.io.FileNotFoundException
 import java.util.Collections
 import java.util.concurrent.{Executors, ScheduledFuture, TimeUnit}
 
@@ -8,7 +7,7 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
-import com.programmaticallyspeaking.ncd.nashorn.mirrors.{JSObjectMirror, ScriptObjectMirror}
+import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
 import com.sun.jdi.request.{EventRequest, ExceptionRequest, StepRequest}
 import com.sun.jdi.{StackFrame => _, _}
