@@ -150,4 +150,29 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
       }
     }
   }
+
+  "with multiple line locations in the same function where an if statement is last" - {
+    val script =
+      """function value() { return 0; }
+        |function fun() {
+        |  if ((function () { return value(); })() > 4) {
+        |    value(5);
+        |  }
+        |}
+        |fun();
+      """.stripMargin
+    lazy val f = testAddScriptWithWait(script, 1000.millis)
+
+    "multiple breakable locations for the different functions are reported" in {
+      whenReady(f) { scripts =>
+        scripts.find(_.contents.contains("value()")) match {
+          case Some(s) =>
+            getHost.getBreakpointLocations(s.id, ScriptLocation(3, Some(1)), Some(ScriptLocation(4, Some(1)))) should be(Seq(
+              ScriptLocation(3, Some(3)), ScriptLocation(3, Some(22))))
+
+          case None => fail("no script")
+        }
+      }
+    }
+  }
 }

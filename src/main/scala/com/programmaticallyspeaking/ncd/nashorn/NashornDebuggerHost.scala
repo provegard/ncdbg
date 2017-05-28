@@ -292,24 +292,19 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
   }
 
   private def guessColumns(script: Script): Unit = {
+    import com.programmaticallyspeaking.ncd.infra.TraversableExtensions._
     breakableLocationsByScriptUrl.get(script.url.toString) match {
       case Some(locations) =>
-        locations.groupBy(_.scriptLocation.lineNumber1Based).foreach {
+        locations.distinctBy(_.location.method()).groupBy(_.scriptLocation.lineNumber1Based).foreach {
           case (lineNo, locs) if locs.size > 1 =>
             val sortedLocs = locs.sortWith((bl1, bl2) => {
               val bl1Method = bl1.location.method()
               val bl2Method = bl2.location.method()
 
-              if (bl1Method == bl2Method) {
-                val line = script.sourceLine(bl1.scriptLocation.lineNumber1Based)
-                throw new UnsupportedOperationException(s"Unexpected, multiple locations in the same method: $bl1 and $bl2, for line $line")
-              } else {
-                // Different methods
-                // # = CompilerConstants.NESTED_FUNCTION_SEPARATOR
-                val bl1MethodNameParts = bl1Method.name().split("#")
-                val bl2MethodNameParts = bl2Method.name().split("#")
-                bl2MethodNameParts.startsWith(bl1MethodNameParts)
-              }
+              // # = CompilerConstants.NESTED_FUNCTION_SEPARATOR
+              val bl1MethodNameParts = bl1Method.name().split("#")
+              val bl2MethodNameParts = bl2Method.name().split("#")
+              bl2MethodNameParts.startsWith(bl1MethodNameParts)
             })
             val columns = script.statementColumnsForLine(lineNo)
             sortedLocs.zip(columns).foreach {
