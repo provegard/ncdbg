@@ -223,14 +223,17 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
   protected def observeAndRunScriptAsync[R](script: String, observer: Observer[ScriptEvent] = null)(handler: (NashornScriptHost) => Future[R]): Unit = {
     Option(observer).foreach(addObserver)
 
-    val f = vmRunningPromise.future.flatMap { host =>
-      log.info(">>>>>> TEST START")
-      log.info("VM running, sending script")
-      sendToVm(script, encodeBase64 = true)
-      handler(host)
+    // Wait separately for the VM to run. Otherwise, a slow-started VM may "eat up" the test timeout.
+    val host = try Await.result(vmRunningPromise.future, resultTimeout) catch {
+      case _: TimeoutException => throw new TimeoutException("Timed out waiting for the VM to start running. Progress:\n" + summarizeProgress())
     }
-    try Await.result(f, resultTimeout) catch {
-      case t: TimeoutException =>
+
+    log.info(">>>>>> TEST START")
+    log.info("VM running, sending script")
+    sendToVm(script, encodeBase64 = true)
+
+    try Await.result(handler(host), resultTimeout) catch {
+      case _: TimeoutException =>
         throw new TimeoutException(s"No results within ${resultTimeout.toMillis} ms. Progress:\n" + summarizeProgress())
     } finally {
       // getHost may throw if the host isn't set
