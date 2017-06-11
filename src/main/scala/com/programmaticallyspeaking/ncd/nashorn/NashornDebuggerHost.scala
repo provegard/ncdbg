@@ -612,6 +612,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     case _ => throw new IllegalArgumentException("Cannot box " + prim)
   }
 
+  //TODO: Move with boxed
+  private def unboxed(objectValue: ObjectReference): Value = {
+    // This is ugly, but if we invoke a method like 'Integer.intValue', we will invalidate any stack frame where we
+    // need to set the resulting value to a variable...
+    val valueField = objectValue.referenceType().fieldByName("value")
+    Option(valueField).map(objectValue.getValue).getOrElse(objectValue)
+  }
+
   private def scopeWithFreeVariables(scopeObject: Value, freeVariables: Map[String, AnyRef])(implicit marshaller: Marshaller): Value = {
     require(scopeObject != null, "Scope object must be non-null")
     implicit val thread = marshaller.thread
@@ -1264,6 +1272,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
     }
   }
 
+  // If the type name is something like 'int', i.e. without a dot, it's bound to be primitive. I think.
+  private def typeNameLooksPrimitive(typeName: String) = typeName.indexOf('.') < 0
+
   private def updateChangedLocals(sf: StackFrameImpl, namedValues: Map[String, AnyRef], namedObjects: Map[String, ObjectId])(implicit marshaller: Marshaller): Unit = {
     def jdiStackFrameForObject(id: ObjectId) = locationForLocals.get(id).flatMap(jdiStackFrameFromLocation(marshaller.thread))
 
@@ -1282,7 +1293,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, asyncInvokeOnThis:
                 values.grouped(2).collect { case (str: StringReference) :: v :: Nil => str.value() -> v }.foreach {
                   case (name, newValue) =>
                     // We have almost everything we need. Find the LocalVariable and set its value.
-                    Try(Option(jdiStackFrame.visibleVariableByName(name))).map(_.foreach(jdiStackFrame.setValue(_, newValue))) match {
+                    Try(Option(jdiStackFrame.visibleVariableByName(name))).map(_.foreach(localVar => {
+                      // Unbox if necessary
+                      val valueToSet = newValue match {
+                        case objRef: ObjectReference if typeNameLooksPrimitive(localVar.typeName()) => unboxed(objRef)
+                        case other => other
+                      }
+                      jdiStackFrame.setValue(localVar, valueToSet)
+                    })) match {
                       case Success(_) =>
                         log.debug(s"Updated the value of $name for $objectId to $newValue in ${jdiStackFrame.location()}")
                       case Failure(t) =>
