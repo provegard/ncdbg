@@ -1,5 +1,9 @@
 # Changelog
 
+# Unreleased
+
+* Support setting local variables of primitive type (issue #46)
+
 # 0.5.0 (2017-05-28)
 
 * Show a java.util.Hashtable as a JS object with properties, not as a native Java
