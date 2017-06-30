@@ -1,13 +1,11 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import java.util.Collections
-import java.util.concurrent.{Executors, ScheduledFuture, TimeUnit}
 
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
+import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, Undefined}
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost._
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
 import com.sun.jdi.request.{EventRequest, ExceptionRequest, StepRequest}
@@ -17,7 +15,7 @@ import org.slf4s.Logging
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
