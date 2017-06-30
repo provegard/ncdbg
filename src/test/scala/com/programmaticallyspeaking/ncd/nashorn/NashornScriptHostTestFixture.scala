@@ -161,7 +161,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
     val cp = System.getProperty("java.class.path")
     val className = scriptExecutor.getClass.getName.replaceAll("\\$$", "")
     val mainArg = args.get("main")
-    mainArg.setValue(s"""-cp "$cp" $className""")
+    mainArg.setValue(s"""-Dnashorn.args=--language=es6 -cp "$cp" $className""")
 
     val vm = conn.launch(args)
 
