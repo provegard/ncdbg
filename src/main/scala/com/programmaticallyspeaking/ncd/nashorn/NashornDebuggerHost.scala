@@ -6,6 +6,7 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, Undefined}
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
+import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.StepRequestClassFilter
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
 import com.sun.jdi.request.{EventRequest, ExceptionRequest, StepRequest}
@@ -162,7 +163,7 @@ object NashornDebuggerHost {
   val StepRequestClassFilter = "jdk.nashorn.internal.scripts.*"
 }
 
-class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any]) extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport {
+class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any]) extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport {
   import NashornDebuggerHost._
   import com.programmaticallyspeaking.ncd.infra.BetterOption._
 
@@ -1122,7 +1123,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def resumeWhenPaused(): Unit = pausedData match {
+  protected def resumeWhenPaused(): Unit = pausedData match {
     case Some(data) =>
       log.info("Resuming virtual machine")
       enableGarbageCollectionWhereDisabled()
@@ -1160,46 +1161,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       case None =>
         log.warn(s"Got request to remove an unknown breakpoint with id $id")
     }
-  }
-
-  override def step(stepType: StepType): Unit = pausedData match {
-    case Some(pd) =>
-      log.info(s"Stepping with type $stepType")
-
-      // Note that we don't issue normal step requests to the remove VM, because a script line != a Java line, so if we
-      // were to request step out, for example, we might end up in some method that acts as a script bridge.
-      stepType match {
-        case StepInto =>
-          createEnabledStepIntoRequest(pd.thread)
-        case StepOver =>
-          createEnabledStepOverRequest(pd.thread, pd.isAtDebuggerStatement)
-        case StepOut =>
-          createEnabledStepOutRequest(pd.thread, pd.isAtDebuggerStatement)
-      }
-
-      resumeWhenPaused()
-    case None =>
-      throw new IllegalStateException("A breakpoint must be active for stepping to work")
-  }
-
-  private def createEnabledStepRequest(thread: ThreadReference, depth: Int, count: Int): Unit = {
-    val sr = virtualMachine.eventRequestManager().createStepRequest(thread, StepRequest.STEP_LINE, depth)
-    sr.addClassFilter(StepRequestClassFilter)
-    if (count > 0) sr.addCountFilter(count)
-    sr.enable()
-  }
-
-  private def createEnabledStepIntoRequest(thread: ThreadReference): Unit = {
-    createEnabledStepRequest(thread, StepRequest.STEP_INTO, -1)
-  }
-
-  private def createEnabledStepOverRequest(thread: ThreadReference, isAtDebuggerStatement: Boolean): Unit = {
-    createEnabledStepRequest(thread, StepRequest.STEP_OVER, if (isAtDebuggerStatement) 2 else -1)
-  }
-
-  private def createEnabledStepOutRequest(thread: ThreadReference, isAtDebuggerStatement: Boolean): Unit = {
-    //TODO: Why 3 and not 2??
-    createEnabledStepRequest(thread, StepRequest.STEP_OUT, if (isAtDebuggerStatement) 3 else -1)
   }
 
   private def evaluateOnStackFrame(pd: PausedData, stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): ValueNode = {
@@ -1465,3 +1426,4 @@ case class ActiveBreakpoint(id: String, breakableLocations: Seq[BreakableLocatio
 
   def contains(breakableLocation: BreakableLocation) = breakableLocations.contains(breakableLocation)
 }
+
