@@ -163,7 +163,8 @@ object NashornDebuggerHost {
   val StepRequestClassFilter = "jdk.nashorn.internal.scripts.*"
 }
 
-class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any]) extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport {
+class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
+    extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport with BreakpointSupport {
   import NashornDebuggerHost._
   import com.programmaticallyspeaking.ncd.infra.BetterOption._
 
@@ -172,12 +173,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private val scriptByPath = mutable.Map[String, Script]()
 
-  private val breakableLocationsByScriptUrl = mutable.Map[String, ListBuffer[BreakableLocation]]()
+  protected val breakableLocationsByScriptUrl = mutable.Map[String, ListBuffer[BreakableLocation]]()
 
-  private val enabledBreakpoints = mutable.Map[String, ActiveBreakpoint]()
+  protected val enabledBreakpoints = mutable.Map[String, ActiveBreakpoint]()
 
   private val scriptIdGenerator = new IdGenerator("nds")
-  private val breakpointIdGenerator = new IdGenerator("ndb")
+  protected val breakpointIdGenerator = new IdGenerator("ndb")
   protected val stackframeIdGenerator = new IdGenerator("ndsf")
 
   private val eventSubject = Subject.serialized[ScriptEvent]
@@ -222,7 +223,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     * By default, we don't pause when a breakpoint is hit. This is important since we add a fixed breakpoint for
     * JS 'debugger' statements, and we don't want that to pause the VM when a debugger hasn't attached yet.
     */
-  private var willPauseOnBreakpoints = false
+  protected var willPauseOnBreakpoints = false
 
   private var seenClassPrepareRequests = 0
   private var lastSeenClassPrepareRequests = -1L
@@ -1064,38 +1065,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  override def setBreakpoint(scriptUri: String, location: ScriptLocation, condition: Option[String]): Option[Breakpoint] = {
-    findBreakableLocationsAtLine(scriptUri, location.lineNumber1Based) match {
-      case Some(bls) =>
-        // If we have a column number, find exactly that location. Otherwise grab all locations
-        val candidates = location.columnNumber1Based match {
-          case Some(col) => bls.filter(_.scriptLocation.columnNumber1Based.contains(col))
-          case None => bls
-        }
-        if (candidates.nonEmpty) {
-          val newId = breakpointIdGenerator.next
-          val conditionDescription = condition.map(c => s" with condition ($c)").getOrElse("")
-          log.info(s"Setting a breakpoint with ID $newId for location(s) ${candidates.mkString(", ")} in $scriptUri$conditionDescription")
-
-          // Force boolean and handle that the condition contains a trailing comment
-          val wrapper = condition.map(c =>
-            s"""!!(function() {
-               |return $c
-               |})()
-           """.stripMargin)
-
-          val activeBp = ActiveBreakpoint(newId, candidates, wrapper)
-          activeBp.enable()
-          enabledBreakpoints += (activeBp.id -> activeBp)
-          Some(activeBp.toBreakpoint)
-        } else None
-
-      case None =>
-        log.trace(s"No breakable locations found for script $scriptUri at line ${location.lineNumber1Based}")
-        None
-    }
-  }
-
   private def findBreakableLocation(location: Location): Option[BreakableLocation] = {
     scriptByPath.get(scriptPathFromLocation(location)).flatMap { script =>
       // We cannot compare locations directly because the passed-in Location may have a code index that is
@@ -1117,7 +1086,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def findBreakableLocationsAtLine(scriptUrl: String, lineNumber: Int): Option[Seq[BreakableLocation]] = {
+  protected def findBreakableLocationsAtLine(scriptUrl: String, lineNumber: Int): Option[Seq[BreakableLocation]] = {
     breakableLocationsByScriptUrl.get(scriptUrl).map { breakableLocations =>
       breakableLocations.filter(_.scriptLocation.lineNumber1Based == lineNumber)
     }
@@ -1299,16 +1268,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     pausedData.stackFrames.find(_.id == id)
   }
 
-  override def pauseOnBreakpoints(): Unit = {
-    log.info("Will pause on breakpoints")
-    willPauseOnBreakpoints = true
-  }
-
-  override def ignoreBreakpoints(): Unit = {
-    log.info("Will ignore breakpoints")
-    willPauseOnBreakpoints = false
-  }
-
   override def pauseOnExceptions(pauseType: ExceptionPauseType): Unit = {
     val erm = virtualMachine.eventRequestManager()
 
@@ -1328,26 +1287,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       exceptionRequests += request
     } else {
       log.info("Won't pause on exceptions")
-    }
-  }
-
-  override def getBreakpointLocations(scriptId: String, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation] = {
-    scriptById(scriptId).flatMap(script => breakableLocationsByScriptUrl.get(script.url.toString)) match {
-      case Some(locations) =>
-        // Get hold of all script locations we know of, but since Nashorn/Java doesn't report column number, we
-        // a) ignore the column number
-        // b) may end up with multiple ones with the same line number
-        val candidates = locations.map(_.scriptLocation).filter { sloc =>
-          sloc.lineNumber1Based >= from.lineNumber1Based && to.forall(sloc.lineNumber1Based < _.lineNumber1Based)
-        }
-
-        //TODO: Update doc
-        // Filter so that we end up with one location per line, max. Since ScriptLocation is a case class and all
-        // column numbers on the same line will be the same (again, since Nashorn/Java doesn't report column numbers),
-        // it's sufficient to get the unique locations.
-        candidates.distinct.sortBy(_.columnNumber1Based)
-
-      case None => throw new IllegalArgumentException("Unknown script ID: " + scriptId)
     }
   }
 
