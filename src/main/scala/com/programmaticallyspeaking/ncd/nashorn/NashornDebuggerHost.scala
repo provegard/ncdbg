@@ -164,7 +164,7 @@ object NashornDebuggerHost {
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
-    extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport with BreakpointSupport {
+    extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport with BreakpointSupport with PauseSupport {
   import NashornDebuggerHost._
   import com.programmaticallyspeaking.ncd.infra.BetterOption._
 
@@ -227,8 +227,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private var seenClassPrepareRequests = 0
   private var lastSeenClassPrepareRequests = -1L
-
-  private val exceptionRequests = ListBuffer[ExceptionRequest]()
 
   private def addBreakableLocations(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
     breakableLocationsByScriptUrl.getOrElseUpdate(script.url.toString, ListBuffer.empty) ++= breakableLocations
@@ -1105,10 +1103,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       log.debug("Ignoring resume request when not paused (no pause data).")
   }
 
-  override def resume(): Unit = {
-    resumeWhenPaused()
-  }
-
   private def removeAllBreakpoints(): Unit = {
     enabledBreakpoints.foreach(e => e._2.disable())
     enabledBreakpoints.clear()
@@ -1266,28 +1260,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   private def findStackFrame(pausedData: PausedData, id: String): Option[StackFrame] = {
     if (id == "$top") return pausedData.stackFrames.headOption
     pausedData.stackFrames.find(_.id == id)
-  }
-
-  override def pauseOnExceptions(pauseType: ExceptionPauseType): Unit = {
-    val erm = virtualMachine.eventRequestManager()
-
-    // Clear all first, simpler than trying to keep in sync
-    erm.deleteEventRequests(exceptionRequests.asJava)
-    exceptionRequests.clear()
-
-    val pauseOnCaught = pauseType == ExceptionPauseType.Caught || pauseType == ExceptionPauseType.All
-    // Note that uncaught is currently untested since our test setup doesn't really allow it.
-    val pauseOnUncaught = pauseType == ExceptionPauseType.Uncaught || pauseType == ExceptionPauseType.All
-
-    if (pauseOnCaught || pauseOnUncaught) {
-      log.info(s"Will pause on exceptions (caught=$pauseOnCaught, uncaught=$pauseOnUncaught)")
-      val request = erm.createExceptionRequest(null, pauseOnCaught, pauseOnUncaught)
-      request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD) // TODO: Duplicate code
-      request.setEnabled(true)
-      exceptionRequests += request
-    } else {
-      log.info("Won't pause on exceptions")
-    }
   }
 
   override def restartStackFrame(stackFrameId: String): Seq[StackFrame] = {
