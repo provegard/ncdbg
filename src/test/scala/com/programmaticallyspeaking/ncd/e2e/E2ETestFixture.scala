@@ -62,7 +62,10 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
         } catch {
           case NonFatal(t) =>
             val ids = callFrameIdLists.map(_.mkString("[ ", ", ", " ]")).mkString("[ ", ", ", " ]")
-            donePromise.tryFailure(new RuntimeException(s"ERROR (call frame IDs: $ids)", t))
+            // Gradle shortens any stack trace too much, so suppress the stack trace of the wrapper exception
+            donePromise.tryFailure(new RuntimeException(s"ERROR (call frame IDs: $ids)", t) {
+              override def fillInStackTrace(): Throwable = this
+            })
         }
     })
     donePromise.future.onComplete(_ => eventSubscription.unsubscribe())
