@@ -45,8 +45,10 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
     val donePromise = Promise[Unit]()
     val testerQueue = mutable.Queue(testers: _*)
 
+    var callFrameIdLists = Seq[Seq[String]]()
     val eventSubscription = domainEventSubject.subscribe(Observer.from[Messages.DomainMessage] {
       case Messages.Event(_, PausedEventParams(callFrames, _, _)) =>
+        callFrameIdLists :+= callFrames.map(_.callFrameId)
 
         val tester = testerQueue.dequeue()
         try {
@@ -59,7 +61,8 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
 
         } catch {
           case NonFatal(t) =>
-            donePromise.tryFailure(t)
+            val ids = callFrameIdLists.map(_.mkString("[ ", ", ", " ]")).mkString("[ ", ", ", " ]")
+            donePromise.tryFailure(new RuntimeException(s"ERROR (call frame IDs: $ids)", t))
         }
     })
     donePromise.future.onComplete(_ => eventSubscription.unsubscribe())
