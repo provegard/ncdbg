@@ -144,7 +144,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
       runScript(script)(callFrames => {
         withHead(callFrames) { cf =>
           sendRequest(Debugger.restartFrame(cf.callFrameId))
-          sendRequest(Debugger.resume)
         }
       }, callFrames => {
         withHead(callFrames) { cf =>
@@ -168,20 +167,14 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
       runScript(script)(callFrames => {
         withHead(callFrames) { cf =>
           // At 'debugger', set the initial breakpoint
-          reportProgress("Setting the initial breakpoint in function f")
           val scriptUrl = getHost.scriptById(cf.location.scriptId).map(_.url.toString).getOrElse(
             throw new IllegalArgumentException("No script with ID: " + cf.location.scriptId))
           sendRequest(Debugger.setBreakpointByUrl(1, scriptUrl, None, None))
-          reportProgress("Resuming after setting the initial breakpoint")
-          sendRequest(Debugger.resume)
         }
       }, callFrames => {
         withHead(callFrames) { cf =>
           // At the regular breakpoint
-          reportProgress(s"Restarting frame with ID ${cf.callFrameId}")
           sendRequest(Debugger.restartFrame(cf.callFrameId))
-          reportProgress("Resuming after restarting the frame")
-          sendRequest(Debugger.resume)
         }
       }, callFrames => {
         withHead(callFrames) { cf =>
