@@ -79,7 +79,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
   protected val eventSubject = new SerializedSubject[ScriptEvent]
 
   private def nowString = ZonedDateTime.now().format(DateTimeFormatter.ISO_INSTANT)
-  private def reportProgress(msg: String): Unit = progress.add(s"[$nowString] $msg")
+  protected def reportProgress(msg: String): Unit = progress.add(s"[$nowString] $msg")
 
   protected def summarizeProgress() = progress.asScala.mkString("\n")
   protected def clearProgress() = progress.clear()
