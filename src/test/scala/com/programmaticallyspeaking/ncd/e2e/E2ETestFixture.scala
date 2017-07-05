@@ -62,8 +62,9 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
         } catch {
           case NonFatal(t) =>
             val ids = callFrameIdLists.map(_.mkString("[ ", ", ", " ]")).mkString("[ ", ", ", " ]")
+            val errMsg = s"ERROR '${t.getMessage}' (call frame IDs: $ids), progress = \n${summarizeProgress()}"
             // Gradle shortens any stack trace too much, so suppress the stack trace of the wrapper exception
-            donePromise.tryFailure(new RuntimeException(s"ERROR (call frame IDs: $ids)", t) {
+            donePromise.tryFailure(new RuntimeException(errMsg, t) {
               override def fillInStackTrace(): Throwable = this
             })
         }
