@@ -160,7 +160,7 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
           |  f.toString(); // regular breakpoint here
           |};
           |f();            // make sure f is compiled
-          |debugger;
+          |debugger;       // where we set a breakpoint
           |f();
           |debugger;       // after resume, we should NOT get here
         """.stripMargin

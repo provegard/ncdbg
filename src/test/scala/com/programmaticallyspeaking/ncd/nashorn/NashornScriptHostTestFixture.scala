@@ -82,6 +82,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
   private def reportProgress(msg: String): Unit = progress.add(s"[$nowString] $msg")
 
   protected def summarizeProgress() = progress.asScala.mkString("\n")
+  protected def clearProgress() = progress.clear()
 
   override def beforeAllTests(): Unit = {
     vm = launchVm()
@@ -228,6 +229,7 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
       case _: TimeoutException => throw new TimeoutException("Timed out waiting for the VM to start running. Progress:\n" + summarizeProgress())
     }
 
+    clearProgress() // New progress for each test.
     log.info(">>>>>> TEST START")
     log.info("VM running, sending script")
     sendToVm(script, encodeBase64 = true)
