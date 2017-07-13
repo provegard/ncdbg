@@ -127,6 +127,7 @@ abstract class DomainActor(scriptHost: ScriptHost) extends Actor with Logging {
   private def handleProcessingResult(req: Messages.Request, theSender: ActorRef, t: Try[Any]): Unit = t match {
     case Success(f: Future[_]) => f.onComplete(handleProcessingResult(req, theSender, _: Try[Any]))
     case Success(result) => self.tell(ProcessingResult(req, result), theSender)
+    case Failure(ex: UndeclaredThrowableException) => self.tell(ProcessingError(req, ex.getUndeclaredThrowable), theSender)
     case Failure(ex) => self.tell(ProcessingError(req, ex), theSender)
   }
 
