@@ -1,12 +1,12 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{Breakpoint, ScriptLocation}
+import com.programmaticallyspeaking.ncd.host.{Breakpoint, ScriptIdentity, ScriptLocation}
 import org.slf4s.Logging
 
 trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
 
-  override def setBreakpoint(scriptUri: String, location: ScriptLocation, condition: Option[String]): Option[Breakpoint] = {
-    findBreakableLocationsAtLine(scriptUri, location.lineNumber1Based) match {
+  override def setBreakpoint(id: ScriptIdentity, location: ScriptLocation, condition: Option[String]): Option[Breakpoint] = {
+    findBreakableLocationsAtLine(id, location.lineNumber1Based) match {
       case Some(bls) =>
         // If we have a column number, find exactly that location. Otherwise grab all locations
         val candidates = location.columnNumber1Based match {
@@ -16,7 +16,7 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
         if (candidates.nonEmpty) {
           val newId = breakpointIdGenerator.next
           val conditionDescription = condition.map(c => s" with condition ($c)").getOrElse("")
-          log.info(s"Setting a breakpoint with ID $newId for location(s) ${candidates.mkString(", ")} in $scriptUri$conditionDescription")
+          log.info(s"Setting a breakpoint with ID $newId for location(s) ${candidates.mkString(", ")} in $id$conditionDescription")
 
           // Force boolean and handle that the condition contains a trailing comment
           val wrapper = condition.map(c =>
@@ -32,7 +32,7 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
         } else None
 
       case None =>
-        log.trace(s"No breakable locations found for script $scriptUri at line ${location.lineNumber1Based}")
+        log.trace(s"No breakable locations found for script $id at line ${location.lineNumber1Based}")
         None
     }
   }
@@ -47,8 +47,8 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
     willPauseOnBreakpoints = false
   }
 
-  override def getBreakpointLocations(scriptId: String, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation] = {
-    scriptById(scriptId).flatMap(script => breakableLocationsByScriptUrl.get(script.url.toString)) match {
+  override def getBreakpointLocations(id: ScriptIdentity, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation] = {
+    findScript(id).flatMap(script => breakableLocationsByScriptUrl.get(script.url.toString)) match {
       case Some(locations) =>
         // Get hold of all script locations we know of, but since Nashorn/Java doesn't report column number, we
         // a) ignore the column number
@@ -63,7 +63,7 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
         // it's sufficient to get the unique locations.
         candidates.distinct.sortBy(_.columnNumber1Based)
 
-      case None => throw new IllegalArgumentException("Unknown script ID: " + scriptId)
+      case None => throw new IllegalArgumentException("Unknown script ID: " + id)
     }
   }
 

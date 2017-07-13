@@ -186,7 +186,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
 
     case Debugger.getScriptSource(scriptId) =>
       log.debug(s"Requested script source for script with ID $scriptId")
-      scriptHost.scriptById(scriptId) match {
+      scriptHost.findScript(ScriptIdentity.fromId(scriptId)) match {
         case Some(script) =>
           GetScriptSourceResult(script.contents)
         case None =>
@@ -197,7 +197,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
       // DevTools passes "" when the breakpoint isn't conditional
       val actualCondition = condition.filter(_ != "")
       val location = ScriptLocation(lineNumberBase0 + 1, maybeColumnNumberBase0.map(_ + 1))
-      scriptHost.setBreakpoint(url, location, actualCondition) match {
+      scriptHost.setBreakpoint(ScriptIdentity.fromURL(url), location, actualCondition) match {
         case Some(bp) =>
           SetBreakpointByUrlResult(bp.breakpointId, bp.locations.map(l => Location(bp.scriptId, l.lineNumber1Based - 1, l.columnNumber1Based.map(_ - 1))))
         case None =>
@@ -256,7 +256,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
 
     case Debugger.getPossibleBreakpoints(start, maybeEnd) =>
       // TODO: Unit test if works
-      val locations = scriptHost.getBreakpointLocations(start.scriptId, ScriptLocation(start.lineNumber + 1, start.columnNumber.map(_ + 1)),
+      val locations = scriptHost.getBreakpointLocations(ScriptIdentity.fromId(start.scriptId), ScriptLocation(start.lineNumber + 1, start.columnNumber.map(_ + 1)),
         maybeEnd.map(e => ScriptLocation(e.lineNumber + 1, e.columnNumber.map(_ + 1))))
         .map(loc => BreakLocation(start.scriptId, loc.lineNumber1Based - 1, loc.columnNumber1Based.map(_ - 1)))
       GetPossibleBreakpointsResult(locations)

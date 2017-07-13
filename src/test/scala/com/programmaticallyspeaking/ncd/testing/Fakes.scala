@@ -21,11 +21,11 @@ object FakeScriptHost extends ScriptHost {
   override def removeBreakpointById(id: String): Unit = notImpl
   override def resume(): Unit = notImpl
   override def reset(): Unit = notImpl
-  override def scriptById(id: String): Option[Script] = None
+  override def findScript(id: ScriptIdentity): Option[Script] = None
   override def events: Observable[ScriptEvent] = eventSubject
   override def scripts: Seq[Script] = Seq.empty
-  override def setBreakpoint(scriptUri: String, location: ScriptLocation, condition: Option[String]): Option[Breakpoint] = notImpl
-  override def getBreakpointLocations(scriptId: String, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation] = Seq.empty
+  override def setBreakpoint(id: ScriptIdentity, location: ScriptLocation, condition: Option[String]): Option[Breakpoint] = notImpl
+  override def getBreakpointLocations(id: ScriptIdentity, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation] = Seq.empty
   override def step(stepType: StepType): Unit = notImpl
   override def pauseOnBreakpoints(): Unit = notImpl
   override def ignoreBreakpoints(): Unit = notImpl

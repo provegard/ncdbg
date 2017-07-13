@@ -3,7 +3,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 import java.io.File
 import java.nio.file.Files
 
-import com.programmaticallyspeaking.ncd.host.{Script, ScriptAdded, ScriptEvent, ScriptLocation}
+import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.infra.DelayedFuture
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import org.scalatest.concurrent.{Eventually, IntegrationPatience, ScalaFutures}
@@ -108,7 +108,7 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
       whenReady(f) { scripts =>
         scripts.find(_.contents.contains("function fun")) match {
           case Some(s) =>
-            getHost.getBreakpointLocations(s.id, ScriptLocation(1, Some(1)), Some(ScriptLocation(2, Some(1)))) should
+            getHost.getBreakpointLocations(ScriptIdentity.fromId(s.id), ScriptLocation(1, Some(1)), Some(ScriptLocation(2, Some(1)))) should
               be(Seq(ScriptLocation(1, Some(1)), ScriptLocation(1, Some(18))))
 
           case None => fail("no script")
@@ -120,7 +120,7 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
       whenReady(f) { scripts =>
         scripts.find(_.contents.contains("function fun")) match {
           case Some(s) =>
-            getHost.getBreakpointLocations(s.id, ScriptLocation(1, Some(3)), Some(ScriptLocation(2, Some(1)))) should have size (2)
+            getHost.getBreakpointLocations(ScriptIdentity.fromId(s.id), ScriptLocation(1, Some(3)), Some(ScriptLocation(2, Some(1)))) should have size (2)
 
           case None => fail("no script")
         }
@@ -142,7 +142,7 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
       whenReady(f) { scripts =>
         scripts.find(_.contents.contains("funnier")) match {
           case Some(s) =>
-            getHost.getBreakpointLocations(s.id, ScriptLocation(2, Some(1)), Some(ScriptLocation(3, Some(1)))) should be(Seq(
+            getHost.getBreakpointLocations(ScriptIdentity.fromId(s.id), ScriptLocation(2, Some(1)), Some(ScriptLocation(3, Some(1)))) should be(Seq(
               ScriptLocation(2, Some(3)), ScriptLocation(2, Some(47))))
 
           case None => fail("no script")
@@ -167,7 +167,7 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
       whenReady(f) { scripts =>
         scripts.find(_.contents.contains("value()")) match {
           case Some(s) =>
-            getHost.getBreakpointLocations(s.id, ScriptLocation(3, Some(1)), Some(ScriptLocation(4, Some(1)))) should be(Seq(
+            getHost.getBreakpointLocations(ScriptIdentity.fromId(s.id), ScriptLocation(3, Some(1)), Some(ScriptLocation(4, Some(1)))) should be(Seq(
               ScriptLocation(3, Some(3)), ScriptLocation(3, Some(22))))
 
           case None => fail("no script")

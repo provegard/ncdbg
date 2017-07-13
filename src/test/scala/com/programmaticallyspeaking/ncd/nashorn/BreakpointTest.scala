@@ -266,8 +266,8 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
       val observer = createObserver { data =>
         val scriptId = data.bp.stackFrames.head.breakpoint.scriptId
         val maybeBreakpoint = for {
-          s <- getHost.scriptById(scriptId)
-          bp <- getHost.setBreakpoint(s.url.toString, ScriptLocation(line, col), None)
+          s <- getHost.findScript(ScriptIdentity.fromId(scriptId))
+          bp <- getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(line, col), None)
         } yield bp
 
         donePromise.complete(Try(handler(maybeBreakpoint)))
@@ -308,8 +308,8 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         if (data.hitsSoFar == 1) {
           // debugger
           (for {
-            s <- getHost.scriptById(scriptId)
-            bp <- getHost.setBreakpoint(s.url.toString, ScriptLocation(2, None), None)
+            s <- getHost.findScript(ScriptIdentity.fromId(scriptId))
+            bp <- getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(2, None), None)
           } yield bp) match {
             case Some(bps) => breakpointIds += bps.breakpointId
             case None => donePromise.failure(new Exception("No script or breakpoint"))

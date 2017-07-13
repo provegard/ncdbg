@@ -44,11 +44,11 @@ class MultiThreadingTest extends MultiThreadingTestFixture {
 
     whenReady(ready) { host =>
       whenReady(scriptAddedPromise.future) { script =>
-        val scriptLocation = host.getBreakpointLocations(script.id, location(1), None).headOption match {
+        val scriptLocation = host.getBreakpointLocations(ScriptIdentity.fromId(script.id), location(1), None).headOption match {
           case Some(l) => l
           case None => fail(s"No line numbers for script ${script.id}")
         }
-        host.setBreakpoint(script.url.toString, scriptLocation, None)
+        host.setBreakpoint(ScriptIdentity.fromURL(script.url), scriptLocation, None)
         whenReady(hitBreakpointPromise.future) { _ =>
           // Ugly, but wait for a while to see if the counter increases over 1 (which it shouldn't).
           Thread.sleep(200)

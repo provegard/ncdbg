@@ -77,9 +77,7 @@ trait ScriptHost {
     */
   def reset(): Unit
 
-  def scriptById(id: String): Option[Script]
-
-//  def scriptByUri(uri: String): Option[Script]
+  def findScript(id: ScriptIdentity): Option[Script]
 
   def events: Observable[ScriptEvent]
 
@@ -88,15 +86,15 @@ trait ScriptHost {
   /**
     * Sets a breakpoint in the given script at the given line.
     *
-    * @param scriptUri the URI of the script
+    * @param id the script identifier
     * @param location the location of the breakpoint; if the column number isn't set, the returned breakpoint may
     *                 refer to multiple locations.
     * @param condition optional condition to use for the breakpoint
     * @return a structure describing the breakpoint that was set
     */
-  def setBreakpoint(scriptUri: String, location: ScriptLocation, condition: Option[String]): Option[Breakpoint]
+  def setBreakpoint(id: ScriptIdentity, location: ScriptLocation, condition: Option[String]): Option[Breakpoint]
 
-  def getBreakpointLocations(scriptId: String, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation]
+  def getBreakpointLocations(id: ScriptIdentity, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation]
 
   def step(stepType: StepType): Unit
 

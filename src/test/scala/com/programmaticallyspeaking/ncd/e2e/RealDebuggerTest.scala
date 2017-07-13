@@ -4,6 +4,7 @@ import akka.actor.ActorRef
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, EvaluateOnCallFrameResult}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, Runtime => RuntimeD}
+import com.programmaticallyspeaking.ncd.host.ScriptIdentity
 import com.programmaticallyspeaking.ncd.ioc.Container
 import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, SharedInstanceActorTesting}
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
@@ -112,7 +113,7 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
 
       runScript(script)(callFrames => {
         withHead(callFrames) { cf =>
-          getHost.scriptById(cf.location.scriptId) match {
+          getHost.findScript(ScriptIdentity.fromId(cf.location.scriptId)) match {
             case Some(s) =>
               sendRequest(Debugger.setBreakpointByUrl(3, s.url.toString, Some(2), Some("i>0")))
             case None => fail("Unknown script: " + cf.location.scriptId)
@@ -167,7 +168,7 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
       runScript(script)(callFrames => {
         withHead(callFrames) { cf =>
           // At 'debugger', set the initial breakpoint
-          val scriptUrl = getHost.scriptById(cf.location.scriptId).map(_.url.toString).getOrElse(
+          val scriptUrl = getHost.findScript(ScriptIdentity.fromId(cf.location.scriptId)).map(_.url.toString).getOrElse(
             throw new IllegalArgumentException("No script with ID: " + cf.location.scriptId))
           sendRequest(Debugger.setBreakpointByUrl(1, scriptUrl, None, None))
         }

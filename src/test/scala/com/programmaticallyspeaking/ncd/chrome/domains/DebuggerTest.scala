@@ -189,7 +189,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       "should translate empty condition to no condition" in {
         setBreakpointByUrl(3, "a", Some(""))
-        verify(currentScriptHost).setBreakpoint(any[String], any[ScriptLocation], meq(None))
+        verify(currentScriptHost).setBreakpoint(any[ScriptIdentity], any[ScriptLocation], meq(None))
       }
     }
 
@@ -214,7 +214,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     "getPossibleBreakpoints" - {
 
       def setup: ActorRef = {
-        when(currentScriptHost.getBreakpointLocations(any[String], any[ScriptLocation], any[Option[ScriptLocation]]))
+        when(currentScriptHost.getBreakpointLocations(any[ScriptIdentity], any[ScriptLocation], any[Option[ScriptLocation]]))
           .thenReturn(Seq(location(1, 1), location(2, 1), location(3, 1)))
 
         val debugger = newActorInstance[Debugger]
@@ -229,7 +229,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
         requestAndReceiveResponse(debugger, "2", Debugger.getPossibleBreakpoints(start, Some(end)))
 
-        verify(currentScriptHost).getBreakpointLocations("a", location(2, 3), Some(location(6, 4)))
+        verify(currentScriptHost).getBreakpointLocations(ScriptIdentity.fromId("a"), location(2, 3), Some(location(6, 4)))
       }
 
       "should map resulting line & column numbers back to Chrome space" in {
@@ -506,14 +506,18 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
   override def createScriptHost(): ScriptHost = {
     val host = super.createScriptHost()
 
-    when(host.setBreakpoint(any[String], any[ScriptLocation], any[Option[String]])).thenAnswerWith({
-      case (uri: String) :: (location: ScriptLocation) :: _ :: Nil =>
-        val id = "bp_" + location.lineNumber1Based
+    when(host.setBreakpoint(any[ScriptIdentity], any[ScriptLocation], any[Option[String]])).thenAnswerWith({
+      case (scriptId: ScriptIdentity) :: (location: ScriptLocation) :: _ :: Nil =>
+        val bpId = "bp_" + location.lineNumber1Based
         // Arbitrary test stuff. High line numbers don't exist!
         if (location.lineNumber1Based > 100) None
         else {
-          activeBreakpoints += id
-          Some(Breakpoint(id, uri + "_id", None, Seq(location)))
+          activeBreakpoints += bpId
+          val sid = scriptId match {
+            case IdBasedScriptIdentity(x) => x
+            case URLBasedScriptIdentity(url) => url
+          }
+          Some(Breakpoint(bpId, sid + "_id", None, Seq(location)))
         }
     })
     when(host.removeBreakpointById(any[String])).thenAnswerWith({

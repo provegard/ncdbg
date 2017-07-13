@@ -992,7 +992,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           // Indicate that we're paused
           pausedData = Some(new PausedData(thread, stackFrames, marshaller, atDebugger))
 
-          scriptById(breakpoint.scriptId).foreach { s =>
+          findScript(ScriptIdentity.fromId(breakpoint.scriptId)).foreach { s =>
             val line = s.sourceLine(breakpoint.location.lineNumber1Based).getOrElse("<unknown line>")
             log.info(s"Pausing at ${s.url}:${breakpoint.location.lineNumber1Based}: $line")
           }
@@ -1051,7 +1051,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   override def scripts: Seq[Script] = scriptByPath.values.toSeq
 
-  override def scriptById(id: String): Option[Script] = scripts.find(_.id == id) //TODO: make more efficient
+  override def findScript(id: ScriptIdentity): Option[Script] = {
+    val predicate = id match {
+      case IdBasedScriptIdentity(x) => (s: Script) => s.id == x
+      case URLBasedScriptIdentity(url) => (s: Script) => s.url.toString == url
+    }
+    scripts.find(predicate) //TODO: make more efficient
+  }
+
 
   override def events: Observable[ScriptEvent] = new Observable[ScriptEvent] {
     override def subscribe(observer: Observer[ScriptEvent]): Subscription = {
@@ -1067,7 +1074,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     scriptByPath.get(scriptPathFromLocation(location)).flatMap { script =>
       // We cannot compare locations directly because the passed-in Location may have a code index that is
       // different from the one stored in a BreakableLocation - so do a line comparison.
-      findBreakableLocationsAtLine(script.url.toString, location.lineNumber()).flatMap(_.find(bl => sameMethodAndLine(bl.location, location)))
+      val id = ScriptIdentity.fromURL(script.url)
+      findBreakableLocationsAtLine(id, location.lineNumber()).flatMap(_.find(bl => sameMethodAndLine(bl.location, location)))
     }
   }
 
@@ -1084,10 +1092,20 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  protected def findBreakableLocationsAtLine(scriptUrl: String, lineNumber: Int): Option[Seq[BreakableLocation]] = {
-    breakableLocationsByScriptUrl.get(scriptUrl).map { breakableLocations =>
-      breakableLocations.filter(_.scriptLocation.lineNumber1Based == lineNumber)
+  protected def findBreakableLocationsAtLine(id: ScriptIdentity, lineNumber: Int): Option[Seq[BreakableLocation]] = {
+    id match {
+      case _: IdBasedScriptIdentity =>
+        findScript(id) match {
+          case Some(script) =>
+            findBreakableLocationsAtLine(ScriptIdentity.fromURL(script.url), lineNumber)
+          case None => throw new IllegalArgumentException("Unknown script: " + id)
+        }
+      case URLBasedScriptIdentity(scriptUrl) =>
+        breakableLocationsByScriptUrl.get(scriptUrl).map { breakableLocations =>
+          breakableLocations.filter(_.scriptLocation.lineNumber1Based == lineNumber)
+        }
     }
+
   }
 
   protected def resumeWhenPaused(): Unit = pausedData match {
