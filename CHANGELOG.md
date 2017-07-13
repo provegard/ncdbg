@@ -6,6 +6,7 @@
 * Support Debugger.continueToLocation (issue #47)
 * Support Debugger.pause (issue #49)
 * Pause in certain situations even if breakpoints are disabled (issue #50)
+* Implement Debugger.setSkipAllPauses (issue #48)
 
 # 0.5.0 (2017-05-28)
 

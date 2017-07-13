@@ -27,6 +27,11 @@ object Debugger extends Logging {
     */
   case object pause
 
+  /**
+    * Makes page not interrupt on any pauses (breakpoint, exception, dom exception etc).
+    */
+  case class setSkipAllPauses(skip: Boolean)
+
   case class evaluateOnCallFrame(callFrameId: CallFrameId, expression: String, silent: Option[Boolean], returnByValue: Option[Boolean], generatePreview: Option[Boolean])
 
   case class EvaluateOnCallFrameResult(result: Runtime.RemoteObject, exceptionDetails: Option[Runtime.ExceptionDetails] = None)
@@ -241,6 +246,10 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
     case Debugger.stepOut =>
       lastCallFrameList = None
       scriptHost.step(StepOut)
+
+    case Debugger.setSkipAllPauses(skip: Boolean) =>
+      scriptHost.setSkipAllPauses(skip)
+
 
     case Debugger.setPauseOnExceptions(state) =>
       val pauseType = state match {

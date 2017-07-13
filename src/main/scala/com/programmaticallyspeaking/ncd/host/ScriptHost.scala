@@ -55,6 +55,14 @@ case object StepOver extends StepType
 case object StepOut extends StepType
 
 trait ScriptHost {
+  /**
+    * Indicates that all pauses should be skipped or not skipped. This flag is applied "on top" of pausing on
+    * breakpoints and exceptions. When the flag is reset to false, breakpoint and exception pausing happens as
+    * configured earlier.
+    *
+    * @param skip true to skip all pauses
+    */
+  def setSkipAllPauses(skip: Boolean): Unit
 
   /**
     * Evaluates an expression on a specific stack frame. Variables visible on that stack frame can be used in the

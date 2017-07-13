@@ -227,6 +227,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     */
   protected var willPauseOnBreakpoints = false
 
+  /**
+    * If true, we won't stop on breakpoints or exceptions.
+    */
+  protected var disablePausingAltogether = false
+
   private var seenClassPrepareRequests = 0
   private var lastSeenClassPrepareRequests = -1L
 
@@ -497,7 +502,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       log.trace(s"Considering step/method entry event at ${ev.location()} with byte code: 0x${bc.toHexString}")
       // forcePause = true, because: Stepping should work even if breakpoints are disabled, and method entry is
       // when the user wants to pause, which also should work when breakpoints are disabled.
-      doResume = handleBreakpoint(ev, forcePause = true)
+      doResume = handleBreakpoint(ev, pauseEvenIfBreakpointsAreDisabled = true)
       if (!doResume) infoAboutLastStep = Some(StepLocationInfo.from(ev))
     }
     doResume
@@ -547,7 +552,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               attemptToResolveSourceLessReferenceTypes()
 
               val isECMAException = ev.exception().referenceType().name() == NIR_ECMAException
-              doResume = !isECMAException || handleBreakpoint(ev, forcePause = true)
+              doResume = !isECMAException || handleBreakpoint(ev, pauseEvenIfBreakpointsAreDisabled = true)
 
             case _: VMStartEvent =>
               // ignore it, but don't log a warning
@@ -954,9 +959,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def handleBreakpoint(ev: LocatableEvent, forcePause: Boolean = false): Boolean = {
+  private def handleBreakpoint(ev: LocatableEvent, pauseEvenIfBreakpointsAreDisabled: Boolean = false): Boolean = {
+    // disablePausingAltogether disabled all sort of pausing - exceptions, stepping, breakpoints...
+    if (disablePausingAltogether) return true
+
     // Resume right away if we're not pausing on breakpoints
-    if (!willPauseOnBreakpoints && !forcePause) return true
+    if (!willPauseOnBreakpoints && !pauseEvenIfBreakpointsAreDisabled) return true
 
     // Log at debug level because we get noise due to exception requests.
     log.debug(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")

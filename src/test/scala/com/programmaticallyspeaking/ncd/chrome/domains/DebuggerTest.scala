@@ -482,6 +482,16 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       }
     }
 
+    "setSkipAllPauses" - {
+      "should call the corresponding method on ScriptHost" in {
+        val debugger = newActorInstance[Debugger]
+        sendAndReceive(debugger, Messages.Request("1", Domain enable))
+        sendAndReceive(debugger, Messages.Request("2", Debugger setSkipAllPauses true))
+
+        verify(currentScriptHost).setSkipAllPauses(true)
+      }
+    }
+
     "should tell ScriptHost to reset when stopping" in {
       val probe = TestProbe()
       val debugger = newActorInstance[Debugger]

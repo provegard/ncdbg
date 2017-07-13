@@ -98,4 +98,9 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
         }
       } finally virtualMachine.resume()
   }
+
+  override def setSkipAllPauses(skip: Boolean): Unit = {
+    disablePausingAltogether = skip
+  }
+
 }
