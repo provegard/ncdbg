@@ -24,6 +24,10 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
       debugger = newActorInstance[Debugger]
       sendRequestAndWait(debugger, Domain.enable)
     }
+
+    // clean slate
+    sendRequest(Debugger setBreakpointsActive true)
+    sendRequest(Debugger setPauseOnExceptions "none")
   }
 
   def sendRequest(msg: AnyRef): Any = sendRequestAndWait(debugger, msg)
@@ -299,33 +303,43 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
       })
     }
 
-    "should support pausing at next statement" in {
-      enableDebugger
-      val script =
-        """debugger;
-          |java.lang.Thread.sleep(1000); // make sure the pause request has time to be registered
-          |f();
-          |debugger;
-          |function f() {
-          |  return 42;
-          |}
-        """.stripMargin
+    "should support pausing at next statement" - {
+      def pauseAtNext = {
+        val script =
+          """debugger;
+            |java.lang.Thread.sleep(1000); // make sure the pause request has time to be registered
+            |f();
+            |debugger;
+            |function f() {
+            |  return 42;
+            |}
+          """.stripMargin
 
-      runScript(script)(_ => {
-        sendRequest(Debugger.resume)
-        sendRequest(Debugger.pause)
-        DontAutoResume
-      }, callFrames => {
-        withHead(callFrames) { cf =>
-          // Don't know exactly where in f it'll pause, so be permissive
-          Seq(1, 2, 5) should contain (cf.location.lineNumber)
-        }
-      }, callFrames => {
-        // Consume the last debugger statement, a.k.a. wait for the loop to be finished
-        withHead(callFrames) { cf =>
-          cf.location.lineNumber should be (3)
-        }
-      })
+        runScript(script)(_ => {
+          sendRequest(Debugger.resume)
+          sendRequest(Debugger.pause)
+          DontAutoResume
+        }, callFrames => {
+          withHead(callFrames) { cf =>
+            // Don't know exactly where in f it'll pause, so be permissive
+            Seq(1, 2, 5) should contain (cf.location.lineNumber)
+          }
+        }, callFrames => {
+          // Consume the last debugger statement, a.k.a. wait for the loop to be finished
+          withHead(callFrames) { cf =>
+            cf.location.lineNumber should be (3)
+          }
+        })
+      }
+      "when breakpoints are enabled" in {
+        enableDebugger
+        pauseAtNext
+      }
+      "when breakpoints are disabled" in {
+        sendRequest(Debugger setBreakpointsActive false)
+        enableDebugger
+        pauseAtNext
+      }
     }
 
     "should support pausing at next statement when there's no function call involved" in {
@@ -355,6 +369,47 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
         }
       })
 
+    }
+
+    "should pause on exception when enabled even if pausing on breakpoint is disabled" in {
+      enableDebugger
+      val script =
+        """debugger; // disable breakpoint pausing here
+          |debugger; // this one should be ignored
+          |try {
+          |  throw new Error("oops"); // we should pause here
+          |} catch (e) {
+          |  e.toString();
+          |}
+        """.stripMargin
+
+      runScript(script)(_ => {
+        sendRequest(Debugger setBreakpointsActive false)
+        sendRequest(Debugger setPauseOnExceptions "all")
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (3)
+        }
+      })
+    }
+
+    "should step even if pausing on breakpoint is disabled" in {
+      enableDebugger
+      val script =
+        """var i = 0;
+          |debugger;  // disable breakpoint pausing here, then step
+          |i = i + 1; // we should end up here
+        """.stripMargin
+
+      runScript(script)(_ => {
+        sendRequest(Debugger setBreakpointsActive false)
+        sendRequest(Debugger stepOver)
+        DontAutoResume
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (2)
+        }
+      })
     }
 
   }

@@ -495,7 +495,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       createEnabledStepOverRequest(ev.thread(), isAtDebuggerStatement = false)
     } else {
       log.trace(s"Considering step/method entry event at ${ev.location()} with byte code: 0x${bc.toHexString}")
-      doResume = handleBreakpoint(ev)
+      // forcePause = true, because: Stepping should work even if breakpoints are disabled, and method entry is
+      // when the user wants to pause, which also should work when breakpoints are disabled.
+      doResume = handleBreakpoint(ev, forcePause = true)
       if (!doResume) infoAboutLastStep = Some(StepLocationInfo.from(ev))
     }
     doResume
@@ -545,7 +547,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               attemptToResolveSourceLessReferenceTypes()
 
               val isECMAException = ev.exception().referenceType().name() == NIR_ECMAException
-              doResume = !isECMAException || handleBreakpoint(ev)
+              doResume = !isECMAException || handleBreakpoint(ev, forcePause = true)
 
             case _: VMStartEvent =>
               // ignore it, but don't log a warning
@@ -952,9 +954,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def handleBreakpoint(ev: LocatableEvent): Boolean = {
+  private def handleBreakpoint(ev: LocatableEvent, forcePause: Boolean = false): Boolean = {
     // Resume right away if we're not pausing on breakpoints
-    if (!willPauseOnBreakpoints) return true
+    if (!willPauseOnBreakpoints && !forcePause) return true
 
     // Log at debug level because we get noise due to exception requests.
     log.debug(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")
