@@ -1,10 +1,10 @@
 package com.programmaticallyspeaking.ncd.e2e
 
 import akka.actor.ActorRef
-import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, EvaluateOnCallFrameResult}
+import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, EvaluateOnCallFrameResult, Location}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, Runtime => RuntimeD}
-import com.programmaticallyspeaking.ncd.host.ScriptIdentity
+import com.programmaticallyspeaking.ncd.host.{ScriptIdentity, ScriptLocation}
 import com.programmaticallyspeaking.ncd.ioc.Container
 import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, SharedInstanceActorTesting}
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
@@ -180,6 +180,111 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
       }, callFrames => {
         withHead(callFrames) { cf =>
           cf.location.lineNumber should be (1) // 0-based
+        }
+      })
+    }
+
+    "should support continuing to a specific location" in {
+      enableDebugger
+      val script =
+        """debugger;
+          |var x = 0;
+          |x = x + 1;
+          |x = x.toString(); // target
+        """.stripMargin
+
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          val scriptId = cf.location.scriptId
+          sendRequest(Debugger.continueToLocation(Location(scriptId, 3, None)))
+        }
+        DontAutoResume
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (3) // 0-based
+        }
+      })
+    }
+
+    "should support continuing to a specific location with column 0 (because that's what Chrome sends)" in {
+      enableDebugger
+      val script =
+        """debugger;
+          |if (true) {
+          |  var x = 0;
+          |  x = x + 1;
+          |  x = x.toString(); // target
+          |}
+        """.stripMargin
+
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          val scriptId = cf.location.scriptId
+          sendRequest(Debugger.continueToLocation(Location(scriptId, 4, Some(0))))
+        }
+        DontAutoResume
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (4) // 0-based
+        }
+      })
+    }
+
+    "should not leave an unwanted breakpoint after continuing to a location" in {
+      enableDebugger
+      val script =
+        """debugger;
+          |var x = 0;
+          |while (x < 2) {
+          |  x = x + 1; // target
+          |}
+          |debugger; // end up here afterwards
+        """.stripMargin
+
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          val scriptId = cf.location.scriptId
+          sendRequest(Debugger.continueToLocation(Location(scriptId, 3, None)))
+        }
+        DontAutoResume
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (3) // 0-based
+        }
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (5) // 0-based
+        }
+      })
+    }
+
+    "should be able to continue to a location where there already is a breakpoint" in {
+      enableDebugger
+      val script =
+        """debugger;
+          |var x = 0;
+          |while (x < 2) {
+          |  x = x + 1; // target, but also where we set a breakpoint
+          |}
+        """.stripMargin
+
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          val scriptId = cf.location.scriptId
+          // Debugger API doesn't allow us to set a breakpoint by ID, so we have to access ScriptHost directly.
+          getHost.setBreakpoint(ScriptIdentity.fromId(scriptId), ScriptLocation(4, None), None).getOrElse(throw new Exception("Failed to set a breakpoint"))
+          sendRequest(Debugger.continueToLocation(Location(scriptId, 3, None)))
+        }
+        DontAutoResume
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          // The result of continuing to the location
+          cf.location.lineNumber should be (3) // 0-based
+        }
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          // The original breakpoint
+          cf.location.lineNumber should be (3) // 0-based
         }
       })
     }

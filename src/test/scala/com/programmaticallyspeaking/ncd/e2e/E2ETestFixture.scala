@@ -18,7 +18,10 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
-  type Tester = (Seq[CallFrame]) => Unit
+  type Tester = (Seq[CallFrame]) => Any
+
+  // Return this from a callframe tester to prevent auto resume
+  case object DontAutoResume
 
   private val domainEventSubject = new SerializedSubject[Messages.DomainMessage]
   private val requestor = system.actorOf(Props(new Requestor), "E2E-Requestor")
@@ -52,8 +55,10 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
 
         val tester = testerQueue.dequeue()
         try {
-          tester(callFrames)
-          getHost.resume()
+          tester(callFrames) match {
+            case DontAutoResume =>
+            case _ => getHost.resume()
+          }
 
           if (testerQueue.isEmpty) {
             donePromise.trySuccess(())
