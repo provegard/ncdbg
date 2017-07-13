@@ -38,4 +38,6 @@ object FakeScriptHost extends ScriptHost {
 
   override def startProfiling(samplingInterval: FiniteDuration): Unit = notImpl
   override def stopProfiling(): ProfilingData = notImpl
+
+  override def pauseAtNextStatement(): Unit = notImpl
 }

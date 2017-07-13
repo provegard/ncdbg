@@ -9,7 +9,7 @@ import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.StepRequestClassFilter
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
-import com.sun.jdi.request.{EventRequest, ExceptionRequest, StepRequest}
+import com.sun.jdi.request.{BreakpointRequest, EventRequest, ExceptionRequest, StepRequest}
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
@@ -176,6 +176,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   protected val breakableLocationsByScriptUrl = mutable.Map[String, ListBuffer[BreakableLocation]]()
 
   protected val enabledBreakpoints = mutable.Map[String, ActiveBreakpoint]()
+
+  // Breakpoints created by PauseSupport to pause at the next executing statement.
+  protected val oneOffBreakpoints = ListBuffer[BreakpointRequest]()
 
   private val scriptIdGenerator = new IdGenerator("nds")
   protected val breakpointIdGenerator = new IdGenerator("ndb")
@@ -482,6 +485,29 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     if (bc < 0) bc + 256 else bc
   }
 
+  private def handleStepOrMethodEntryEvent(ev: LocatableEvent): Boolean = {
+    var doResume = true
+    attemptToResolveSourceLessReferenceTypes()
+    virtualMachine.eventRequestManager().deleteEventRequest(ev.request())
+    val bc = byteCodeFromLocation(ev.location())
+    if (IlCodesToIgnoreOnStepEvent.contains(bc)) {
+      // We most likely hit an "intermediate" location after returning from a function.
+      log.trace(s"Skipping step/method entry event at ${ev.location()} because byte code is ignored: 0x${bc.toHexString}")
+      createEnabledStepOverRequest(ev.thread(), isAtDebuggerStatement = false)
+    } else {
+      log.trace(s"Considering step/method entry event at ${ev.location()} with byte code: 0x${bc.toHexString}")
+      doResume = handleBreakpoint(ev)
+      if (!doResume) infoAboutLastStep = Some(StepLocationInfo.from(ev))
+    }
+    doResume
+  }
+
+  private def removeOneOffBreakpoints(): Unit = {
+    val erm = virtualMachine.eventRequestManager()
+    erm.deleteEventRequests(oneOffBreakpoints.asJava)
+    oneOffBreakpoints.clear()
+  }
+
   def handleOperation(eventQueueItem: NashornScriptOperation): Unit = eventQueueItem match {
     case NashornEventSet(es) if hasDeathOrDisconnectEvent(es) =>
       signalComplete()
@@ -490,20 +516,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       eventSet.asScala.foreach { ev =>
         try {
           ev match {
+            case ev: MethodEntryEvent =>
+              doResume = handleStepOrMethodEntryEvent(ev)
+
             case ev: StepEvent =>
-              virtualMachine.eventRequestManager().deleteEventRequest(ev.request())
-              val bc = byteCodeFromLocation(ev.location())
-              if (IlCodesToIgnoreOnStepEvent.contains(bc)) {
-                // We most likely hit an "intermediate" location after returning from a function.
-                log.trace(s"Skipping step event at ${ev.location()} because byte code is ignored: 0x${bc.toHexString}")
-                createEnabledStepOverRequest(ev.thread(), isAtDebuggerStatement = false)
-              } else {
-                log.trace(s"Considering step event at ${ev.location()} with byte code: 0x${bc.toHexString}")
-                doResume = handleBreakpoint(ev)
-                if (!doResume) infoAboutLastStep = Some(StepLocationInfo.from(ev))
-              }
+              doResume = handleStepOrMethodEntryEvent(ev)
 
             case ev: BreakpointEvent if pausedData.isEmpty =>
+              // Breakpoints created for pausing at the next executing statement shouldn't remain.
+              removeOneOffBreakpoints()
               infoAboutLastStep match {
                 case Some(info) if info == StepLocationInfo.from(ev) =>
                   // We stopped in the same location. Continue!

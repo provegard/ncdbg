@@ -3,7 +3,8 @@
 # Unreleased
 
 * Support setting local variables of primitive type (issue #46)
-* Support Debugger.continueToLocation (issues #47)
+* Support Debugger.continueToLocation (issue #47)
+* Support Debugger.pause (issue #49)
 
 # 0.5.0 (2017-05-28)
 

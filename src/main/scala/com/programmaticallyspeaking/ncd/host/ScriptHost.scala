@@ -55,6 +55,7 @@ case object StepOver extends StepType
 case object StepOut extends StepType
 
 trait ScriptHost {
+
   /**
     * Evaluates an expression on a specific stack frame. Variables visible on that stack frame can be used in the
     * expression.
@@ -69,6 +70,11 @@ trait ScriptHost {
   def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode]
 
   def removeBreakpointById(id: String): Unit
+
+  /**
+    * Pauses script execution at the next statement.
+    */
+  def pauseAtNextStatement(): Unit
 
   def resume(): Unit
 

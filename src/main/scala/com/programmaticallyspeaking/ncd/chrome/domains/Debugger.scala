@@ -22,6 +22,11 @@ object Debugger extends Logging {
 
   case object resume
 
+  /**
+    * Stops on the next JavaScript statement.
+    */
+  case object pause
+
   case class evaluateOnCallFrame(callFrameId: CallFrameId, expression: String, silent: Option[Boolean], returnByValue: Option[Boolean], generatePreview: Option[Boolean])
 
   case class EvaluateOnCallFrameResult(result: Runtime.RemoteObject, exceptionDetails: Option[Runtime.ExceptionDetails] = None)
@@ -218,6 +223,9 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
     case Debugger.resume =>
       lastCallFrameList = None
       scriptHost.resume()
+
+    case Debugger.pause =>
+      scriptHost.pauseAtNextStatement()
 
     case Debugger.removeBreakpoint(id) =>
       scriptHost.removeBreakpointById(id)

@@ -299,6 +299,68 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
       })
     }
 
+    "should support pausing at next statement" in {
+      enableDebugger
+      val script =
+        """debugger;
+          |java.lang.Thread.sleep(1000); // make sure the pause request has time to be registered
+          |f();
+          |debugger;
+          |function f() {
+          |  return 42;
+          |}
+        """.stripMargin
+
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          sendRequest(Debugger.resume)
+          sendRequest(Debugger.pause)
+        }
+        DontAutoResume
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          // Don't know exactly where in f it'll pause, so be permissive
+          Seq(1, 2, 5) should contain (cf.location.lineNumber)
+        }
+      }, callFrames => {
+        // Consume the last debugger statement, a.k.a. wait for the loop to be finished
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (3)
+        }
+      })
+    }
+
+    "should support pausing at next statement when there's no function call involved" in {
+      enableDebugger
+      val script =
+        """var i = 0;
+          |debugger;
+          |java.lang.Thread.sleep(1000); // make sure the pause request has time to be registered
+          |i = i + 1; // we ought to end up here
+          |i = i + 1; // but never here!
+          |debugger;
+        """.stripMargin
+
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          sendRequest(Debugger.resume)
+          sendRequest(Debugger.pause)
+        }
+        DontAutoResume
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          // Don't know exactly where it'll pause, so be permissive
+          Seq(2, 3) should contain (cf.location.lineNumber)
+        }
+      }, callFrames => {
+        // Consume the last debugger statement, a.k.a. wait for the loop to be finished
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (5)
+        }
+      })
+
+    }
+
   }
 
   private def withHead(callFrames: Seq[CallFrame])(fun: (CallFrame) => Unit) = {
