@@ -150,6 +150,11 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
         withHead(callFrames) { cf =>
           cf.location.lineNumber should be (1) // 0-based
         }
+      }, callFrames => {
+        // Consume the last debugger statement
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (2) // 0-based
+        }
       })
     }
 
@@ -162,7 +167,7 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
           |f();            // make sure f is compiled
           |debugger;       // where we set a breakpoint
           |f();
-          |debugger;       // after resume, we should NOT get here
+          |debugger;       // after restart-frame-resume, we should NOT get here
         """.stripMargin
 
       runScript(script)(callFrames => {
@@ -180,6 +185,11 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
       }, callFrames => {
         withHead(callFrames) { cf =>
           cf.location.lineNumber should be (1) // 0-based
+        }
+      }, callFrames => {
+        // Consume the last debugger statement
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (6) // 0-based
         }
       })
     }
