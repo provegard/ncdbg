@@ -311,11 +311,9 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
           |}
         """.stripMargin
 
-      runScript(script)(callFrames => {
-        withHead(callFrames) { cf =>
-          sendRequest(Debugger.resume)
-          sendRequest(Debugger.pause)
-        }
+      runScript(script)(_ => {
+        sendRequest(Debugger.resume)
+        sendRequest(Debugger.pause)
         DontAutoResume
       }, callFrames => {
         withHead(callFrames) { cf =>
@@ -341,11 +339,9 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
           |debugger;
         """.stripMargin
 
-      runScript(script)(callFrames => {
-        withHead(callFrames) { cf =>
-          sendRequest(Debugger.resume)
-          sendRequest(Debugger.pause)
-        }
+      runScript(script)(_ => {
+        sendRequest(Debugger.resume)
+        sendRequest(Debugger.pause)
         DontAutoResume
       }, callFrames => {
         withHead(callFrames) { cf =>
