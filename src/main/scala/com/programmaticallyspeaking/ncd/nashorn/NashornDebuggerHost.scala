@@ -6,10 +6,9 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, Undefined}
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.StepRequestClassFilter
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
-import com.sun.jdi.request.{BreakpointRequest, EventRequest, ExceptionRequest, StepRequest}
+import com.sun.jdi.request.{BreakpointRequest, EventRequest}
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
