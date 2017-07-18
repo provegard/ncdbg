@@ -1,6 +1,6 @@
 # Changelog
 
-# Unreleased
+# 0.5.1 (2017-07-18)
 
 * Support setting local variables of primitive type (issue #46)
 * Support Debugger.continueToLocation (issue #47)
