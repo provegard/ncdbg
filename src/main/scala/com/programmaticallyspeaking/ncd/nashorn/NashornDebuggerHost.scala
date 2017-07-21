@@ -500,7 +500,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private def byteCodeFromLocation(location: Location): Int =  {
     val methodByteCodes = location.method().bytecodes()
-    var bc = methodByteCodes(location.codeIndex().toInt).toInt
+    val bc = methodByteCodes(location.codeIndex().toInt).toInt
     if (bc < 0) bc + 256 else bc
   }
 
