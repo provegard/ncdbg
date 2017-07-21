@@ -160,6 +160,16 @@ object NashornDebuggerHost {
 
   // Filter for step requests for stopping in a script
   val StepRequestClassFilter = "jdk.nashorn.internal.scripts.*"
+
+  /**
+    * Key for an EventRequest property that stores a handler to execute when an event for the request is seen.
+    */
+  private[nashorn] object EventHandlerKey
+
+  /**
+    * The type of a handler for an event associated with an event request.
+    */
+  type EventHandler = (Event) => Unit
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
@@ -175,9 +185,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   protected val breakableLocationsByScriptUrl = mutable.Map[String, ListBuffer[BreakableLocation]]()
 
   protected val enabledBreakpoints = mutable.Map[String, ActiveBreakpoint]()
-
-  // Breakpoints created by PauseSupport to pause at the next executing statement.
-  protected val oneOffBreakpoints = ListBuffer[BreakpointRequest]()
 
   private val scriptIdGenerator = new IdGenerator("nds")
   protected val breakpointIdGenerator = new IdGenerator("ndb")
@@ -234,6 +241,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private var seenClassPrepareRequests = 0
   private var lastSeenClassPrepareRequests = -1L
+
+  /**
+    * Associate a handler to be executed when an event for the request is observed.
+    */
+  protected def beforeEventIsHandled(r: EventRequest)(h: EventHandler): Unit = {
+    Option(r.getProperty(EventHandlerKey)).foreach(_ => throw new IllegalMonitorStateException("Event handler already associated."))
+    r.putProperty(EventHandlerKey, h)
+  }
 
   private def addBreakableLocations(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
     breakableLocationsByScriptUrl.getOrElseUpdate(script.url.toString, ListBuffer.empty) ++= breakableLocations
@@ -508,12 +523,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     doResume
   }
 
-  private def removeOneOffBreakpoints(): Unit = {
-    val erm = virtualMachine.eventRequestManager()
-    erm.deleteEventRequests(oneOffBreakpoints.asJava)
-    oneOffBreakpoints.clear()
-  }
-
   def handleOperation(eventQueueItem: NashornScriptOperation): Unit = eventQueueItem match {
     case NashornEventSet(es) if hasDeathOrDisconnectEvent(es) =>
       signalComplete()
@@ -521,6 +530,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       var doResume = true
       eventSet.asScala.foreach { ev =>
         try {
+          // Invoke any event handler associated with the request for the event.
+          Option(ev.request().getProperty(EventHandlerKey)).foreach {
+            case h: EventHandler => h(ev)
+          }
+
           ev match {
             case ev: MethodEntryEvent =>
               doResume = handleStepOrMethodEntryEvent(ev)
@@ -529,8 +543,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               doResume = handleStepOrMethodEntryEvent(ev)
 
             case ev: BreakpointEvent if pausedData.isEmpty =>
-              // Breakpoints created for pausing at the next executing statement shouldn't remain.
-              removeOneOffBreakpoints()
               infoAboutLastStep match {
                 case Some(info) if info == StepLocationInfo.from(ev) =>
                   // We stopped in the same location. Continue!

@@ -3,7 +3,8 @@ package com.programmaticallyspeaking.ncd.nashorn
 import com.programmaticallyspeaking.ncd.host.ExceptionPauseType
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{StepRequestClassFilter, isInfrastructureThread, isRunningThread}
 import com.sun.jdi.StackFrame
-import com.sun.jdi.request.{EventRequest, EventRequestManager, ExceptionRequest}
+import com.sun.jdi.event.Event
+import com.sun.jdi.request.{BreakpointRequest, EventRequest, EventRequestManager, ExceptionRequest}
 import org.slf4s.Logging
 
 import scala.collection.mutable.ListBuffer
@@ -13,6 +14,9 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
   val ScriptClassPrefix = "jdk.nashorn.internal.scripts.Script"
 
   private val exceptionRequests = ListBuffer[ExceptionRequest]()
+
+  // Breakpoints created to pause at the next executing statement.
+  private val oneOffBreakpoints = ListBuffer[BreakpointRequest]()
 
   override def pauseOnExceptions(pauseType: ExceptionPauseType): Unit = {
     val erm = virtualMachine.eventRequestManager()
@@ -40,7 +44,14 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
     resumeWhenPaused()
   }
 
+  private def removeOneOffBreakpoints(): Unit = {
+    val erm = virtualMachine.eventRequestManager()
+    erm.deleteEventRequests(oneOffBreakpoints.asJava)
+    oneOffBreakpoints.clear()
+  }
+
   private def setOneOffBreakpointsForScriptFrames(scriptFrames: List[StackFrame]) = {
+    def handler(e: Event): Unit = removeOneOffBreakpoints()
     val erm = virtualMachine.eventRequestManager()
     scriptFrames.foreach(sf => {
       val startLine = sf.location().lineNumber()
@@ -49,6 +60,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
         val bp = erm.createBreakpointRequest(l)
         bp.addCountFilter(1)
         bp.setEnabled(true)
+        beforeEventIsHandled(bp)(handler)
         oneOffBreakpoints += bp
       }
     })
