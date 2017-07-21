@@ -11,6 +11,7 @@ import com.programmaticallyspeaking.ncd.infra.{FileReader, FileSystemFileReader,
 import org.slf4s.Logging
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success}
 
 object Debugger extends Logging {
@@ -163,7 +164,9 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
 
   override def postStop(): Unit = try {
     // Tell the ScriptHost to reset, so that we don't leave it paused
-    Option(scriptHost).foreach(_.reset())
+    try Option(scriptHost).foreach(_.reset()) catch {
+      case NonFatal(t) => log.warn("VM reset failed", t)
+    }
   } finally super.postStop()
 
   /** Key = script ID
