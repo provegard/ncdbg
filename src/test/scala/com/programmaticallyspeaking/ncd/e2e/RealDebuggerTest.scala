@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.e2e
 
 import akka.actor.ActorRef
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, EvaluateOnCallFrameResult, Location}
-import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
+import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{CallArgument, RemoteObject}
 import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, Runtime => RuntimeD}
 import com.programmaticallyspeaking.ncd.host.{ScriptIdentity, ScriptLocation}
 import com.programmaticallyspeaking.ncd.ioc.Container
@@ -11,6 +11,7 @@ import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.concurrent.Future
+import scala.util.control.NonFatal
 
 class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting with ScalaFutures with IntegrationPatience with TableDrivenPropertyChecks {
 
@@ -31,6 +32,8 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
   }
 
   def sendRequest(msg: AnyRef): Any = sendRequestAndWait(debugger, msg)
+
+
 
   "Debugging" - {
     "should support setVariableValue" in {
@@ -303,73 +306,96 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
       })
     }
 
-    "should support pausing at next statement" - {
-      def pauseAtNext = {
-        val script =
-          """debugger;
-            |java.lang.Thread.sleep(1000); // make sure the pause request has time to be registered
-            |f();
-            |debugger;
-            |function f() {
-            |  return 42;
-            |}
-          """.stripMargin
-
-        runScript(script)(_ => {
-          sendRequest(Debugger.resume)
-          sendRequest(Debugger.pause)
-          DontAutoResume
-        }, callFrames => {
-          withHead(callFrames) { cf =>
-            // Don't know exactly where in f it'll pause, so be permissive
-            Seq(1, 2, 5) should contain (cf.location.lineNumber)
-          }
-        }, callFrames => {
-          // Consume the last debugger statement, a.k.a. wait for the loop to be finished
-          withHead(callFrames) { cf =>
-            cf.location.lineNumber should be (3)
-          }
-        })
+    def pauseAtNext(script: String, runAtDebugger: () => Unit, possiblePauseLineNumbers: Seq[Int]) = {
+      assert(script.contains("done"), "expected the script to contain a done variable")
+      val lineOf2ndDebugger = script.split("\r?\n").toSeq.zipWithIndex.filter(_._1.trim == "debugger;").tail.toList match {
+        case x :: _ => x._2
+        case Nil => fail("No 2nd debugger statement")
       }
-      "when breakpoints are enabled" in {
-        enableDebugger
-        pauseAtNext
-      }
-      "when breakpoints are disabled" in {
-        sendRequest(Debugger setBreakpointsActive false)
-        enableDebugger
-        pauseAtNext
-      }
-    }
-
-    "should support pausing at next statement when there's no function call involved" in {
-      enableDebugger
-      val script =
-        """var i = 0;
-          |debugger;
-          |java.lang.Thread.sleep(1000); // make sure the pause request has time to be registered
-          |i = i + 1; // we ought to end up here
-          |i = i + 1; // but never here!
-          |debugger;
-        """.stripMargin
-
       runScript(script)(_ => {
+        runAtDebugger()
         sendRequest(Debugger.resume)
         sendRequest(Debugger.pause)
         DontAutoResume
       }, callFrames => {
         withHead(callFrames) { cf =>
           // Don't know exactly where it'll pause, so be permissive
-          Seq(2, 3) should contain (cf.location.lineNumber)
+          possiblePauseLineNumbers should contain (cf.location.lineNumber)
+          // Break out of the loop. Since f captures done, we should always be able to set it on scope 0.
+          sendRequest(Debugger.setVariableValue(0, "done", CallArgument(Some(true), None, None), cf.callFrameId))
         }
       }, callFrames => {
         // Consume the last debugger statement, a.k.a. wait for the loop to be finished
         withHead(callFrames) { cf =>
-          cf.location.lineNumber should be (5)
+          cf.location.lineNumber should be (lineOf2ndDebugger)
         }
       })
-
     }
+
+    "should support pausing at next statement" - {
+      // This script is likely to trigger the method-entry case, and since f is called repeatedly, the method-entry
+      // breakpoint will eventually hit.
+      val script =
+        """var done = false;
+          |f(); // compile f
+          |debugger;
+          |while (!done) {
+          |  f();
+          |}
+          |debugger;
+          |function f() {
+          |  java.lang.Thread.sleep(done ? 100 : 100); // capture 'done'
+          |}
+        """.stripMargin
+
+      "when breakpoints are enabled" in {
+        enableDebugger
+        pauseAtNext(script, () => (), Seq(3, 4, 8))
+      }
+      "when breakpoints are disabled" in {
+        enableDebugger
+        pauseAtNext(script, () => Debugger setBreakpointsActive false, Seq(3, 4, 8))
+      }
+    }
+
+    "should support pausing at next statement when there's no function call involved and the thread isn't sleeping" in {
+      // This script will hit the case where we set breakpoints in the current stack frame.
+      val script =
+        """var done = false, i = 0;
+          |debugger;
+          |while (!done) {
+          |  i = i + 1;
+          |}
+          |debugger;
+        """.stripMargin
+
+      enableDebugger
+      pauseAtNext(script, () => (), Seq(2, 3))
+    }
+
+    "should support pausing at next statement when the thread is sleeping in a function that won't be called again" in {
+      // With method-entry/breakpoint separation, this TC typically hits the method-entry case but since f won't
+      // be called again, the method-entry breakpoint is never hit. The TC fails when run individually, but not as part
+      // of the suite... :-(
+      val script =
+        """var done = false, i = 0;
+          |f(); // compile
+          |debugger;
+          |f();
+          |while (!done) {
+          |  i = i + 1;
+          |}
+          |debugger;
+          |function f() {
+          |  java.lang.Thread.sleep(200);
+          |}
+        """.stripMargin
+
+      enableDebugger
+      pauseAtNext(script, () => (), Seq(3, 4, 5, 9))
+    }
+
+
 
     "should pause on exception when enabled even if pausing on breakpoint is disabled" in {
       enableDebugger
