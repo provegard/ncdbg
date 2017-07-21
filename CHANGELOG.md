@@ -1,5 +1,9 @@
 # Changelog
 
+# Unreleased
+
+* More robust pause support.
+
 # 0.5.1 (2017-07-18)
 
 * Support setting local variables of primitive type (issue #46)
