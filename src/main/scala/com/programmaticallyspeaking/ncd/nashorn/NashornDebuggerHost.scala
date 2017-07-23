@@ -515,10 +515,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     val bc = byteCodeFromLocation(ev.location())
     if (IlCodesToIgnoreOnStepEvent.contains(bc)) {
       // We most likely hit an "intermediate" location after returning from a function.
-      log.trace(s"Skipping step/method entry event at ${ev.location()} because byte code is ignored: 0x${bc.toHexString}")
+      log.debug(s"Skipping step/method entry event at ${ev.location()} because byte code is ignored: 0x${bc.toHexString}")
       createEnabledStepOverRequest(ev.thread(), isAtDebuggerStatement = false)
     } else {
-      log.trace(s"Considering step/method entry event at ${ev.location()} with byte code: 0x${bc.toHexString}")
+      log.debug(s"Considering step/method entry event at ${ev.location()} with byte code: 0x${bc.toHexString}")
       // forcePause = true, because: Stepping should work even if breakpoints are disabled, and method entry is
       // when the user wants to pause, which also should work when breakpoints are disabled.
       doResume = handleBreakpoint(ev, pauseEvenIfBreakpointsAreDisabled = true)
@@ -979,11 +979,16 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   }
 
   private def handleBreakpoint(ev: LocatableEvent, pauseEvenIfBreakpointsAreDisabled: Boolean = false): Boolean = {
+    def ignoreIt(reason: String) = {
+      log.debug(s"Ignoring breakpoint at ${ev.location()} because $reason.")
+      true
+    }
+
     // disablePausingAltogether disabled all sort of pausing - exceptions, stepping, breakpoints...
-    if (disablePausingAltogether) return true
+    if (disablePausingAltogether) return ignoreIt("pausing is entirely disabled")
 
     // Resume right away if we're not pausing on breakpoints
-    if (!willPauseOnBreakpoints && !pauseEvenIfBreakpointsAreDisabled) return true
+    if (!willPauseOnBreakpoints && !pauseEvenIfBreakpointsAreDisabled) return ignoreIt("breakpoints are disabled")
 
     // Log at debug level because we get noise due to exception requests.
     log.debug(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")
@@ -1001,8 +1006,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     stackFrames.headOption match {
       case Some(holder) if holder.stackFrame.isEmpty && !holder.mayBeAtSpecialStatement =>
         // First/top stack frame doesn't belong to a script. Resume!
-        log.debug(s"Ignoring breakpoint at ${ev.location()} because it doesn't belong to a script.")
-        true
+        ignoreIt("it doesn't belong to a script")
       case Some(holder) =>
         if (holder.isAtDebuggerStatement) log.debug("Breakpoint is at JavaScript 'debugger' statement")
         val didPause = doPause(thread, stackFrames.flatMap(_.stackFrame), holder.isAtDebuggerStatement)
@@ -1010,8 +1014,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
         !didPause // false
       case None =>
         // Hm, no stack frames at all... Resume!
-        log.debug(s"Ignoring breakpoint at ${ev.location()} because no stack frames were found at all.")
-        true
+        ignoreIt("no stack frames were found at all")
     }
   }
 
