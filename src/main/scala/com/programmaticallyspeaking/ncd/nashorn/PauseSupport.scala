@@ -99,6 +99,9 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
           viewOfFrames.map(locationsForStackFrame).find(_.nonEmpty).getOrElse(Seq.empty)
         }
 
+        log.info("Will pause at next script statement")
+        log.debug(s"Creating ${locationsToSetBreakpointsOn.size} one-off breakpoint request(s) and a method-entry request for pausing.")
+
         // Create both a method-entry request and breakpoint requests.
         val methodEntryRequest = setMethodEntryBreakpoint()
         val breakpoints = locationsToSetBreakpointsOn.map(setOneOffBreakpoint)
