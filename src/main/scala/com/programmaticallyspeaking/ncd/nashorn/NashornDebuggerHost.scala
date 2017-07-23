@@ -192,7 +192,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private val eventSubject = Subject.serialized[ScriptEvent]
 
-  private var isInitialized = false
+  private var hostInitializationComplete = false
 
   protected val objectDescriptorById = mutable.Map[ObjectId, ObjectDescriptor]()
 
@@ -241,6 +241,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private var seenClassPrepareRequests = 0
   private var lastSeenClassPrepareRequests = -1L
+  private var hasScannedClasses = false
 
   /**
     * Associate a handler to be executed when an event for the request is observed.
@@ -425,6 +426,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   }
 
   private def retryInitLater(): Unit = {
+    log.debug("Postponing initialization until classes have stabilized")
     DelayedFuture(200.milliseconds) {
       asyncInvokeOnThis(_.handleOperation(PostponeInitialize))
     }
@@ -432,7 +434,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   def initialize(): Unit = {
     watchAddedClasses()
-    log.debug("Postponing initialization until classes have stabilized")
     retryInitLater()
   }
 
@@ -446,16 +447,19 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def doInitialize(): Unit = {
+  private def scanClasses(): Unit = {
+    log.debug("Scanning all currently known classes...")
     val referenceTypes = virtualMachine.allClasses()
 
     // Go through reference types that exist so far. More may arrive later!
     referenceTypes.asScala.foreach(considerReferenceType(_: ReferenceType, InitialScriptResolveAttempts))
+
+    hasScannedClasses = true
   }
 
   private def considerInitializationToBeComplete(): Unit = {
     log.info("Host initialization is complete.")
-    isInitialized = true
+    hostInitializationComplete = true
     emitEvent(InitialInitializationComplete)
   }
 
@@ -555,9 +559,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               }
 
             case ev: ClassPrepareEvent =>
-              if (isInitialized) {
+              if (hasScannedClasses) {
+                // A new class, added after we have scanned
                 considerReferenceType(ev.referenceType(), InitialScriptResolveAttempts)
               } else {
+                // Bump the class counter - when we handle PostponeInitialize, if the class cound has stabilized,
+                // we do a full scan.
+                log.debug(s"New class (${ev.referenceType().name()}), counting it to await full scan when class count has stabilized.")
                 seenClassPrepareRequests += 1
               }
             case ev: ExceptionEvent if pausedData.isEmpty =>
@@ -596,9 +604,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       } else {
         considerReferenceType(refType, attemptsLeft)
       }
-    case x@PostponeInitialize =>
-
-      if (lastSeenClassPrepareRequests == seenClassPrepareRequests) doInitialize()
+    case PostponeInitialize =>
+      if (lastSeenClassPrepareRequests == seenClassPrepareRequests) scanClasses()
       else {
         lastSeenClassPrepareRequests = seenClassPrepareRequests
         retryInitLater()
@@ -1105,7 +1112,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   override def events: Observable[ScriptEvent] = new Observable[ScriptEvent] {
     override def subscribe(observer: Observer[ScriptEvent]): Subscription = {
       // Make sure the observer sees that we're initialized
-      if (isInitialized) {
+      if (hostInitializationComplete) {
         observer.onNext(InitialInitializationComplete)
       }
       eventSubject.subscribe(observer)
