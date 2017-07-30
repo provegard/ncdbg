@@ -2,7 +2,7 @@
 
 # Unreleased
 
-* More robust pause support.
+* More robust pause support (issue #51)
 
 # 0.5.1 (2017-07-18)
 

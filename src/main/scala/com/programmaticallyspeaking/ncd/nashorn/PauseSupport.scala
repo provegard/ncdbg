@@ -46,8 +46,11 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
   private def lineLocations(m: Method): Seq[Location] = Try(m.allLineLocations().asScala).getOrElse(Seq.empty)
 
   private def locationsForStackFrame(sf: StackFrame): Seq[Location] = {
-    val startLine = sf.location().lineNumber()
-    lineLocations(sf.location().method()).filter(_.lineNumber() > startLine)
+    // Use all locations since the current line/location may be inside a loop, i.e. execution can continue on a line
+    // before the current one. A possible optimization is to check if there are branch instructions in the byte codes
+    // and use subsequent or all locations depending on that, but it's more complex and I'm not sure it's worth the
+    // trouble.
+    lineLocations(sf.location().method())
   }
 
   private def setOneOffBreakpoint(location: Location) = {
