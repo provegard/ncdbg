@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.e2e
 
-import akka.actor.ActorRef
+import akka.actor.{ActorRef, PoisonPill}
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, EvaluateOnCallFrameResult, Location}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{CallArgument, RemoteObject}
 import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, Runtime => RuntimeD}
@@ -10,8 +10,7 @@ import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, SharedInstan
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
-import scala.concurrent.Future
-import scala.util.control.NonFatal
+import scala.concurrent.{Future, TimeoutException}
 
 class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting with ScalaFutures with IntegrationPatience with TableDrivenPropertyChecks {
 
@@ -444,6 +443,21 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     callFrames.headOption match {
       case Some(cf) => fun(cf)
       case None => fail("No call frames")
+    }
+  }
+
+  protected override def restart(): Unit = {
+    Option(debugger).foreach(_ ! PoisonPill)
+    debugger = null
+    super.restart()
+  }
+
+  protected override def runScript(script: String)(testers: Tester*): Unit = {
+    try super.runScript(script)(testers: _*) catch {
+      case ex: TimeoutException =>
+        // The VM may have entered an infinite loop, so we need a new starting point.
+        restart()
+        throw ex
     }
   }
 }

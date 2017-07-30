@@ -75,6 +75,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
   private val progress = new ConcurrentLinkedQueue[String]()
 
   private var logSubscription: Subscription = _
+  private var hostEventSubscription: Subscription = _
 
   protected val eventSubject = new SerializedSubject[ScriptEvent]
 
@@ -84,7 +85,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
   protected def summarizeProgress() = progress.asScala.mkString("\n")
   protected def clearProgress() = progress.clear()
 
-  override def beforeAllTests(): Unit = {
+  private def start(): Unit = {
     vm = launchVm()
     vmStdinWriter = new PrintWriter(new OutputStreamWriter(vm.process().getOutputStream()), true)
     val debugger = new NashornDebugger()
@@ -109,6 +110,25 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
     setupHost()
   }
 
+  private def stop(): Unit = {
+    clearProgress()
+    Option(vm).foreach(_.process().destroy())
+    Option(logSubscription).foreach(_.unsubscribe())
+    Option(vmStdinWriter).foreach(_.close())
+    Option(hostEventSubscription).foreach(_.unsubscribe())
+    vm = null
+    logSubscription = null
+    vmStdinWriter = null
+    hostEventSubscription = null
+  }
+
+  protected def restart(): Unit = {
+    stop()
+    start()
+  }
+
+  override def beforeAllTests(): Unit = start()
+
   protected def sendToVm(data: String, encodeBase64: Boolean = false): Unit = {
     val dataToSend = if (encodeBase64) StringUtils.toBase64(data) else data
     log.info("Sending to VM: " + dataToSend)
@@ -117,10 +137,12 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
 
   protected def setupHost(): Unit = {
     log.info("VM is running, setting up host")
-    host.events.subscribe(new Observer[ScriptEvent] {
-      override def onError(error: Throwable): Unit = vmRunningPromise.tryFailure(error)
+    // Capture to prevent completing an old promise during restart.
+    val capturedRunningPromise = vmRunningPromise
+    hostEventSubscription = host.events.subscribe(new Observer[ScriptEvent] {
+      override def onError(error: Throwable): Unit = capturedRunningPromise.tryFailure(error)
 
-      override def onComplete(): Unit = vmRunningPromise.tryFailure(new Exception("complete"))
+      override def onComplete(): Unit = capturedRunningPromise.tryFailure(new Exception("complete"))
 
       override def onNext(item: ScriptEvent): Unit = item match {
         case InitialInitializationComplete =>
@@ -136,9 +158,9 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
 
               // Resolve the promise on which we chain script execution in runScript. This means that any script execution
               // will wait until the infrastructure is ready.
-              vmRunningPromise.trySuccess(host)
+              capturedRunningPromise.trySuccess(host)
 
-            case Failure(t) => vmRunningPromise.tryFailure(t)
+            case Failure(t) => capturedRunningPromise.tryFailure(t)
           }
         case other =>
           log.debug("Dispatching to event observers: " + other)
@@ -148,10 +170,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
     host.pauseOnBreakpoints()
   }
 
-  override def afterAllTests(): Unit = {
-    vm.process().destroy()
-    Option(logSubscription).foreach(_.unsubscribe())
-  }
+  override def afterAllTests(): Unit = stop()
 
   protected def getHost = Option(host).getOrElse(throw new IllegalStateException("Host not set"))
 
