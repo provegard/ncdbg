@@ -1,5 +1,9 @@
 # Changelog
 
+# Unreleased
+
+* Properly pause on uncaught exceptions (issue #52)
+
 # 0.5.2 (2017-07-31)
 
 * More robust pause support (issue #51)
