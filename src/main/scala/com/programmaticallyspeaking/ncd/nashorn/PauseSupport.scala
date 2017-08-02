@@ -23,13 +23,18 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
     erm.deleteEventRequests(exceptionRequests.asJava)
     exceptionRequests.clear()
 
+    currentExceptionPauseType = pauseType
+
     val pauseOnCaught = pauseType == ExceptionPauseType.Caught || pauseType == ExceptionPauseType.All
-    // Note that uncaught is currently untested since our test setup doesn't really allow it.
     val pauseOnUncaught = pauseType == ExceptionPauseType.Uncaught || pauseType == ExceptionPauseType.All
 
     if (pauseOnCaught || pauseOnUncaught) {
       log.info(s"Will pause on exceptions (caught=$pauseOnCaught, uncaught=$pauseOnUncaught)")
-      val request = erm.createExceptionRequest(null, pauseOnCaught, pauseOnUncaught)
+      // Note that we want to pause on both caught and uncaught exceptions at all times, because we have
+      // a custom definition of what "uncaught" means, since Nashorn may create a Java adapter that catches and
+      // rethrows an exception.
+      //TODO: Add a script filter here!
+      val request = erm.createExceptionRequest(null, true, true)
       request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD) // TODO: Duplicate code
       request.setEnabled(true)
       exceptionRequests += request

@@ -93,11 +93,11 @@ trait ProfilingSupport extends ScriptHost { self: NashornDebuggerHost with Loggi
       try {
         //TODO: Should we include a native frame, e.g. inside NativeInt8Array?
         findActiveBreakpoint(location).map(ab => StackFrameImpl(stackframeId, null, Seq.empty, ab, null, functionDetails(functionMethod))) match {
-          case Some(sf) => StackFrameHolder(Some(sf))
-          case None => StackFrameHolder(None)
+          case Some(sf) => StackFrameHolder(Some(sf), location)
+          case None => StackFrameHolder(None, location)
         }
       } catch {
-        case _: AbsentInformationException => StackFrameHolder(None)
+        case _: AbsentInformationException => StackFrameHolder(None, location)
       }
     }
   }

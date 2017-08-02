@@ -437,6 +437,69 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
       })
     }
 
+    "should stop on an uncaught error (although it's caught and re-thrown in a Java adapter)" in {
+      enableDebugger
+      val script =
+        """debugger;
+          |var runf = function() {
+          |  throw "oops"; // stop here
+          |};
+          |var runiface = new java.lang.Runnable({run: runf});
+          |var thread = new java.lang.Thread(runiface);
+          |thread.start();
+          |thread.join();
+        """.stripMargin
+
+      runScript(script)(_ => {
+        sendRequest(Debugger setPauseOnExceptions "uncaught")
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (2)
+        }
+      })
+    }
+
+    "should stop on an caught error when a Java adapter is between the throw and catch locations" in {
+      enableDebugger
+      val script =
+        """debugger;
+          |var runf = function() {
+          |  throw "oops"; // stop here
+          |};
+          |var runiface = new java.lang.Runnable({run: runf});
+          |try {
+          |  runiface.run();
+          |} catch (e) {}
+        """.stripMargin
+
+      runScript(script)(_ => {
+        sendRequest(Debugger setPauseOnExceptions "all")
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (2)
+        }
+      })
+    }
+
+
+    "should ignore a caught error when pausing on uncaught ones" in {
+      enableDebugger
+      val script =
+        """debugger;
+          |try {
+          |  throw "oops";
+          |} catch (e) {}
+          |debugger;
+        """.stripMargin
+
+      runScript(script)(_ => {
+        sendRequest(Debugger setPauseOnExceptions "uncaught")
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (4)
+        }
+      })
+    }
   }
 
   private def withHead(callFrames: Seq[CallFrame])(fun: (CallFrame) => Unit) = {

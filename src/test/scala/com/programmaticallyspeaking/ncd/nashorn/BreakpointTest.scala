@@ -226,17 +226,6 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         }
       }
     }
-
-    "a caught (by ScriptExecutor) non-Error value should be detected" in {
-      val script =
-        """throw 42; // row 1
-          |if (false) debugger; // waitForBreakpoint requires it
-          """.stripMargin
-
-      waitForBreakpoint(script, _.pauseOnExceptions(ExceptionPauseType.Caught)) { (_, breakpoint) =>
-        breakpoint.stackFrames.headOption.map(_.breakpoint.location.lineNumber1Based) should be(Some(1))
-      }
-    }
   }
 
   "given a script with multiple breakable locations on the same line" - {

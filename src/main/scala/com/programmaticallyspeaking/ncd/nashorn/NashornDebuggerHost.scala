@@ -202,6 +202,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private var infoAboutLastStep: Option[StepLocationInfo] = None
 
+  protected var currentExceptionPauseType: ExceptionPauseType = ExceptionPauseType.None
+
   /**
     * Keeps track of the stack frame location for a given locals object that we have created to host local variable
     * values. This allows us to update local variables for the correct stack frame (based on its location). We cannot
@@ -527,6 +529,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     doResume
   }
 
+  private def catchLocationIsNative(frames: Seq[StackFrameHolder], catchLocation: Location): Boolean = {
+    val catchMethod = catchLocation.method()
+    val isScriptCatchLocation = frames.exists(f => f.location.method() == catchMethod && f.stackFrame.isDefined)
+    !isScriptCatchLocation
+  }
+
+  private def throwLocationIsScript(frames: Seq[StackFrameHolder]): Boolean = frames.headOption.flatMap(_.stackFrame).isDefined
+
   def handleOperation(eventQueueItem: NashornScriptOperation): Unit = eventQueueItem match {
     case NashornEventSet(es) if hasDeathOrDisconnectEvent(es) =>
       signalComplete()
@@ -571,8 +581,28 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
             case ev: ExceptionEvent if pausedData.isEmpty =>
               attemptToResolveSourceLessReferenceTypes()
 
-              val isECMAException = ev.exception().referenceType().name() == NIR_ECMAException
-              doResume = !isECMAException || handleBreakpoint(ev, pauseEvenIfBreakpointsAreDisabled = true)
+              val exceptionTypeName = ev.exception().referenceType().name()
+              val isECMAException = exceptionTypeName == NIR_ECMAException
+              if (isECMAException) {
+                // TODO: Move this code into PauseSupport...
+                val stackPredicate = { frames: Seq[StackFrameHolder] =>
+                  val throwingInScript = throwLocationIsScript(frames)
+                  if (throwingInScript) {
+                    // If there is no catch location, we know this is an uncaught exception.
+                    // If there is a catch location but no script frames beyond the current frame, then assume the catch
+                    // location is in native code and treat the exception as effectively uncaught.
+                    val isUncaught = ev.catchLocation() == null || catchLocationIsNative(frames, ev.catchLocation())
+                    val caughtStr = if (isUncaught) "uncaught" else "caught"
+                    val pauseOnCaught = currentExceptionPauseType == ExceptionPauseType.Caught || currentExceptionPauseType == ExceptionPauseType.All
+                    val pauseOnUncaught = currentExceptionPauseType == ExceptionPauseType.Uncaught || currentExceptionPauseType == ExceptionPauseType.All
+                    val catchIt = (isUncaught && pauseOnUncaught) || (!isUncaught && pauseOnCaught)
+                    log.debug(s"Exception $exceptionTypeName is $caughtStr; pausing on caught: $pauseOnCaught, uncaught: $pauseOnUncaught")
+                    if (catchIt) None
+                    else Some(s"the exception is $caughtStr and we're not pausing on that kind")
+                  } else Some("the exception is thrown in a non-script frame")
+                }
+                doResume = handleBreakpoint(ev, pauseEvenIfBreakpointsAreDisabled = true, stackPredicate)
+              }
 
             case _: VMStartEvent =>
               // ignore it, but don't log a warning
@@ -905,18 +935,18 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
             try {
               findActiveBreakpoint(location).map(ab => StackFrameImpl(stackframeId, thisObj, scopeChain, ab, evaluateCodeOnFrame, functionDetails(functionMethod))) match {
-                case Some(sf) => StackFrameHolder(Some(sf))
+                case Some(sf) => StackFrameHolder(Some(sf), location)
                 case None =>
                   log.warn(s"Won't create a stack frame for location ($location) since we don't recognize it.")
-                  StackFrameHolder(None)
+                  StackFrameHolder(None, location)
               }
             } catch {
               case ex: AbsentInformationException =>
                 log.warn(s"Won't create a stack frame for location ($location) since there's no source information.")
-                StackFrameHolder(None)
+                StackFrameHolder(None, location)
             }
           case _ =>
-            StackFrameHolder(None, Some(location))
+            StackFrameHolder(None, location)
         }
 
     }
@@ -978,7 +1008,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def handleBreakpoint(ev: LocatableEvent, pauseEvenIfBreakpointsAreDisabled: Boolean = false): Boolean = {
+  private def handleBreakpoint(ev: LocatableEvent, pauseEvenIfBreakpointsAreDisabled: Boolean = false, stackPredicate: Seq[StackFrameHolder] => Option[String] = _ => None): Boolean = {
     def ignoreIt(reason: String) = {
       log.debug(s"Ignoring breakpoint at ${ev.location()} because $reason.")
       true
@@ -1003,6 +1033,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     implicit val marshaller = createMarshaller()
 
     val stackFrames = captureStackFrames(thread)
+    stackPredicate(stackFrames) match {
+      case Some(ignoreReason) => return ignoreIt(ignoreReason)
+      case None =>
+    }
+
     stackFrames.headOption match {
       case Some(holder) if holder.stackFrame.isEmpty && !holder.mayBeAtSpecialStatement =>
         // First/top stack frame doesn't belong to a script. Resume!
@@ -1054,7 +1089,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
         }
         conditionIsTrue
       case None =>
-        throw new IllegalStateException("Unexpected - no stack frame head")
+        log.debug("Not pausing because there are no stack frames")
+        false
     }
   }
 
@@ -1377,9 +1413,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     val breakpoint = activeBreakpoint.toBreakpoint
   }
 
-  case class StackFrameHolder(stackFrame: Option[StackFrame], location: Option[Location] = None) {
-    val mayBeAtSpecialStatement = location.isDefined
-    val isAtDebuggerStatement = location.exists(isDebuggerStatementLocation)
+  case class StackFrameHolder(stackFrame: Option[StackFrame], location: Location) {
+    val mayBeAtSpecialStatement = stackFrame.isEmpty
+    val isAtDebuggerStatement = isDebuggerStatementLocation(location)
   }
 }
 
