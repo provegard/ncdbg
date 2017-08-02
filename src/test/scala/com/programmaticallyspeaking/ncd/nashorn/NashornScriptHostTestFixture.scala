@@ -40,6 +40,7 @@ trait FairAmountOfPatience extends AbstractPatienceConfiguration { this: Patienc
 object Signals {
   val go = "go"
   val ready = "ready"
+  val scriptDone = "script_done"
 }
 
 trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
@@ -52,6 +53,8 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
     if (output == Signals.ready) {
       log.info("Got the ready signal from the VM")
       vmReadyPromise.success(())
+    } else if (output == Signals.scriptDone) {
+      vmScriptDonePromise.success(())
     } else {
       log.info("VM output: " + output)
     }
@@ -63,6 +66,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
   implicit val executionContext: ExecutionContext
 
   val resultTimeout: FiniteDuration = 12.seconds
+  val scriptDoneTimeout: FiniteDuration = 5.seconds
 
   private var vm: VirtualMachine = _
   private var host: NashornScriptHost = _
@@ -70,6 +74,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
   private var vmStdinWriter: PrintWriter = _
   protected var vmRunningPromise: Promise[NashornScriptHost] = _
   protected var vmReadyPromise: Promise[Unit] = _
+  protected var vmScriptDonePromise: Promise[Unit] = _
 
   // Tracks progress for better timeout failure reporting
   private val progress = new ConcurrentLinkedQueue[String]()
@@ -248,6 +253,9 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
       case _: TimeoutException => throw new TimeoutException("Timed out waiting for the VM to start running. Progress:\n" + summarizeProgress())
     }
 
+    // This promise is resolved when we observe that the VM is done with script execution.
+    vmScriptDonePromise = Promise[Unit]()
+
     clearProgress() // New progress for each test.
     log.info(">>>>>> TEST START")
     log.info("VM running, sending script")
@@ -259,6 +267,11 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
     } finally {
       // getHost may throw if the host isn't set
       Try(getHost.resume())
+    }
+
+    try Await.result(vmScriptDonePromise.future, scriptDoneTimeout) catch {
+      case _: TimeoutException =>
+        throw new TimeoutException("VM script execution didn't finish")
     }
   }
 
@@ -308,6 +321,7 @@ object ScriptExecutor extends App with ScriptExecutorBase {
       case NonFatal(t) =>
         t.printStackTrace(System.err)
     }
+    println(Signals.scriptDone)
   }
 }
 
