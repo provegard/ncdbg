@@ -12,8 +12,8 @@ class StepTest extends StepTestFixture {
             |debugger;
             |x = x + 1;
           """.stripMargin
-        stepInScript(script, Seq(StepOver)) { bp =>
-          bp.location.lineNumber1Based should be(3)
+        stepInScript(script, Seq(StepOver)) { location =>
+          location.lineNumber1Based should be(3)
         }
       }
 
@@ -25,8 +25,8 @@ class StepTest extends StepTestFixture {
             |fun();
             |fun.toString();
           """.stripMargin
-        stepInScript(script, Seq(StepOver)) { bp =>
-          bp.location.lineNumber1Based should be (5)
+        stepInScript(script, Seq(StepOver)) { location =>
+          location.lineNumber1Based should be (5)
         }
       }
 
@@ -42,8 +42,8 @@ class StepTest extends StepTestFixture {
             |bar();
             |bar.toString();
           """.stripMargin
-        stepInScript(script, Seq(StepOver, StepOver)) { bp =>
-          bp.location.lineNumber1Based should be (9)
+        stepInScript(script, Seq(StepOver, StepOver)) { location =>
+          location.lineNumber1Based should be (9)
         }
       }
 
@@ -56,8 +56,8 @@ class StepTest extends StepTestFixture {
             |fun();
             |fun.toString();
           """.stripMargin
-        stepInScript(script, Seq(StepOver, StepOver)) { bp =>
-          bp.location.lineNumber1Based should be (6)
+        stepInScript(script, Seq(StepOver, StepOver)) { location =>
+          location.lineNumber1Based should be (6)
         }
       }
 
@@ -72,8 +72,8 @@ class StepTest extends StepTestFixture {
           """.stripMargin
 
         "jumps back to the loop condition after the body" in {
-          stepInScript(script, Seq(StepOver, StepOver, StepOver)) { bp =>
-            bp.location.lineNumber1Based should be (3)
+          stepInScript(script, Seq(StepOver, StepOver, StepOver)) { location =>
+            location.lineNumber1Based should be (3)
           }
         }
       }
@@ -89,8 +89,8 @@ class StepTest extends StepTestFixture {
             |fun();
             |fun.toString();
           """.stripMargin
-        stepInScript(script, Seq(StepOut)) { bp =>
-          bp.location.lineNumber1Based should be (5)
+        stepInScript(script, Seq(StepOut)) { location =>
+          location.lineNumber1Based should be (5)
         }
       }
 
@@ -103,8 +103,8 @@ class StepTest extends StepTestFixture {
             |fun();
             |fun.toString();
           """.stripMargin
-        stepInScript(script, Seq(StepOut)) { bp =>
-          bp.location.lineNumber1Based should be (6)
+        stepInScript(script, Seq(StepOut)) { location =>
+          location.lineNumber1Based should be (6)
         }
       }
 
@@ -117,8 +117,8 @@ class StepTest extends StepTestFixture {
             |fun();
             |fun.toString();
           """.stripMargin
-        stepInScript(script, Seq(StepOver, StepOut)) { bp =>
-          bp.location.lineNumber1Based should be (6)
+        stepInScript(script, Seq(StepOver, StepOut)) { location =>
+          location.lineNumber1Based should be (6)
         }
       }
 
@@ -132,8 +132,8 @@ class StepTest extends StepTestFixture {
             |fun();
             |fun.toString();
           """.stripMargin
-        stepInScript(script, Seq(StepOver, StepOut)) { bp =>
-          bp.location.lineNumber1Based should be (7)
+        stepInScript(script, Seq(StepOver, StepOut)) { location =>
+          location.lineNumber1Based should be (7)
         }
       }
     }
@@ -148,8 +148,8 @@ class StepTest extends StepTestFixture {
             |debugger;
             |fun();
           """.stripMargin
-        stepInScript(script, Seq(StepOver, StepInto)) { bp =>
-          bp.location.lineNumber1Based should be (2)
+        stepInScript(script, Seq(StepOver, StepInto)) { location =>
+          location.lineNumber1Based should be (2)
         }
       }
 
@@ -163,8 +163,8 @@ class StepTest extends StepTestFixture {
             |var f = fun;
             |f();
           """.stripMargin
-        stepInScript(script, Seq(StepOver, StepOver, StepInto)) { bp =>
-          bp.location.lineNumber1Based should be (2)
+        stepInScript(script, Seq(StepOver, StepOver, StepInto)) { location =>
+          location.lineNumber1Based should be (2)
         }
       }
     }

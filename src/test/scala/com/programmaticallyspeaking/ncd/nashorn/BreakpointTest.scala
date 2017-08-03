@@ -117,7 +117,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
           |})();
         """.stripMargin
       waitForBreakpoint(script) { (_, breakpoint) =>
-        breakpoint.stackFrames.headOption.flatMap(_.breakpoint.location.columnNumber1Based) should be (Some(5))
+        breakpoint.stackFrames.headOption.flatMap(_.location.columnNumber1Based) should be (Some(5))
       }
     }
 
@@ -222,7 +222,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
            """.stripMargin
 
         waitForBreakpoint(script, _.pauseOnExceptions(ExceptionPauseType.Caught)) { (_, breakpoint) =>
-          breakpoint.stackFrames.headOption.map(_.breakpoint.location.lineNumber1Based) should be(Some(2))
+          breakpoint.stackFrames.headOption.map(_.location.lineNumber1Based) should be(Some(2))
         }
       }
     }
@@ -253,7 +253,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     def testSetBreakpoint(line: Int, col: Option[Int])(handler: (Option[Breakpoint]) => Unit): Unit = {
       val donePromise = Promise[Unit]()
       val observer = createObserver { data =>
-        val scriptId = data.bp.stackFrames.head.breakpoint.scriptId
+        val scriptId = data.bp.stackFrames.head.scriptId
         val maybeBreakpoint = for {
           s <- getHost.findScript(ScriptIdentity.fromId(scriptId))
           bp <- getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(line, col), None)
@@ -291,8 +291,8 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
       val donePromise = Promise[Unit]()
       val breakpointIds = ListBuffer[String]()
       val observer = createObserver { data =>
-        val scriptId = data.bp.stackFrames.head.breakpoint.scriptId
-        val breakpointId = data.bp.stackFrames.head.breakpoint.breakpointId
+        val scriptId = data.bp.stackFrames.head.scriptId
+        val breakpointId = data.bp.breakpointId
 
         if (data.hitsSoFar == 1) {
           // debugger

@@ -12,9 +12,9 @@ class StepTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
-  protected def stepInScript(script: String, stepTypes: Seq[StepType])(tester: (Breakpoint) => Unit): Unit = {
+  protected def stepInScript(script: String, stepTypes: Seq[StepType])(tester: (ScriptLocation) => Unit): Unit = {
     assert(script.contains("debugger;"), "Script must contain a 'debugger' statement")
-    val breakpointPromise = Promise[Breakpoint]()
+    val locationPromise = Promise[ScriptLocation]()
     val stepQueue = mutable.Queue(stepTypes: _*)
     val observer = new Observer[ScriptEvent] {
       override def onNext(item: ScriptEvent): Unit = item match {
@@ -25,14 +25,14 @@ class StepTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
         case bp: HitBreakpoint =>
           bp.stackFrames.headOption match {
-            case Some(sf) => breakpointPromise.trySuccess(sf.breakpoint)
-            case None => breakpointPromise.tryFailure(new Exception("No stack frame"))
+            case Some(sf) => locationPromise.trySuccess(sf.location)
+            case None => locationPromise.tryFailure(new Exception("No stack frame"))
           }
 
         case _ => // ignore
       }
 
-      override def onError(error: Throwable): Unit = breakpointPromise.tryFailure(error)
+      override def onError(error: Throwable): Unit = locationPromise.tryFailure(error)
 
       override def onComplete(): Unit = {}
     }
@@ -42,7 +42,7 @@ class StepTestFixture extends UnitTest with NashornScriptHostTestFixture {
          |'dummy';
        """.stripMargin
     observeAndRunScriptAsync(wrapper, observer) { host =>
-      breakpointPromise.future.map(breakpoint => {
+      locationPromise.future.map(breakpoint => {
         tester(breakpoint)
       })
     }

@@ -279,11 +279,13 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     }
 
     "HitBreakpoint handling" - {
+      val aScriptURL = ScriptURL.create("http://programmaticallyspeaking.com/test.js")
+
       def simulateHitBreakpoint(stackFrames: Seq[StackFrame]): Messages.Event = {
         val debugger = newActorInstance[Debugger]
 
         receiveScriptEventTriggeredEvent(debugger, Seq(Messages.Request("1", Domain.enable)),
-          Seq(HitBreakpoint(stackFrames))
+          Seq(HitBreakpoint(stackFrames, "dummy"))
         )
       }
       def getEventParams(ev: Messages.Event): PausedEventParams = ev.params match {
@@ -304,7 +306,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
           val thisObj = objectWithId("$$this")
           val scopeObjectId = ObjectId("$$scope")
           val scopeObj = ObjectNode("Object", scopeObjectId)
-          val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), Breakpoint("bp1", "a", None, Seq(location(10))), "fun")
+          val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, scopeType)), "a", aScriptURL, location(10), "fun")
           val ev = simulateHitBreakpoint(Seq(stackFrame))
           val params = getEventParams(ev)
 
@@ -320,7 +322,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       "with a scope object" - {
         val thisObj = objectWithId("$$this")
         val scopeObj = objectWithId("$$scope")
-        val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), Breakpoint("bp1", "a", None, Seq(location(10))), "fun")
+        val stackFrame = createStackFrame("sf1", thisObj, Some(Scope(scopeObj, ScopeType.Closure)), "a", aScriptURL, location(10), "fun")
 
         "should result in a Debugger.paused event" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
@@ -355,7 +357,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       "without scopes" - {
         val thisObj = objectWithId("$$this")
-        val stackFrame = createStackFrame("sf1", thisObj, None, Breakpoint("bp1", "a", None, Seq(location(10))), "fun")
+        val stackFrame = createStackFrame("sf1", thisObj, None, "a", aScriptURL, location(10), "fun")
 
         "should not have a scopes in the event params" in {
           val ev = simulateHitBreakpoint(Seq(stackFrame))
@@ -546,12 +548,14 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     host
   }
 
-  def createStackFrame(Aid: String, AthisObj: ValueNode, scope: Option[Scope], Abreakpoint: Breakpoint, functionName: String) = new StackFrame {
-    override val breakpoint: Breakpoint = Abreakpoint
+  def createStackFrame(Aid: String, AthisObj: ValueNode, scope: Option[Scope], aScriptId: String, aScriptURL: ScriptURL, aLocation: ScriptLocation, functionName: String) = new StackFrame {
     override val thisObj: ValueNode = AthisObj
     override val scopeChain = scope.toSeq
     override val id: String = Aid
     override val functionDetails: FunctionDetails = FunctionDetails(functionName)
+    override val scriptId: String = aScriptId
+    override val scriptURL: ScriptURL = aScriptURL
+    override val location: ScriptLocation = aLocation
   }
 }
 

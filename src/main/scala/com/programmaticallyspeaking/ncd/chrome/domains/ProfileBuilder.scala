@@ -45,9 +45,9 @@ object ProfileBuilder {
     }
 
     private def stackFrameToCallFrame(sf: StackFrame): Runtime.CallFrame = {
-      val headLocation = sf.breakpoint.locations.head
-      Runtime.CallFrame(sf.functionDetails.name, sf.breakpoint.scriptId,
-        sf.breakpoint.scriptURL.map(_.toString).getOrElse(""),
+      val headLocation = sf.location
+      Runtime.CallFrame(sf.functionDetails.name, sf.scriptId,
+        sf.scriptURL.toString,
         headLocation.lineNumber1Based - 1,
         headLocation.columnNumber1Based.map(_ - 1))
     }

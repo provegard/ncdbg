@@ -7,12 +7,14 @@ import com.programmaticallyspeaking.ncd.testing.UnitTest
 
 trait ProfilerTesting {
   def emptyRootNode = ProfileNode(1, Runtime.CallFrame("(root)", "0", "", -1, Some(-1)), 0, Seq.empty)
-  def createStackFrame(scriptId: String, url: String, functionName: String, lineNo1: Int, colNo1: Int) = new StackFrame {
+  def createStackFrame(aScriptId: String, url: String, functionName: String, lineNo1: Int, colNo1: Int) = new StackFrame {
     override val functionDetails: FunctionDetails = FunctionDetails(functionName)
     override val scopeChain: Seq[Scope] = Seq.empty
-    override val breakpoint: Breakpoint = Breakpoint("xx", scriptId, Some(ScriptURL.create(url)), Seq(ScriptLocation(lineNo1, Some(colNo1))))
-    override val id: String = scriptId
+    override val id: String = aScriptId
     override val thisObj: ValueNode = null
+    override val scriptId: String = aScriptId
+    override val scriptURL: ScriptURL = ScriptURL.create(url)
+    override val location: ScriptLocation = ScriptLocation(lineNo1, Some(colNo1))
   }
 }
 

@@ -370,21 +370,21 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
       val scopes = sf.scopeChain.map(s => Scope(scopeType(s), toRemoteObject(s.value)))
       val thisObj = toRemoteObject(sf.thisObj)
       // Reuse stack frame ID as call frame ID so that mapping is easier when we talk to the debugger
-      val headLocation = sf.breakpoint.locations.head
-      CallFrame(sf.id, Location(sf.breakpoint.scriptId, headLocation.lineNumber1Based - 1, headLocation.columnNumber1Based.map(_ - 1)), scopes, thisObj, sf.functionDetails.name)
+      val headLocation = sf.location
+      CallFrame(sf.id, Location(sf.scriptId, headLocation.lineNumber1Based - 1, headLocation.columnNumber1Based.map(_ - 1)), scopes, thisObj, sf.functionDetails.name)
     }
   }
 
   private def pauseBasedOnBreakpoint(hitBreakpoint: HitBreakpoint): Option[String] = {
-    val callFrames = stackFramesToCallFrames(hitBreakpoint.stackFrames)
     hitBreakpoint.stackFrames.headOption match {
-      case Some(sf) =>
+      case Some(_) =>
         // Call frames are saved to be used with setVariableValue.
+        val callFrames = stackFramesToCallFrames(hitBreakpoint.stackFrames)
         lastCallFrameList = Some(callFrames)
         
-        val params = PausedEventParams(callFrames, "other", Seq(sf.breakpoint.breakpointId))
+        val params = PausedEventParams(callFrames, "other", Seq(hitBreakpoint.breakpointId))
         emitEvent("Debugger.paused", params)
-        Some(sf.breakpoint.breakpointId)
+        Some(hitBreakpoint.breakpointId)
 
       case None =>
         log.warn("Unexpected! Got a HitBreakpoint without stack frames!")

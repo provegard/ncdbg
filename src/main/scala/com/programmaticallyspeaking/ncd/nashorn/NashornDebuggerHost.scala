@@ -172,10 +172,13 @@ object NashornDebuggerHost {
   type EventHandler = (Event) => Unit
 
   case class StackFrameImpl(id: String, thisObj: ValueNode, scopeChain: Seq[Scope],
-                            activeBreakpoint: ActiveBreakpoint,
+                            breakableLocation: BreakableLocation,
                             eval: CodeEvaluator,
                             functionDetails: FunctionDetails) extends StackFrame {
-    val breakpoint = activeBreakpoint.toBreakpoint
+    val scriptId = breakableLocation.script.id
+    val scriptURL = breakableLocation.script.url
+    val location = breakableLocation.scriptLocation
+    val nativeLocation = breakableLocation.location
   }
 
   case class StackFrameHolder(stackFrame: Option[StackFrame], location: Location) {
@@ -947,7 +950,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
             }
 
             try {
-              findActiveBreakpoint(location).map(ab => StackFrameImpl(stackframeId, thisObj, scopeChain, ab, evaluateCodeOnFrame, functionDetails(functionMethod))) match {
+              findBreakableLocation(location).map(bl => StackFrameImpl(stackframeId, thisObj, scopeChain, bl, evaluateCodeOnFrame, functionDetails(functionMethod))) match {
                 case Some(sf) => StackFrameHolder(Some(sf), location)
                 case None =>
                   log.warn(s"Won't create a stack frame for location ($location) since we don't recognize it.")
@@ -1069,16 +1072,18 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame], atDebugger: Boolean)(implicit marshaller: Marshaller): Boolean = {
     stackFrames.headOption.collect { case sf: StackFrameImpl => sf } match {
       case Some(topStackFrame) =>
-        val breakpoint = topStackFrame.breakpoint
+        val scriptId = topStackFrame.scriptId
+        val activeBreakpoint = getActiveBreakpoint(topStackFrame.breakableLocation)
+        val breakpointId = activeBreakpoint.id
 
         // Check condition if we have one. We cannot do this until now (which means that a conditional breakpoint
         // will be slow) because we need stack frames and locals to be setup for code evaluation.
-        val conditionIsTrue = topStackFrame.activeBreakpoint.condition match {
+        val conditionIsTrue = activeBreakpoint.condition match {
           case Some(c) =>
             topStackFrame.eval(c, Map.empty) match {
               case SimpleValue(true) => true
               case SimpleValue(false) =>
-                log.trace(s"Not pausing on breakpoint ${breakpoint.breakpointId} in script ${breakpoint.scriptId} since the condition ($c) evaluated to false.")
+                log.trace(s"Not pausing on breakpoint $breakpointId in script $scriptId since the condition ($c) evaluated to false.")
                 false
               case other =>
                 log.warn(s"Condition $c resulted in unexpected value $other, will pause.")
@@ -1092,12 +1097,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           // Indicate that we're paused
           pausedData = Some(new PausedData(thread, stackFrames, marshaller, atDebugger))
 
-          findScript(ScriptIdentity.fromId(breakpoint.scriptId)).foreach { s =>
-            val line = s.sourceLine(breakpoint.location.lineNumber1Based).getOrElse("<unknown line>")
-            log.info(s"Pausing at ${s.url}:${breakpoint.location.lineNumber1Based}: $line")
+          findScript(ScriptIdentity.fromId(scriptId)).foreach { s =>
+            val location = topStackFrame.location
+            val line = s.sourceLine(location.lineNumber1Based).getOrElse("<unknown line>")
+            log.info(s"Pausing at ${s.url}:${location.lineNumber1Based}: $line")
           }
 
-          val hitBreakpoint = HitBreakpoint(stackFrames)
+          val hitBreakpoint = HitBreakpoint(stackFrames, breakpointId)
           emitEvent(hitBreakpoint)
         }
         conditionIsTrue
@@ -1171,7 +1177,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def findBreakableLocation(location: Location): Option[BreakableLocation] = {
+  protected def findBreakableLocation(location: Location): Option[BreakableLocation] = {
     scriptByPath.get(scriptPathFromLocation(location)).flatMap { script =>
       // We cannot compare locations directly because the passed-in Location may have a code index that is
       // different from the one stored in a BreakableLocation - so do a line comparison.
@@ -1185,11 +1191,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   }
 
   protected def findActiveBreakpoint(location: Location): Option[ActiveBreakpoint] = {
-    findBreakableLocation(location).map { bl =>
-      enabledBreakpoints.values.find(_.contains(bl)) match {
-        case Some(ab) => ab // existing active breakpoint
-        case None => ActiveBreakpoint(breakpointIdGenerator.next, Seq(bl), None) // temporary breakpoint (e.g. debugger statement)
-      }
+    findBreakableLocation(location).map(getActiveBreakpoint)
+  }
+
+  private def getActiveBreakpoint(bl: BreakableLocation): ActiveBreakpoint = {
+    enabledBreakpoints.values.find(_.contains(bl)) match {
+      case Some(ab) => ab // existing active breakpoint
+      case None => ActiveBreakpoint(breakpointIdGenerator.next, Seq(bl), None) // temporary breakpoint (e.g. debugger statement)
     }
   }
 
@@ -1388,7 +1396,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
         // Get the Location of the stack frame to pop
         pd.stackFrames.find(_.id == stackFrameId) match {
           case Some(sf: StackFrameImpl) =>
-            val location = sf.activeBreakpoint.firstBreakableLocation.location // ew
+            val location = sf.nativeLocation
 
             // Now get the current stack frame list and identify the correct target. This is needed since the old
             // stack frame list isn't valid anymore (due to thread resume due to marshalling).
