@@ -16,6 +16,7 @@ case class OngoingProfiling(schedule: ScheduledFuture[_], samples: ListBuffer[Sa
 
 trait ProfilingSupport extends ScriptHost { self: NashornDebuggerHost with Logging =>
   import scala.collection.JavaConverters._
+  import NashornDebuggerHost._
 
   private var profiling: Option[OngoingProfiling] = None
   private lazy val profilingExecutor = Executors.newSingleThreadScheduledExecutor()

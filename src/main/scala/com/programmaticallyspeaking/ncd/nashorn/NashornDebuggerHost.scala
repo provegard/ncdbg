@@ -170,6 +170,23 @@ object NashornDebuggerHost {
     * The type of a handler for an event associated with an event request.
     */
   type EventHandler = (Event) => Unit
+
+  case class StackFrameImpl(id: String, thisObj: ValueNode, scopeChain: Seq[Scope],
+                            activeBreakpoint: ActiveBreakpoint,
+                            eval: CodeEvaluator,
+                            functionDetails: FunctionDetails) extends StackFrame {
+    val breakpoint = activeBreakpoint.toBreakpoint
+  }
+
+  case class StackFrameHolder(stackFrame: Option[StackFrame], location: Location) {
+    val mayBeAtSpecialStatement = stackFrame.isEmpty
+    val isAtDebuggerStatement = isDebuggerStatementLocation(location)
+  }
+
+  // Determines if the location is in ScriptRuntime.DEBUGGER.
+  private def isDebuggerStatementLocation(loc: Location) =
+    loc.declaringType().name() == NIR_ScriptRuntime && loc.method().name() == ScriptRuntime_DEBUGGER
+
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
@@ -777,10 +794,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
         throw new IllegalStateException("The Context type wasn't found, cannot evaluate code.")
     }
   }
-
-  // Determines if the location is in ScriptRuntime.DEBUGGER.
-  private def isDebuggerStatementLocation(loc: Location) =
-    loc.declaringType().name() == NIR_ScriptRuntime && loc.method().name() == ScriptRuntime_DEBUGGER
 
   private def scopeTypeFromValueType(value: Value): ScopeType = {
     val typeName = value.`type`().name()
@@ -1404,18 +1417,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       case None =>
         throw new IllegalStateException("Frame restart can only be done in a paused state.")
     }
-  }
-
-  case class StackFrameImpl(id: String, thisObj: ValueNode, scopeChain: Seq[Scope],
-                            activeBreakpoint: ActiveBreakpoint,
-                            eval: CodeEvaluator,
-                            functionDetails: FunctionDetails) extends StackFrame {
-    val breakpoint = activeBreakpoint.toBreakpoint
-  }
-
-  case class StackFrameHolder(stackFrame: Option[StackFrame], location: Location) {
-    val mayBeAtSpecialStatement = stackFrame.isEmpty
-    val isAtDebuggerStatement = isDebuggerStatementLocation(location)
   }
 }
 
