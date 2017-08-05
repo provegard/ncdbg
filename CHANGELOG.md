@@ -3,6 +3,7 @@
 # Unreleased
 
 * Properly pause on uncaught exceptions (issue #52)
+* Fix variable setting when stack contains recusion (issue #53)
 
 # 0.5.2 (2017-07-31)
 

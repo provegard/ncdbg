@@ -308,8 +308,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
 
           val expression = s"$scopeName['$varName']=$newValueName;"
 
-          // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
-          evaluate(scriptHost, "$top", expression, namedObjects.result, true).exceptionDetails match {
+          evaluate(scriptHost, callFrameId, expression, namedObjects.result, reportException = true).exceptionDetails match {
             case Some(details) =>
               val location = details.url.map(u => " (at " + Seq(u, details.lineNumber.toString, details.columnNumber.toString).mkString(":") + ")").getOrElse("")
               throw new IllegalArgumentException(details.text + location)

@@ -9,6 +9,8 @@ import org.slf4s.Logging
 import scala.util.{Failure, Success}
 
 trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerHost with Logging =>
+  import NashornDebuggerHost._
+
   private var maybeScriptBasedPropertyHolderFactory: Option[ScriptBasedPropertyHolderFactory] = None
   private var objectPropertiesCacheEnabled = true
 
@@ -40,7 +42,7 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
 
           // In addition, the node may contain extra entries that typically do not come from Nashorn. One example is
           // the Java stack we add if we detect a Java exception.
-          val extraProps = desc.extras.map(e => {
+          val extraProps = desc.extras.filterNot(_._1.startsWith(hiddenPrefix)).map(e => {
             e._1 -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true, isWritable = false,
               isOwn = true, Some(e._2), None, None)
           })

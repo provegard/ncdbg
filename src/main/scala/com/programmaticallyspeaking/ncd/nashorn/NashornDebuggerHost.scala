@@ -136,6 +136,7 @@ object NashornDebuggerHost {
   val hiddenPrefixEscapedForUseInJavaScriptRegExp = "[|][|]"
 
   val localScopeObjectIdPrefix = "$$locals-"
+  val stackFrameIndexExtraProp = hiddenPrefix + "stackIndex"
 
   case class ObjectDescriptor(native: Option[Value], marshalled: ComplexNode, extras: Map[String, ValueNode])
 
@@ -223,13 +224,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   private var infoAboutLastStep: Option[StepLocationInfo] = None
 
   protected var currentExceptionPauseType: ExceptionPauseType = ExceptionPauseType.None
-
-  /**
-    * Keeps track of the stack frame location for a given locals object that we have created to host local variable
-    * values. This allows us to update local variables for the correct stack frame (based on its location). We cannot
-    * store stack frame, because stack frames are invalidates on thread resume, i.e. on code evaluation.
-    */
-  private val locationForLocals = mutable.Map[ObjectId, Location]()
 
   private val mappingRegistry: MappingRegistry = (value: Value, valueNode: ComplexNode, extra: Map[String, ValueNode]) => {
     objectDescriptorById += valueNode.objectId -> ObjectDescriptor(Option(value), valueNode, extra)
@@ -876,8 +870,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private def buildStackFramesSequence(perStackFrame: Seq[(Map[String, Value], Location)])(implicit marshaller: Marshaller): Seq[StackFrameHolder] = {
     implicit val thread: ThreadReference = marshaller.thread
-    perStackFrame.map {
-      case (values, location) =>
+    perStackFrame.zipWithIndex.map {
+      case ((values, location), stackIndex) =>
         val functionMethod = location.method()
 
         // Generate an ID for the stack frame so that we can find it later when asked to evaluate code for a
@@ -908,17 +902,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
             // Create an artificial object node to hold the locals. Note that the object ID must be unique per stack
             // since we store object nodes in a map.
-            val locals = localValues.map(e => e._1 -> marshaller.marshal(e._2))
-            val localNode = if (locals.nonEmpty) {
+            val localNode = if (localValues.nonEmpty) {
+              //val locals = localValues.map(e => e._1 -> marshaller.marshal(e._2))
               val objectId = ObjectId(localScopeObjectIdPrefix + stackframeId)
               val node = ObjectNode("Object", objectId)
 
               // Note: Don't register locals as extra properties, since they will shadow the real properties on the
               // local scope object.
-              mappingRegistry.register(localScope, node, Map.empty)
-
-              // Track location (of the stack frame), so that we can update locals later on
-              locationForLocals += objectId -> location
+              // Store stack index so that we know which stack frame to update local variables on later.
+              mappingRegistry.register(localScope, node, Map(stackFrameIndexExtraProp -> SimpleValue(stackIndex)))
 
               Some(node)
             } else None
@@ -1042,8 +1034,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
     // Start with a fresh object registry
     objectDescriptorById.clear()
-
-    locationForLocals.clear()
 
     // Shared marshaller
     implicit val marshaller = createMarshaller()
@@ -1319,7 +1309,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   private def typeNameLooksPrimitive(typeName: String) = typeName.indexOf('.') < 0
 
   private def updateChangedLocals(sf: StackFrameImpl, namedValues: Map[String, AnyRef], namedObjects: Map[String, ObjectId])(implicit marshaller: Marshaller): Unit = {
-    def jdiStackFrameForObject(id: ObjectId) = locationForLocals.get(id).flatMap(jdiStackFrameFromLocation(marshaller.thread))
+    def jdiStackFrameForObject(id: ObjectId) =
+      objectDescriptorById.get(id).flatMap(_.extras.get(stackFrameIndexExtraProp)).flatMap(_.as[Number]).map(n => marshaller.thread.frame(n.intValue()))
 
     // Note: namedValues is created from namedObjects, so we access namedObjects directly (not via get)
     namedValues.map(e => (e._1, e._2, namedObjects(e._1))).foreach {
@@ -1380,9 +1371,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       case other => Left("Not a marshalled array: " + other)
     }
   }
-
-  private def jdiStackFrameFromLocation(thread: ThreadReference)(loc: Location) =
-    thread.frames().asScala.find(_.location() == loc)
 
   private def findStackFrame(pausedData: PausedData, id: String): Option[StackFrame] = {
     if (id == "$top") return pausedData.stackFrames.headOption
