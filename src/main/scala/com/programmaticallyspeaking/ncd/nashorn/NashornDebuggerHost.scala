@@ -568,10 +568,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           }
 
           ev match {
-            case ev: MethodEntryEvent =>
+            case ev: MethodEntryEvent if pausedData.isEmpty =>
               doResume = handleStepOrMethodEntryEvent(ev)
 
-            case ev: StepEvent =>
+            case ev: StepEvent if pausedData.isEmpty =>
               doResume = handleStepOrMethodEntryEvent(ev)
 
             case ev: BreakpointEvent if pausedData.isEmpty =>
