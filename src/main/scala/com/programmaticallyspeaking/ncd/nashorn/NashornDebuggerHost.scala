@@ -6,6 +6,7 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, Undefined}
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
+import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{ObjectPropertiesKey, StackFrameHolder}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
 import com.sun.jdi.request.{BreakpointRequest, EventRequest}
@@ -105,17 +106,6 @@ object NashornDebuggerHost {
 
   case object PostponeInitialize extends NashornScriptOperation
 
-  private[nashorn] class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame],
-                                                val marshaller: Marshaller, val isAtDebuggerStatement: Boolean) {
-
-    /** We assume that we can cache object properties as long as we're in a paused state. Since we're connected to a
-      * Java process, an arbitrary Java object may change while in this state, so we only cache JS objects.
-      */
-    val objectPropertiesCache = mutable.Map[ObjectPropertiesKey, Map[String, ObjectPropertyDescriptor]]()
-
-    val propertyHolderCache = mutable.Map[ObjectId, Option[PropertyHolder]]()
-  }
-
   private[nashorn] case class ObjectPropertiesKey(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean)
 
   /** This marker is embedded in all scripts evaluated by NashornDebuggerHost on behalf of Chrome DevTools. The problem
@@ -186,6 +176,41 @@ object NashornDebuggerHost {
   // Determines if the location is in ScriptRuntime.DEBUGGER.
   private def isDebuggerStatementLocation(loc: Location) =
     loc.declaringType().name() == NIR_ScriptRuntime && loc.method().name() == ScriptRuntime_DEBUGGER
+
+}
+
+//private[nashorn] class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame],
+//                                  val marshaller: Marshaller, val isAtDebuggerStatement: Boolean) {
+private[nashorn] class PausedData(val thread: ThreadReference, val marshaller: Marshaller, stackBuilder: StackBuilder) {
+
+  /** We assume that we can cache object properties as long as we're in a paused state. Since we're connected to a
+    * Java process, an arbitrary Java object may change while in this state, so we only cache JS objects.
+    */
+  val objectPropertiesCache = mutable.Map[ObjectPropertiesKey, Map[String, ObjectPropertyDescriptor]]()
+
+  val propertyHolderCache = mutable.Map[ObjectId, Option[PropertyHolder]]()
+
+  lazy val stackFrameHolders = stackBuilder.captureStackFrames(thread)(marshaller)
+
+  def pausedInAScript: Boolean = stackFrameHolders.headOption.exists(h => h.stackFrame.isDefined || h.mayBeAtSpecialStatement)
+
+  def isAtDebuggerStatement: Boolean = stackFrameHolders.headOption.exists(_.isAtDebuggerStatement)
+
+  lazy val stackFrames: Seq[StackFrame] = stackFrameHolders.flatMap(_.stackFrame)
+
+//  stackFrames.headOption match {
+//    case Some(holder) if holder.stackFrame.isEmpty && !holder.mayBeAtSpecialStatement =>
+//      // First/top stack frame doesn't belong to a script. Resume!
+//      ignoreIt("it doesn't belong to a script")
+//    case Some(holder) =>
+//      if (holder.isAtDebuggerStatement) log.debug("Breakpoint is at JavaScript 'debugger' statement")
+//      val didPause = doPause(thread, stackFrames.flatMap(_.stackFrame), holder.isAtDebuggerStatement)
+//      // Resume will be controlled externally
+//      !didPause // false
+//    case None =>
+//      // Hm, no stack frames at all... Resume!
+//      ignoreIt("no stack frames were found at all")
+//  }
 
 }
 
@@ -541,7 +566,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       log.debug(s"Considering step/method entry event at ${ev.location()} with byte code: 0x${bc.toHexString}")
       // forcePause = true, because: Stepping should work even if breakpoints are disabled, and method entry is
       // when the user wants to pause, which also should work when breakpoints are disabled.
-      doResume = handleBreakpoint(ev, pauseEvenIfBreakpointsAreDisabled = true)
+      doResume = handleBreakpoint(ev, prepareForPausing(ev), pauseEvenIfBreakpointsAreDisabled = true)
       if (!doResume) infoAboutLastStep = Some(StepLocationInfo.from(ev))
     }
     doResume
@@ -555,11 +580,26 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private def throwLocationIsScript(frames: Seq[StackFrameHolder]): Boolean = frames.headOption.flatMap(_.stackFrame).isDefined
 
+  // Creates the PausedData structure
+  private def prepareForPausing(ev: LocatableEvent): PausedData = {
+    assert(pausedData.isEmpty, "prepareForPausing in paused state")
+    implicit val thread = ev.thread()
+    val pd = new PausedData(thread, createMarshaller(), stackBuilder)
+    pausedData = Some(pd)
+    pd
+  }
+
+  private def cleanupPausing(): Unit = {
+//    pausedData.foreach()
+    pausedData = None
+  }
+
   def handleOperation(eventQueueItem: NashornScriptOperation): Unit = eventQueueItem match {
     case NashornEventSet(es) if hasDeathOrDisconnectEvent(es) =>
       signalComplete()
     case NashornEventSet(eventSet) =>
       var doResume = true
+      val wasPausedAtEntry = pausedData.isDefined
       eventSet.asScala.foreach { ev =>
         try {
           // Invoke any event handler associated with the request for the event.
@@ -583,7 +623,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                   removeAnyStepRequest()
                   attemptToResolveSourceLessReferenceTypes()
 
-                  doResume = handleBreakpoint(ev)
+                  doResume = handleBreakpoint(ev, prepareForPausing(ev))
               }
 
             case ev: ClassPrepareEvent =>
@@ -602,6 +642,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               val exceptionTypeName = ev.exception().referenceType().name()
               val isECMAException = exceptionTypeName == NIR_ECMAException
               if (isECMAException) {
+                val pd = prepareForPausing(ev)
                 // TODO: Move this code into PauseSupport...
                 val stackPredicate = { frames: Seq[StackFrameHolder] =>
                   val throwingInScript = throwLocationIsScript(frames)
@@ -619,7 +660,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                     else Some(s"the exception is $caughtStr and we're not pausing on that kind")
                   } else Some("the exception is thrown in a non-script frame")
                 }
-                doResume = handleBreakpoint(ev, pauseEvenIfBreakpointsAreDisabled = true, stackPredicate)
+                doResume = handleBreakpoint(ev, pd, pauseEvenIfBreakpointsAreDisabled = true, stackPredicate)
               }
 
             case _: VMStartEvent =>
@@ -643,7 +684,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
             log.error(s"Failed to handle event ${ev.getClass.getName}", ex)
         }
       }
-      if (doResume) resume(eventSet)
+      if (doResume) {
+        if (!wasPausedAtEntry) cleanupPausing()
+        resume(eventSet)
+      }
     case ConsiderReferenceType(refType, attemptsLeft) =>
       // We may have resolved the reference type when hitting a breakpoint, and in that case we can ignore this retry
       // attempt.
@@ -694,7 +738,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def handleBreakpoint(ev: LocatableEvent, pauseEvenIfBreakpointsAreDisabled: Boolean = false, stackPredicate: Seq[StackFrameHolder] => Option[String] = _ => None): Boolean = {
+  private def handleBreakpoint(ev: LocatableEvent, pausedData: PausedData, pauseEvenIfBreakpointsAreDisabled: Boolean = false, stackPredicate: Seq[StackFrameHolder] => Option[String] = _ => None): Boolean = {
     def ignoreIt(reason: String) = {
       log.debug(s"Ignoring breakpoint at ${ev.location()} because $reason.")
       true
@@ -708,36 +752,29 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
     // Log at debug level because we get noise due to exception requests.
     log.debug(s"A breakpoint was hit at location ${ev.location()} in thread ${ev.thread().name()}")
-    implicit val thread = ev.thread()
 
     // Start with a fresh object registry
     objectDescriptorById.clear()
 
-    // Shared marshaller
-    implicit val marshaller = createMarshaller()
+    val stackFrames = pausedData.stackFrameHolders
 
-    val stackFrames = stackBuilder.captureStackFrames(thread)
+    if (stackFrames.isEmpty) return ignoreIt("no stack frames were found at all")
+
     stackPredicate(stackFrames) match {
       case Some(ignoreReason) => return ignoreIt(ignoreReason)
       case None =>
     }
 
-    stackFrames.headOption match {
-      case Some(holder) if holder.stackFrame.isEmpty && !holder.mayBeAtSpecialStatement =>
-        // First/top stack frame doesn't belong to a script. Resume!
-        ignoreIt("it doesn't belong to a script")
-      case Some(holder) =>
-        if (holder.isAtDebuggerStatement) log.debug("Breakpoint is at JavaScript 'debugger' statement")
-        val didPause = doPause(thread, stackFrames.flatMap(_.stackFrame), holder.isAtDebuggerStatement)
-        // Resume will be controlled externally
-        !didPause // false
-      case None =>
-        // Hm, no stack frames at all... Resume!
-        ignoreIt("no stack frames were found at all")
-    }
+    if (!pausedData.pausedInAScript) return ignoreIt("it doesn't belong to a script")
+
+    if (pausedData.isAtDebuggerStatement) log.debug("Breakpoint is at JavaScript 'debugger' statement")
+
+    // Resume will be controlled externally
+    implicit val marshaller = pausedData.marshaller
+    !doPause(pausedData.stackFrames)
   }
 
-  private def doPause(thread: ThreadReference, stackFrames: Seq[StackFrame], atDebugger: Boolean)(implicit marshaller: Marshaller): Boolean = {
+  private def doPause(stackFrames: Seq[StackFrame])(implicit marshaller: Marshaller): Boolean = {
     stackFrames.headOption.collect { case sf: StackFrameImpl => sf } match {
       case Some(topStackFrame) =>
         val scriptId = topStackFrame.scriptId
@@ -762,9 +799,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
         }
 
         if (conditionIsTrue) {
-          // Indicate that we're paused
-          pausedData = Some(new PausedData(thread, stackFrames, marshaller, atDebugger))
-
           findScript(ScriptIdentity.fromId(scriptId)).foreach { s =>
             val location = topStackFrame.location
             val line = s.sourceLine(location.lineNumber1Based).getOrElse("<unknown line>")
@@ -890,7 +924,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       log.info("Resuming virtual machine")
       enableGarbageCollectionWhereDisabled()
       virtualMachine.resume()
-      pausedData = None
+      cleanupPausing()
       objectDescriptorById.clear() // only valid when paused
       emitEvent(Resumed)
     case None =>
