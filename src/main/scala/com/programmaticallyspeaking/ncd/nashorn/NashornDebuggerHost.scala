@@ -179,8 +179,6 @@ object NashornDebuggerHost {
 
 }
 
-//private[nashorn] class PausedData(val thread: ThreadReference, val stackFrames: Seq[StackFrame],
-//                                  val marshaller: Marshaller, val isAtDebuggerStatement: Boolean) {
 private[nashorn] class PausedData(val thread: ThreadReference, val marshaller: Marshaller, stackBuilder: StackBuilder) {
 
   /** We assume that we can cache object properties as long as we're in a paused state. Since we're connected to a
@@ -197,21 +195,6 @@ private[nashorn] class PausedData(val thread: ThreadReference, val marshaller: M
   def isAtDebuggerStatement: Boolean = stackFrameHolders.headOption.exists(_.isAtDebuggerStatement)
 
   lazy val stackFrames: Seq[StackFrame] = stackFrameHolders.flatMap(_.stackFrame)
-
-//  stackFrames.headOption match {
-//    case Some(holder) if holder.stackFrame.isEmpty && !holder.mayBeAtSpecialStatement =>
-//      // First/top stack frame doesn't belong to a script. Resume!
-//      ignoreIt("it doesn't belong to a script")
-//    case Some(holder) =>
-//      if (holder.isAtDebuggerStatement) log.debug("Breakpoint is at JavaScript 'debugger' statement")
-//      val didPause = doPause(thread, stackFrames.flatMap(_.stackFrame), holder.isAtDebuggerStatement)
-//      // Resume will be controlled externally
-//      !didPause // false
-//    case None =>
-//      // Hm, no stack frames at all... Resume!
-//      ignoreIt("no stack frames were found at all")
-//  }
-
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
