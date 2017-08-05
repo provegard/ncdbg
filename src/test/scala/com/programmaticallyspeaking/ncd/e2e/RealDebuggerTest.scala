@@ -67,6 +67,56 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
       })
     }
 
+    "should set a variable in the correct stack frame" in {
+      enableDebugger
+      // Note that the starting point 1.0 instead of 1 is important, since otherwise Nashorn will first attempt
+      // an Integer-arged method, but will then recompile into a Double-arged method upon the next call, and the
+      // different recompilations will result in unique locations which will cause the flawed Location-based stack
+      // lookup to actually work...
+      val script =
+        """function f(callNo) {
+          |  var x = 0;
+          |  if (callNo === 3) {
+          |    debugger;
+          |    return x;
+          |  }
+          |  var v = 2 * f(callNo + 1);
+          |  return v + x;
+          |}
+          |var result = f(1.0);
+          |debugger;
+        """.stripMargin
+
+      runScript(script)(callFrames => {
+        // At debugger statement
+        // Set x to 1 in the local scope in the grandparent stack frame (stack frame 3/3).
+        // The flawed Location-based stack frame lookup will hit frame 2/3 instead, since it has the same Location
+        // as frame 3/3.
+        callFrames.drop(2).headOption match {
+          case Some(cf) =>
+            cf.scopeChain.zipWithIndex.find(_._1.`type` == "local") match {
+              case Some((_, scopeIdx)) =>
+                sendRequest(Debugger.setVariableValue(scopeIdx, "x", RuntimeD.CallArgument(Some(1), None, None), cf.callFrameId))
+
+              case None => fail("No local scope")
+            }
+          case None => fail("No parent stack frame")
+        }
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          // result is:
+          // if changed in stack frame 1/3: 100 = 4
+          // if changed in stack frame 2/3: 010 = 2
+          // if changed in stack frame 3/3: 001 = 1
+          sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "result", None, None, None)) match {
+            case EvaluateOnCallFrameResult(ro, _) =>
+              ro should be (RemoteObject.forNumber(1.0))
+            case other => fail("Unexpected result: " + other)
+          }
+        }
+      })
+    }
+
     val setVariableValueCases = Table(
       ("type", "initial", "toSet", "expected"),
       ("string", "'foo'", "bar", RemoteObject.forString("bar")),
