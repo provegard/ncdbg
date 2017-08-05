@@ -98,8 +98,8 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
     maybeScriptBasedPropertyHolderFactory match {
       case Some(f) => f
       case None =>
-        val codeEval: (String) => Value = src => {
-          val v = DebuggerSupport_eval_custom(null, null, src)
+        val codeEvalFun: (String) => Value = src => {
+          val v = codeEval.eval(null, null, src)
           disableGarbageCollectionFor(v, entireSession = true)
           v
         }
@@ -113,7 +113,7 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
             case None => throw new RuntimeException("ScriptRuntime wasn't found")
           }
         }
-        val f = new ScriptBasedPropertyHolderFactory(codeEval, funExec)
+        val f = new ScriptBasedPropertyHolderFactory(codeEvalFun, funExec)
         maybeScriptBasedPropertyHolderFactory = Some(f)
         f
     }

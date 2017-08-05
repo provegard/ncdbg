@@ -38,7 +38,6 @@ trait StackFrame {
   val id: String
   val thisObj: ValueNode
   val scopeChain: Seq[Scope]
-//  val breakpoint: Breakpoint
   val functionDetails: FunctionDetails
   val scriptId: String
   val scriptURL: ScriptURL
