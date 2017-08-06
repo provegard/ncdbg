@@ -576,8 +576,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       createEnabledStepOverRequest(ev.thread(), isAtDebuggerStatement = false)
     } else {
       log.debug(s"Considering step/method entry event at ${ev.location()} with byte code: 0x${bc.toHexString}")
-      // forcePause = true, because: Stepping should work even if breakpoints are disabled, and method entry is
-      // when the user wants to pause, which also should work when breakpoints are disabled.
+      // pauseEvenIfBreakpointsAreDisabled = true, because: Stepping should work even if breakpoints are disabled, and
+      // method entry is when the user wants to pause, which also should work when breakpoints are disabled.
       doResume = handleBreakpoint(ev, prepareForPausing(ev), pauseEvenIfBreakpointsAreDisabled = true)
       if (!doResume) infoAboutLastStep = Some(StepLocationInfo.from(ev))
     }
