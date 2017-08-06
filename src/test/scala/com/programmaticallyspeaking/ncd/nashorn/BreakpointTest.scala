@@ -76,12 +76,6 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
       """.stripMargin, Seq("Global:.*"))
   )
 
-  val exceptionTests = Table(
-    ("desc", "thrownValue"),
-    ("Error", "new Error('oops')"),
-    ("value", "42")
-  )
-
   implicit val regexpEq = new Equality[Seq[String]] {
     override def areEqual(a: Seq[String], b: Any): Boolean = b match {
       case regexpes: Seq[_] =>
@@ -205,24 +199,6 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
           evaluateLocalScopeObject(script) { (host, scopeObj) =>
             host.getObjectProperties(scopeObj.objectId, false, false).keys should not contain ("number")
           }
-        }
-      }
-    }
-  }
-
-  "when an exception is thrown" - {
-    forAll(exceptionTests) { (desc, value) =>
-      s"a caught $desc should be detected" in {
-        val script =
-          s"""try {
-             |  throw $value; // row 2
-             |} catch (e) {
-             |  if (false) debugger; // waitForBreakpoint requires it
-             |}
-           """.stripMargin
-
-        waitForBreakpoint(script, _.pauseOnExceptions(ExceptionPauseType.Caught)) { (_, breakpoint) =>
-          breakpoint.stackFrames.headOption.map(_.location.lineNumber1Based) should be(Some(2))
         }
       }
     }

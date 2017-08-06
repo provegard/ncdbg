@@ -22,6 +22,7 @@ class BreakpointTestFixture extends UnitTest with NashornScriptHostTestFixture {
       hostSetup(host)
       stackframesPromise.future.map(bp => {
         try tester(host, bp) finally {
+          host.pauseOnExceptions(ExceptionPauseType.None) // reset
           host.resume()
         }
       })
