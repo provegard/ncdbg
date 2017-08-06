@@ -584,12 +584,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     doResume
   }
 
-  private def catchLocationIsNative(frames: Seq[StackFrameHolder], catchLocation: Location): Boolean = {
-    val catchMethod = catchLocation.method()
-    val isScriptCatchLocation = frames.exists(f => f.location.method() == catchMethod && f.stackFrame.isDefined)
-    !isScriptCatchLocation
-  }
-
   private def throwLocationIsScript(frames: Seq[StackFrameHolder]): Boolean = frames.headOption.flatMap(_.stackFrame).isDefined
 
   // Creates the PausedData structure
@@ -629,10 +623,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
         case ExceptionType.UncaughtByScript => currentExceptionPauseType == ExceptionPauseType.Uncaught
         case _ => false
       })
-      val pauseOnCaught = currentExceptionPauseType == ExceptionPauseType.Caught || currentExceptionPauseType == ExceptionPauseType.All
-      val pauseOnUncaught = currentExceptionPauseType == ExceptionPauseType.Uncaught || currentExceptionPauseType == ExceptionPauseType.All
 
-      log.debug(s"Exception $exceptionTypeName is $exceptionType; pausing on caught: $pauseOnCaught, uncaught: $pauseOnUncaught")
+      log.debug(s"Exception $exceptionTypeName is $exceptionType; pausing: $shouldPause")
       shouldPause
     } else {
       log.debug(s"Ignoring exception $exceptionTypeName thrown in a non-script frame")
