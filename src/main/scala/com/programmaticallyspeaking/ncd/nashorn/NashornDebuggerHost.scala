@@ -1,15 +1,13 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import java.util.Collections
-
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, Undefined}
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{ObjectPropertiesKey, StackFrameHolder}
+import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.ObjectPropertiesKey
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
-import com.sun.jdi.request.{BreakpointRequest, EventRequest}
+import com.sun.jdi.request.EventRequest
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
@@ -148,6 +146,8 @@ object NashornDebuggerHost {
   // Filter for step requests for stopping in a script
   val StepRequestClassFilter = "jdk.nashorn.internal.scripts.*"
 
+  val ScriptClassNamePrefix = "jdk.nashorn.internal.scripts.Script$"
+
   /**
     * Key for an EventRequest property that stores a handler to execute when an event for the request is seen.
     */
@@ -168,15 +168,44 @@ object NashornDebuggerHost {
     val nativeLocation = breakableLocation.location
   }
 
+  object ExceptionType {
+    sealed trait EnumVal
+    case object CaughtByScript extends EnumVal { override def toString = "caught" }
+    case object UncaughtByScript extends EnumVal { override def toString = "uncaught" }
+    case object Unknown extends EnumVal { override def toString = "unknown" }
+
+    def determine(catchLocation: Location, stackFrames: Seq[StackFrameHolder]): EnumVal = {
+      catchLocation match {
+        case loc if loc == null => UncaughtByScript
+        case loc =>
+          val catchMethod = loc.method()
+          def isNotCatchFrame(sf: StackFrameHolder) = sf.location.method() != catchMethod
+          val framesFromCatchLocation = stackFrames.span(isNotCatchFrame)._2.toList
+          framesFromCatchLocation match {
+            case x :: _ if x.belongsToScript => CaughtByScript
+            case _ :: rest =>
+              // Catch location is a non-script. If there are no script frames beyond the catch location, then the
+              // exception is uncaught. Otherwise, it's impossible to know (since we cannot get the exception table
+              // via JDI).
+              val hasScriptFrameAfterCatchLocation = rest.exists(_.belongsToScript)
+              if (hasScriptFrameAfterCatchLocation) Unknown else UncaughtByScript
+            case Nil =>
+              // Couldn't find catch frame...
+              Unknown
+          }
+      }
+    }
+  }
+
   case class StackFrameHolder(stackFrame: Option[StackFrame], location: Location) {
     val mayBeAtSpecialStatement = stackFrame.isEmpty
+    val belongsToScript = stackFrame.isDefined
     val isAtDebuggerStatement = isDebuggerStatementLocation(location)
   }
 
   // Determines if the location is in ScriptRuntime.DEBUGGER.
   private def isDebuggerStatementLocation(loc: Location) =
     loc.declaringType().name() == NIR_ScriptRuntime && loc.method().name() == ScriptRuntime_DEBUGGER
-
 }
 
 private[nashorn] class PausedData(val thread: ThreadReference, val marshaller: Marshaller, stackBuilder: StackBuilder) {
@@ -415,7 +444,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           log.warn(s"Found the $className type but it's a ${other.getClass.getName} rather than a ClassType")
       }
       None
-    } else if (className.startsWith("jdk.nashorn.internal.scripts.Script$")) {
+    } else if (className.startsWith(ScriptClassNamePrefix)) {
       // This is a compiled Nashorn script class.
       log.debug(s"Script reference type: ${refType.name} ($attemptsLeft attempts left)")
 
@@ -577,6 +606,40 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     pausedData = None
   }
 
+  private def shouldPauseOnException(pausedData: PausedData, ev: ExceptionEvent, exceptionTypeName: String): Boolean = {
+    val frames = pausedData.stackFrameHolders
+    val throwingInScript = throwLocationIsScript(frames)
+    if (throwingInScript) {
+      val initialExceptionType = ExceptionType.determine(ev.catchLocation(), frames)
+      val pausingOnAllExceptions = currentExceptionPauseType == ExceptionPauseType.All
+      val exceptionType = initialExceptionType match {
+        case ExceptionType.Unknown if !pausingOnAllExceptions =>
+          // We have to determine whether to pause or not; the exception may be caught or uncaught but
+          // we don't know which.
+          // The safest approach seems to be to pause. Chrome/DevTools wants uncaught or all exceptions,
+          // never only caught ones (as of this writing), so the worst thing that can happen is that we
+          // pause on a caught exception even though we shouldn't.
+          log.warn(s"Cannot determine caught-ness of $exceptionTypeName thrown at ${frames.head.location}, will assume uncaught.")
+          ExceptionType.UncaughtByScript
+        case other => other
+      }
+
+      val shouldPause = pausingOnAllExceptions || (exceptionType match {
+        case ExceptionType.CaughtByScript => currentExceptionPauseType == ExceptionPauseType.Caught
+        case ExceptionType.UncaughtByScript => currentExceptionPauseType == ExceptionPauseType.Uncaught
+        case _ => false
+      })
+      val pauseOnCaught = currentExceptionPauseType == ExceptionPauseType.Caught || currentExceptionPauseType == ExceptionPauseType.All
+      val pauseOnUncaught = currentExceptionPauseType == ExceptionPauseType.Uncaught || currentExceptionPauseType == ExceptionPauseType.All
+
+      log.debug(s"Exception $exceptionTypeName is $exceptionType; pausing on caught: $pauseOnCaught, uncaught: $pauseOnUncaught")
+      shouldPause
+    } else {
+      log.debug(s"Ignoring exception $exceptionTypeName thrown in a non-script frame")
+      false
+    }
+  }
+
   def handleOperation(eventQueueItem: NashornScriptOperation): Unit = eventQueueItem match {
     case NashornEventSet(es) if hasDeathOrDisconnectEvent(es) =>
       signalComplete()
@@ -626,25 +689,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               val isECMAException = exceptionTypeName == NIR_ECMAException
               if (isECMAException) {
                 val pd = prepareForPausing(ev)
-                // TODO: Move this code into PauseSupport...
-                val stackPredicate = { frames: Seq[StackFrameHolder] =>
-                  val throwingInScript = throwLocationIsScript(frames)
-                  if (throwingInScript) {
-                    // If there is no catch location, we know this is an uncaught exception.
-                    // If there is a catch location but no script frames beyond the current frame, then assume the catch
-                    // location is in native code and treat the exception as effectively uncaught.
-                    val isUncaught = ev.catchLocation() == null || catchLocationIsNative(frames, ev.catchLocation())
-                    val caughtStr = if (isUncaught) "uncaught" else "caught"
-                    val pauseOnCaught = currentExceptionPauseType == ExceptionPauseType.Caught || currentExceptionPauseType == ExceptionPauseType.All
-                    val pauseOnUncaught = currentExceptionPauseType == ExceptionPauseType.Uncaught || currentExceptionPauseType == ExceptionPauseType.All
-                    val catchIt = (isUncaught && pauseOnUncaught) || (!isUncaught && pauseOnCaught)
-                    log.debug(s"Exception $exceptionTypeName is $caughtStr; pausing on caught: $pauseOnCaught, uncaught: $pauseOnUncaught")
-                    if (catchIt) None
-                    else Some(s"the exception is $caughtStr and we're not pausing on that kind")
-                  } else Some("the exception is thrown in a non-script frame")
+                if (shouldPauseOnException(pd, ev, exceptionTypeName)) {
+                  doResume = handleBreakpoint(ev, pd, pauseEvenIfBreakpointsAreDisabled = true)
                 }
-                doResume = handleBreakpoint(ev, pd, pauseEvenIfBreakpointsAreDisabled = true, stackPredicate)
-              }
+              } else log.trace(s"Ignoring non-ECMA exception of type $exceptionTypeName")
 
             case _: VMStartEvent =>
               // ignore it, but don't log a warning
@@ -721,7 +769,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def handleBreakpoint(ev: LocatableEvent, pausedData: PausedData, pauseEvenIfBreakpointsAreDisabled: Boolean = false, stackPredicate: Seq[StackFrameHolder] => Option[String] = _ => None): Boolean = {
+  private def handleBreakpoint(ev: LocatableEvent, pausedData: PausedData, pauseEvenIfBreakpointsAreDisabled: Boolean = false): Boolean = {
     def ignoreIt(reason: String) = {
       log.debug(s"Ignoring breakpoint at ${ev.location()} because $reason.")
       true
@@ -742,11 +790,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     val stackFrames = pausedData.stackFrameHolders
 
     if (stackFrames.isEmpty) return ignoreIt("no stack frames were found at all")
-
-    stackPredicate(stackFrames) match {
-      case Some(ignoreReason) => return ignoreIt(ignoreReason)
-      case None =>
-    }
 
     if (!pausedData.pausedInAScript) return ignoreIt("it doesn't belong to a script")
 
