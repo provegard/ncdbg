@@ -261,17 +261,23 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
     log.info("VM running, sending script")
     sendToVm(script, encodeBase64 = true)
 
+    var isThrowing = false
     try Await.result(handler(host), resultTimeout) catch {
       case _: TimeoutException =>
+        isThrowing = true
         throw new TimeoutException(s"No results within ${resultTimeout.toMillis} ms. Progress:\n" + summarizeProgress())
+      case NonFatal(t) =>
+        isThrowing = true
+        throw t
     } finally {
       // getHost may throw if the host isn't set
       Try(getHost.resume())
-    }
 
-    try Await.result(vmScriptDonePromise.future, scriptDoneTimeout) catch {
-      case _: TimeoutException =>
-        throw new TimeoutException("VM script execution didn't finish")
+      try Await.result(vmScriptDonePromise.future, scriptDoneTimeout) catch {
+        case _: TimeoutException =>
+          // If we have an exception above, don't hide it
+          if (!isThrowing) throw new TimeoutException("VM script execution didn't finish")
+      }
     }
   }
 
@@ -335,10 +341,12 @@ class StreamReadingThread(in: InputStream, appender: (String) => Unit) extends T
         Option(str).foreach(appender)
       }
     } catch {
-      case ex: InterruptedException =>
+      case _: InterruptedException =>
       // ok
       case ex: IOException =>
         if (ex.getMessage != "Stream closed") ex.printStackTrace(System.err)
+      case NonFatal(t) =>
+        t.printStackTrace(System.err)
     }
   }
 }
