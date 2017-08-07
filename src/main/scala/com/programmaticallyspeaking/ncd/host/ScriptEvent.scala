@@ -7,3 +7,5 @@ case class HitBreakpoint(stackFrames: Seq[StackFrame], breakpointId: String) ext
 case object Resumed extends ScriptEvent
 
 case class ScriptAdded(script: Script) extends ScriptEvent
+
+case class UncaughtError(error: ErrorValue) extends ScriptEvent

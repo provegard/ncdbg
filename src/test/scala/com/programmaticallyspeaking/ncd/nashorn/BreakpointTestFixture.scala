@@ -4,8 +4,8 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 
-import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Promise}
+import scala.util.Try
 
 class BreakpointTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
@@ -21,12 +21,23 @@ class BreakpointTestFixture extends UnitTest with NashornScriptHostTestFixture {
     observeAndRunScriptAsync(script, observer) { host =>
       hostSetup(host)
       stackframesPromise.future.map(bp => {
-        try tester(host, bp) finally {
-          host.pauseOnExceptions(ExceptionPauseType.None) // reset
-          host.resume()
-        }
+        try tester(host, bp) finally host.resume()
       })
     }
   }
 
+  protected def waitForEvent(script: String, hostSetup: (NashornScriptHost) => Unit = (_) => {})(tester: PartialFunction[ScriptEvent, Unit]): Unit = {
+    val eventPromise = Promise[Unit]()
+    val observer = Observer.from[ScriptEvent] {
+      case ev =>
+        if (tester.isDefinedAt(ev)) {
+          eventPromise.complete(Try(tester.apply(ev)))
+        }
+
+    }
+    observeAndRunScriptAsync(script, observer) { host =>
+      hostSetup(host)
+      eventPromise.future
+    }
+  }
 }

@@ -4,7 +4,7 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, Undefined}
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.ObjectPropertiesKey
+import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{ObjectPropertiesKey, StackFrameHolder}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
 import com.sun.jdi.request.EventRequest
@@ -208,7 +208,20 @@ object NashornDebuggerHost {
     loc.declaringType().name() == NIR_ScriptRuntime && loc.method().name() == ScriptRuntime_DEBUGGER
 }
 
-private[nashorn] class PausedData(val thread: ThreadReference, val marshaller: Marshaller, stackBuilder: StackBuilder) {
+private[nashorn] class ExceptionEventInfo(event: ExceptionEvent, stackFrames: Seq[StackFrameHolder], marshaller: Marshaller) {
+  import NashornDebuggerHost._
+  private val exception = event.exception()
+  val exceptionTypeName = exception.referenceType().name()
+  val isECMAException = exceptionTypeName == NIR_ECMAException
+  val exceptionType = ExceptionType.determine(event.catchLocation(), stackFrames)
+  def throwLocation: Location = stackFrames.headOption.map(_.location).getOrElse(throw new IllegalStateException("Empty stack"))
+  def marshalledException: Either[String, ErrorValue] = marshaller.marshal(exception) match {
+    case err: ErrorValue => Right(err)
+    case other => Left(s"Exception $exceptionTypeName marshalled to unexpected: $other")
+  }
+}
+
+private[nashorn] class PausedData(val thread: ThreadReference, val marshaller: Marshaller, stackBuilder: StackBuilder, event: LocatableEvent) {
 
   /** We assume that we can cache object properties as long as we're in a paused state. Since we're connected to a
     * Java process, an arbitrary Java object may change while in this state, so we only cache JS objects.
@@ -224,6 +237,11 @@ private[nashorn] class PausedData(val thread: ThreadReference, val marshaller: M
   def isAtDebuggerStatement: Boolean = stackFrameHolders.headOption.exists(_.isAtDebuggerStatement)
 
   lazy val stackFrames: Seq[StackFrame] = stackFrameHolders.flatMap(_.stackFrame)
+
+  lazy val exceptionEventInfo: Option[ExceptionEventInfo] = event match {
+    case ex: ExceptionEvent => Some(new ExceptionEventInfo(ex, stackFrameHolders, marshaller))
+    case _ => None
+  }
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
@@ -273,7 +291,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   /**
     * Configure what we do when we encounter one of the wanted types.
     */
-  private val actionPerWantedType: Map[String, () => Unit] = Map(
+  private val actionPerWantedType: Map[String, (ClassType) => Unit] = Map(
     NIR_ScriptRuntime -> enableBreakingAtDebuggerStatement _
   )
 
@@ -312,9 +330,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     breakableLocationsByScriptUrl.getOrElseUpdate(script.url.toString, ListBuffer.empty) ++= breakableLocations
   }
 
-  private def enableBreakingAt(typeName: String, methodName: String, statementName: String): Unit = {
+  private def enableBreakingAt(theType: ClassType, methodName: String, statementName: String): Unit = {
+    val typeName = theType.name()
     val methodLoc = for {
-      theType <- foundWantedTypes.get(typeName).toEither(s"no $typeName type found")
       theMethod <- theType.methodsByName(methodName).asScala.headOption.toEither(s"$typeName.$methodName method not found")
       location <- theMethod.allLineLocations().asScala.headOption.toEither(s"no line location found in $typeName.$methodName")
     } yield location
@@ -331,8 +349,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def enableBreakingAtDebuggerStatement(): Unit =
-    enableBreakingAt(NIR_ScriptRuntime, ScriptRuntime_DEBUGGER, "debugger")
+  private def enableBreakingAtDebuggerStatement(ct: ClassType): Unit =
+    enableBreakingAt(ct, ScriptRuntime_DEBUGGER, "debugger")
 
   private def scriptFromEval(refType: ReferenceType, scriptPath: String, attemptsLeft: Int): Either[String, Script] = {
     shamelesslyExtractEvalSourceFromPrivatePlaces(refType) match {
@@ -433,7 +451,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           foundWantedTypes += className -> ct
 
           // Execute any function associated with the type
-          actionPerWantedType.get(className).foreach(_.apply())
+          actionPerWantedType.get(className).foreach(_.apply(ct))
 
           // If we have all types, we're done
           if (wantedTypes.forall(foundWantedTypes.contains)) {
@@ -517,6 +535,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   private def considerInitializationToBeComplete(): Unit = {
     log.info("Host initialization is complete.")
     hostInitializationComplete = true
+    enableExceptionPausing()
     emitEvent(InitialInitializationComplete)
   }
 
@@ -582,8 +601,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     doResume
   }
 
-  private def throwLocationIsScript(frames: Seq[StackFrameHolder]): Boolean = frames.headOption.flatMap(_.stackFrame).isDefined
-
   // Creates the PausedData structure
   private def prepareForPausing(ev: LocatableEvent): PausedData = {
     assert(pausedData.isEmpty, "prepareForPausing in paused state")
@@ -591,8 +608,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     // Start with a fresh object registry
     objectDescriptorById.clear()
 
+    // Disable exception requests while we're paused since otherwise an exception thrown during JS evaluation
+    // will deadlock (an ExceptionEvent event will be generated but cannot be delivered to NDH since NDH is waiting
+    // for the evaluation to complete).
+    virtualMachine.eventRequestManager().exceptionRequests().asScala.foreach(_.disable())
+
     implicit val thread = ev.thread()
-    val pd = new PausedData(thread, createMarshaller(), stackBuilder)
+    val pd = new PausedData(thread, createMarshaller(), stackBuilder, ev)
     pausedData = Some(pd)
     pd
   }
@@ -601,45 +623,42 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 //    pausedData.foreach()
     pausedData = None
     objectDescriptorById.clear() // only valid when paused
+
+    // Enable exception requests again (see prepareForPausing)
+    virtualMachine.eventRequestManager().exceptionRequests().asScala.foreach(_.enable())
   }
 
-  private def shouldPauseOnException(pausedData: PausedData, ev: ExceptionEvent): Either[String, Unit] = {
-    val exceptionTypeName = ev.exception().referenceType().name()
-    val frames = pausedData.stackFrameHolders
-    val throwingInScript = throwLocationIsScript(frames)
-    if (throwingInScript) {
-      val initialExceptionType = ExceptionType.determine(ev.catchLocation(), frames)
-      val pausingOnAllExceptions = currentExceptionPauseType == ExceptionPauseType.All
-      val exceptionType = initialExceptionType match {
-        case ExceptionType.Unknown if !pausingOnAllExceptions =>
-          // We have to determine whether to pause or not; the exception may be caught or uncaught but
-          // we don't know which.
-          // The safest approach seems to be to pause. Chrome/DevTools wants uncaught or all exceptions,
-          // never only caught ones (as of this writing), so the worst thing that can happen is that we
-          // pause on a caught exception even though we shouldn't.
-          log.warn(s"Cannot determine caught-ness of $exceptionTypeName thrown at ${frames.head.location}, will assume uncaught.")
-          ExceptionType.UncaughtByScript
-        case other => other
-      }
-
-      val shouldPause = pausingOnAllExceptions || (exceptionType match {
-        case ExceptionType.CaughtByScript => currentExceptionPauseType == ExceptionPauseType.Caught
-        case ExceptionType.UncaughtByScript => currentExceptionPauseType == ExceptionPauseType.Uncaught
-        case _ => false
-      })
-
-      if (shouldPause) Right(())
-      else Left(s"exception is $exceptionType, which is ignored")
-    } else {
-      Left(s"exception $exceptionTypeName thrown in a non-script frame")
+  private def shouldPauseOnException(exceptionEventInfo: ExceptionEventInfo): Either[String, Unit] = {
+    val pausingAtAll = currentExceptionPauseType != ExceptionPauseType.None
+    val pausingOnAllExceptions = currentExceptionPauseType == ExceptionPauseType.All
+    def exceptionType = exceptionEventInfo.exceptionType match {
+      case ExceptionType.Unknown if !pausingOnAllExceptions =>
+        // We have to determine whether to pause or not; the exception may be caught or uncaught but
+        // we don't know which.
+        // The safest approach seems to be to pause. Chrome/DevTools wants uncaught or all exceptions,
+        // never only caught ones (as of this writing), so the worst thing that can happen is that we
+        // pause on a caught exception even though we shouldn't.
+        log.warn(s"Cannot determine caught-ness of ${exceptionEventInfo.exceptionTypeName} thrown at ${exceptionEventInfo.throwLocation}, will assume uncaught.")
+        ExceptionType.UncaughtByScript
+      case other => other
     }
+
+    val shouldPause = pausingAtAll && (pausingOnAllExceptions || (exceptionType match {
+      case ExceptionType.CaughtByScript => currentExceptionPauseType == ExceptionPauseType.Caught
+      case ExceptionType.UncaughtByScript => currentExceptionPauseType == ExceptionPauseType.Uncaught
+      case _ => false
+    }))
+
+    if (shouldPause) Right(())
+    else Left(s"exception is $exceptionType, which is ignored")
   }
 
   private def shouldPause(pausedData: PausedData, ev: Event): Either[String, Unit] = ev match {
     case _ if disablePausingAltogether =>
       // disablePausingAltogether disabled all sort of pausing - exceptions, stepping, breakpoints...
       Left("pausing is entirely disabled")
-    case ex: ExceptionEvent => shouldPauseOnException(pausedData, ex)
+    case _ if pausedData.exceptionEventInfo.isDefined =>
+      shouldPauseOnException(pausedData.exceptionEventInfo.get)
     case _:StepEvent|_:MethodEntryEvent =>
       // Stepping should work even if breakpoints are disabled, and method entry is when the user wants to pause,
       // which also should work when breakpoints are disabled.
@@ -651,6 +670,17 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       if (!pausedData.pausedInAScript) return Left("location doesn't belong to a script")
 
       Right(())
+  }
+
+  private def maybeEmitErrorEvent(pd: PausedData): Unit = pd.exceptionEventInfo match {
+    case Some(info) =>
+      if (info.exceptionType == ExceptionType.UncaughtByScript) {
+        info.marshalledException match {
+          case Right(err) => emitEvent(UncaughtError(err))
+          case Left(reason) => log.warn(reason)
+        }
+      }
+    case None =>
   }
 
   def handleOperation(eventQueueItem: NashornScriptOperation): Unit = eventQueueItem match {
@@ -692,7 +722,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               } else {
                 // Bump the class counter - when we handle PostponeInitialize, if the class cound has stabilized,
                 // we do a full scan.
-                log.debug(s"New class (${ev.referenceType().name()}), counting it to await full scan when class count has stabilized.")
+                log.trace(s"New class (${ev.referenceType().name()}), counting it to await full scan when class count has stabilized.")
                 seenClassPrepareRequests += 1
               }
             case ev: ExceptionEvent if pausedData.isEmpty =>
@@ -702,6 +732,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               val isECMAException = exceptionTypeName == NIR_ECMAException
               if (isECMAException) {
                 val pd = prepareForPausing(ev)
+                maybeEmitErrorEvent(pd)
                 doResume = handleBreakpoint(ev, pd)
               } else log.trace(s"Ignoring non-ECMA exception of type $exceptionTypeName")
 

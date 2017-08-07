@@ -1,45 +1,44 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.ExceptionPauseType
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{StepRequestClassFilter, isInfrastructureThread, isRunningThread}
-import com.sun.jdi.{Location, Method, StackFrame}
+import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.isInfrastructureThread
 import com.sun.jdi.event.Event
-import com.sun.jdi.request.{BreakpointRequest, EventRequest, EventRequestManager, ExceptionRequest}
+import com.sun.jdi.request.EventRequest
+import com.sun.jdi.{Location, Method, StackFrame}
 import org.slf4s.Logging
 
-import scala.collection.mutable.ListBuffer
 import scala.util.Try
 
 trait PauseSupport { self: NashornDebuggerHost with Logging =>
   import scala.collection.JavaConverters._
   val ScriptClassPrefix = "jdk.nashorn.internal.scripts.Script"
 
-  private val exceptionRequests = ListBuffer[ExceptionRequest]()
+  protected def enableExceptionPausing(): Unit = {
+    log.info(s"Enabling breaking on exceptions in script classes.")
+    val erm = virtualMachine.eventRequestManager()
+    // Note that we want to pause on both caught and uncaught exceptions at all times, because we have
+    // a custom definition of what "uncaught" means, since Nashorn may create a Java adapter that catches and
+    // rethrows an exception.
+    // We don't necessarily find ECMAException at VM startup, so we don't have it available here.
+    val request = erm.createExceptionRequest(null, true, true)
+    request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD) // TODO: Duplicate code
+    // We're only interested in exceptions
+    request.addClassFilter(ScriptClassPrefix + "*")
+    request.setEnabled(true)
+  }
 
   override def pauseOnExceptions(pauseType: ExceptionPauseType): Unit = {
-    val erm = virtualMachine.eventRequestManager()
+    if (pauseType != currentExceptionPauseType) {
+      currentExceptionPauseType = pauseType
 
-    // Clear all first, simpler than trying to keep in sync
-    erm.deleteEventRequests(exceptionRequests.asJava)
-    exceptionRequests.clear()
+      val pauseOnCaught = pauseType == ExceptionPauseType.Caught || pauseType == ExceptionPauseType.All
+      val pauseOnUncaught = pauseType == ExceptionPauseType.Uncaught || pauseType == ExceptionPauseType.All
 
-    currentExceptionPauseType = pauseType
-
-    val pauseOnCaught = pauseType == ExceptionPauseType.Caught || pauseType == ExceptionPauseType.All
-    val pauseOnUncaught = pauseType == ExceptionPauseType.Uncaught || pauseType == ExceptionPauseType.All
-
-    if (pauseOnCaught || pauseOnUncaught) {
-      log.info(s"Will pause on exceptions (caught=$pauseOnCaught, uncaught=$pauseOnUncaught)")
-      // Note that we want to pause on both caught and uncaught exceptions at all times, because we have
-      // a custom definition of what "uncaught" means, since Nashorn may create a Java adapter that catches and
-      // rethrows an exception.
-      //TODO: Add a script filter here!
-      val request = erm.createExceptionRequest(null, true, true)
-      request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD) // TODO: Duplicate code
-      request.setEnabled(true)
-      exceptionRequests += request
-    } else {
-      log.info("Won't pause on exceptions")
+      if (pauseOnCaught || pauseOnUncaught) {
+        log.info(s"Will pause on exceptions (caught=$pauseOnCaught, uncaught=$pauseOnUncaught)")
+      } else {
+        log.info("Won't pause on exceptions")
+      }
     }
   }
 

@@ -27,6 +27,23 @@ class ExceptionTest extends BreakpointTestFixture with TableDrivenPropertyChecks
         }
       }
     }
+
+    "an event is emitted for an uncaught error even if pausing is turned off" in {
+      val script =
+        """var runf = function() {
+          |  throw "oops"; // uncaught
+          |};
+          |var runiface = new java.lang.Runnable({run: runf});
+          |var thread = new java.lang.Thread(runiface);
+          |thread.start();
+          |thread.join();
+        """.stripMargin
+
+      waitForEvent(script, _.setSkipAllPauses(true)) {
+        case ev: UncaughtError =>
+          ev.error.data.message should include ("oops")
+      }
+    }
   }
 
   "should stop on an uncaught error (although it's caught and re-thrown in a Java adapter)" in {

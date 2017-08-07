@@ -6,9 +6,9 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import ch.qos.logback.classic.Level
-import com.programmaticallyspeaking.ncd.host.ScriptEvent
+import com.programmaticallyspeaking.ncd.host.{ExceptionPauseType, ScriptEvent}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
-import com.programmaticallyspeaking.ncd.testing.{SharedInstanceActorTesting, MemoryAppender, StringUtils, UnitTest}
+import com.programmaticallyspeaking.ncd.testing.{MemoryAppender, SharedInstanceActorTesting, StringUtils, UnitTest}
 import com.sun.jdi.connect.LaunchingConnector
 import com.sun.jdi.event.VMStartEvent
 import com.sun.jdi.{Bootstrap, VirtualMachine}
@@ -261,13 +261,17 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
     log.info("VM running, sending script")
     sendToVm(script, encodeBase64 = true)
 
-    var isThrowing = false
+    // Reset things
+    host.setSkipAllPauses(false)
+    host.pauseOnExceptions(ExceptionPauseType.None)
+
+    var thrownEx: Throwable = null
     try Await.result(handler(host), resultTimeout) catch {
       case _: TimeoutException =>
-        isThrowing = true
-        throw new TimeoutException(s"No results within ${resultTimeout.toMillis} ms. Progress:\n" + summarizeProgress())
+        thrownEx = new TimeoutException(s"No results within ${resultTimeout.toMillis} ms. Progress:\n" + summarizeProgress())
+        throw thrownEx
       case NonFatal(t) =>
-        isThrowing = true
+        thrownEx = t
         throw t
     } finally {
       // getHost may throw if the host isn't set
@@ -275,8 +279,12 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
 
       try Await.result(vmScriptDonePromise.future, scriptDoneTimeout) catch {
         case _: TimeoutException =>
+          val toThrow = new TimeoutException("VM script execution didn't finish")
           // If we have an exception above, don't hide it
-          if (!isThrowing) throw new TimeoutException("VM script execution didn't finish")
+          Option(thrownEx) match {
+            case Some(e) => e.addSuppressed(toThrow)
+            case None => throw toThrow
+          }
       }
     }
   }
