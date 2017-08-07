@@ -584,17 +584,17 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     if (bc < 0) bc + 256 else bc
   }
 
-  private def handleStepOrMethodEntryEvent(ev: LocatableEvent): Boolean = {
+  private def handleStepOrMethodEvent(ev: LocatableEvent): Boolean = {
     var doResume = true
     attemptToResolveSourceLessReferenceTypes()
     virtualMachine.eventRequestManager().deleteEventRequest(ev.request())
     val bc = byteCodeFromLocation(ev.location())
     if (IlCodesToIgnoreOnStepEvent.contains(bc)) {
       // We most likely hit an "intermediate" location after returning from a function.
-      log.debug(s"Skipping step/method entry event at ${ev.location()} because byte code is ignored: 0x${bc.toHexString}")
+      log.debug(s"Skipping step/method event at ${ev.location()} because byte code is ignored: 0x${bc.toHexString}")
       createEnabledStepOverRequest(ev.thread(), isAtDebuggerStatement = false)
     } else {
-      log.debug(s"Considering step/method entry event at ${ev.location()} with byte code: 0x${bc.toHexString}")
+      log.debug(s"Considering step/method event at ${ev.location()} with byte code: 0x${bc.toHexString}")
       doResume = handleBreakpoint(ev, prepareForPausing(ev))
       if (!doResume) infoAboutLastStep = Some(StepLocationInfo.from(ev))
     }
@@ -698,10 +698,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
           ev match {
             case ev: MethodEntryEvent if pausedData.isEmpty =>
-              doResume = handleStepOrMethodEntryEvent(ev)
+              doResume = handleStepOrMethodEvent(ev)
+
+            case ev: MethodExitEvent if pausedData.isEmpty =>
+              doResume = handleStepOrMethodEvent(ev)
 
             case ev: StepEvent if pausedData.isEmpty =>
-              doResume = handleStepOrMethodEntryEvent(ev)
+              doResume = handleStepOrMethodEvent(ev)
 
             case ev: BreakpointEvent if pausedData.isEmpty =>
               infoAboutLastStep match {

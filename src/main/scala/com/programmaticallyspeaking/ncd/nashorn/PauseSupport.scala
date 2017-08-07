@@ -7,10 +7,16 @@ import com.sun.jdi.request.EventRequest
 import com.sun.jdi.{Location, Method, StackFrame}
 import org.slf4s.Logging
 
+import scala.language.reflectiveCalls
 import scala.util.Try
+
+object PauseSupport {
+  type CanAddClassFilter = {def addClassFilter(s: String): Unit}
+}
 
 trait PauseSupport { self: NashornDebuggerHost with Logging =>
   import scala.collection.JavaConverters._
+  import PauseSupport._
   val ScriptClassPrefix = "jdk.nashorn.internal.scripts.Script"
 
   protected def enableExceptionPausing(): Unit = {
@@ -65,9 +71,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
     bp
   }
 
-  private def setMethodEntryBreakpoint() = {
-    val erm = virtualMachine.eventRequestManager()
-    val request = erm.createMethodEntryRequest()
+  private def configureRequest(request: EventRequest with CanAddClassFilter) = {
     // TODO: Lots of duplicate code here wrt how we create breakpoints.
     request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
     // TODO: Should StepRequestClassFilter be this string?? But then maybe it won't be possible to step over _to_
@@ -76,6 +80,16 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
     request.addCountFilter(1)
     request.setEnabled(true)
     request
+  }
+
+  private def setMethodEntryBreakpoint() = {
+    val request = virtualMachine.eventRequestManager().createMethodEntryRequest()
+    configureRequest(request)
+  }
+
+  private def setMethodExitBreakpoint() = {
+    val request = virtualMachine.eventRequestManager().createMethodExitRequest()
+    configureRequest(request)
   }
 
   override def pauseAtNextStatement(): Unit = pausedData match {
@@ -107,12 +121,13 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
         }
 
         log.info("Will pause at next script statement")
-        log.debug(s"Creating ${locationsToSetBreakpointsOn.size} one-off breakpoint request(s) and a method-entry request for pausing.")
+        log.debug(s"Creating one-off breakpoint request(s) at [${locationsToSetBreakpointsOn.mkString(", ")}] and method entry/exit requests for pausing.")
 
         // Create both a method-entry request and breakpoint requests.
         val methodEntryRequest = setMethodEntryBreakpoint()
+        val methodExitRequest = setMethodExitBreakpoint()
         val breakpoints = locationsToSetBreakpointsOn.map(setOneOffBreakpoint)
-        val allRequests = breakpoints :+ methodEntryRequest
+        val allRequests = breakpoints ++ Seq(methodEntryRequest, methodExitRequest)
 
         // When we observe an event for a request, clear all the requests (of both types).
         def eventHandler(ev: Event) = {
