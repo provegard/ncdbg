@@ -600,6 +600,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   private def cleanupPausing(): Unit = {
 //    pausedData.foreach()
     pausedData = None
+    objectDescriptorById.clear() // only valid when paused
   }
 
   private def shouldPauseOnException(pausedData: PausedData, ev: ExceptionEvent): Either[String, Unit] = {
@@ -950,7 +951,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       enableGarbageCollectionWhereDisabled()
       virtualMachine.resume()
       cleanupPausing()
-      objectDescriptorById.clear() // only valid when paused
       emitEvent(Resumed)
     case None =>
       log.debug("Ignoring resume request when not paused (no pause data).")
