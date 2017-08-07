@@ -500,13 +500,4 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     debugger = null
     super.restart()
   }
-
-  protected override def runScript(script: String)(testers: Tester*): Unit = {
-    try super.runScript(script)(testers: _*) catch {
-      case ex: TimeoutException =>
-        // The VM may have entered an infinite loop, so we need a new starting point.
-        restart()
-        throw ex
-    }
-  }
 }

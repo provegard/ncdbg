@@ -266,8 +266,10 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
     host.pauseOnExceptions(ExceptionPauseType.None)
 
     var thrownEx: Throwable = null
+    var hasTimeout: Boolean = false
     try Await.result(handler(host), resultTimeout) catch {
       case _: TimeoutException =>
+        hasTimeout = true
         thrownEx = new TimeoutException(s"No results within ${resultTimeout.toMillis} ms. Progress:\n" + summarizeProgress())
         throw thrownEx
       case NonFatal(t) =>
@@ -279,12 +281,18 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
 
       try Await.result(vmScriptDonePromise.future, scriptDoneTimeout) catch {
         case _: TimeoutException =>
-          val toThrow = new TimeoutException("VM script execution didn't finish")
+          hasTimeout = true
+          val toThrow = new TimeoutException("VM script execution didn't finish. Progress:\n" + summarizeProgress())
           // If we have an exception above, don't hide it
           Option(thrownEx) match {
             case Some(e) => e.addSuppressed(toThrow)
             case None => throw toThrow
           }
+      } finally {
+        if (hasTimeout) {
+          // The VM may have entered an infinite loop, so we need a new starting point.
+          Try(restart())
+        }
       }
     }
   }
