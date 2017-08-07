@@ -12,6 +12,10 @@ object Runtime {
   type RemoteObjectId = String
   type Timestamp = Long
 
+  object Timestamp {
+    def now: Timestamp = System.currentTimeMillis()
+  }
+
   /**
     * Allowed values: Infinity, NaN, -Infinity, -0.
     */
@@ -92,6 +96,14 @@ object Runtime {
 
   case class ExceptionDetails(exceptionId: Int, text: String, lineNumber: Int, columnNumber: Int, url: Option[String], scriptId: Option[ScriptId] = None, executionContextId: ExecutionContextId = StaticExecutionContextId)
 
+  object ExceptionDetails {
+    def fromErrorValue(err: ErrorValue, exceptionId: Int): ExceptionDetails = {
+      val data = err.data
+      // Note that Chrome wants line numbers to be 0-based
+      ExceptionDetails(exceptionId, data.message, data.lineNumberBase1 - 1, data.columnNumberBase0, Some(data.url))
+    }
+  }
+
   /**
     * One of the properties is set, or none for 'undefined'.
     */
@@ -104,9 +116,12 @@ object Runtime {
   case class ConsoleAPICalledEventParams(`type`: String, args: Seq[RemoteObject], executionContextId: ExecutionContextId, timestamp: Timestamp)
 
   case class CallFrame(functionName: String, scriptId: ScriptId, url: String, lineNumber: Int, columnNumber: Option[Int])
+
+  case class ExceptionThrownEventParams(timestamp: Timestamp, exceptionDetails: ExceptionDetails)
 }
 
 class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
+
   import Runtime._
 
   private val compiledScriptIdGenerator = new IdGenerator("compscr")
@@ -137,7 +152,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
         ExecutionContextCreatedEventParams(ExecutionContextDescription(StaticExecutionContextId, "top", "top", null)))
 
       emitEvent("Runtime.consoleAPICalled",
-        ConsoleAPICalledEventParams("log", Seq(RemoteObject.forString("Greetings from ncdbg!")), StaticExecutionContextId, System.currentTimeMillis()))
+        ConsoleAPICalledEventParams("log", Seq(RemoteObject.forString("Greetings from ncdbg!")), StaticExecutionContextId, Timestamp.now))
 
     case Runtime.releaseObjectGroup(grp) =>
       log.debug(s"Request to release object group '$grp'")
@@ -190,5 +205,11 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
 
     case Runtime.releaseObject(objectId) =>
       log.debug(s"Request to release object with ID $objectId")
+  }
+
+  override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
+    case UncaughtError(ev) =>
+      // TODO: What do use for exceptionId?
+      emitEvent("Runtime.exceptionThrown", ExceptionThrownEventParams(Timestamp.now, ExceptionDetails.fromErrorValue(ev, 1)))
   }
 }

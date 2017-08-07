@@ -268,6 +268,28 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         }
       }
     }
+
+    "when ScriptHost emits UncaughtError" - {
+      def testIt = {
+        val runtime = newActorInstance[Runtime]
+        val ev = ErrorValue(ExceptionData("Error", "oops", 1, 0, "http://some/where", None), true, ObjectId("o1"))
+        val req = Messages.Request("1", Domain.enable)
+        // First 2 are executionContextCreated and consoleAPICalled
+        receiveScriptEventTriggeredEvents(runtime, Seq(req), Seq(UncaughtError(ev)), 3).last
+      }
+      "should emit Runtime.exceptionThrown event" in {
+        val event = testIt
+        event.method should be("Runtime.exceptionThrown")
+      }
+      "should convert the error value" in {
+        val event = testIt
+        event.params match {
+          case Runtime.ExceptionThrownEventParams(ts, exceptionDetails) =>
+            exceptionDetails should be (ExceptionDetails(1, "oops", 0, 0, Some("http://some/where")))
+          case other => fail("Unexpected: " + other)
+        }
+      }
+    }
   }
 
   override def createScriptHost(): ScriptHost = {

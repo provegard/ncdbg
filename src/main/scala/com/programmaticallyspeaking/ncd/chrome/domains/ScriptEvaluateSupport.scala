@@ -41,9 +41,7 @@ trait ScriptEvaluateSupport { self: Logging =>
 
     scriptHost.evaluateOnStackFrame(callFrameId, expression, namedObjects) match {
       case Success(err: ErrorValue) if reportException && err.isThrown =>
-        val data = err.data
-        // Note that Chrome wants line numbers to be 0-based
-        val details = Runtime.ExceptionDetails(exceptionId, data.message, data.lineNumberBase1 - 1, data.columnNumber, Some(data.url))
+        val details = Runtime.ExceptionDetails.fromErrorValue(err, exceptionId)
         // Apparently we need to pass an actual value with the exception details
         EvaluationResult(RemoteObject.undefinedValue, Some(details))
       case Success(err: ErrorValue) if err.isThrown =>

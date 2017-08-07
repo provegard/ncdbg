@@ -12,7 +12,7 @@ import scala.language.implicitConversions
 
 object Marshaller {
   val objectIdGenerator = new IdGenerator("objid-")
-  case class ExceptionInfo(stack: String, lineNumber: Int, fileName: String)
+  case class ExceptionInfo(stack: String, lineNumber1Based: Int, fileName: String)
 
   private[Marshaller] case class ExceptionDataWithJavaStack(data: ExceptionData, javaStack: Option[String])
 
@@ -331,7 +331,7 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
             case Some(info) =>
               // Note that we don't include the Java stack here, because we want the stack trace to be a script stack
               // trace always, for consistency. Instead we include the Java stack trace as an extra Error property.
-              (LocationData(info.lineNumber, -1, info.fileName), null)
+              (LocationData(info.lineNumber1Based, -1, info.fileName), null)
             case None =>
               (LocationData(0, -1, "<unknown>"), null)
           }
@@ -347,7 +347,7 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
       // (we get None if there are no stack frames at all, which would be odd).
       val fullJavaStack = javaExceptionInfo.map(info => s"$name: $message\n${info.stack}")
 
-      ExceptionDataWithJavaStack(ExceptionData(name, message, data._1.lineNumber, data._1.columnNumber, data._1.url, Option(fullStack)),
+      ExceptionDataWithJavaStack(ExceptionData(name, message, data._1.lineNumberBase1, data._1.columnNumberBase0, data._1.url, Option(fullStack)),
         fullJavaStack)
     }
   }
@@ -375,5 +375,5 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
     }
   }
 
-  private case class LocationData(lineNumber: Int, columnNumber: Int, url: String)
+  private case class LocationData(lineNumberBase1: Int, columnNumberBase0: Int, url: String)
 }

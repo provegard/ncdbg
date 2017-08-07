@@ -78,6 +78,17 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
       }
     }
 
+    "thrown Error with 0-based column number" in {
+      val expr = "(function(){try{\r\nthrow new Error('error');}catch(e){return e;}})()"
+
+      evaluateExpression(expr) { (_, actual) =>
+        inside(actual) {
+          case ErrorValue(data, _, _) =>
+            data.columnNumberBase0 should be (0)
+        }
+      }
+    }
+
     "Java Exception" - {
       val expr = "(function(){try{throw new java.lang.IllegalArgumentException('oops');}catch(e){return e;}})()"
 
