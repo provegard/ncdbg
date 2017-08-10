@@ -23,6 +23,7 @@ class ByReferenceRemoteObjectConverter extends RemoteObjectConverter {
     case obj: ObjectNode => RemoteObject.forObject(obj.className, objectId(obj))
     case date: DateNode => RemoteObject.forDate(date.stringRepresentation, objectId(date))
     case regexp: RegExpNode => RemoteObject.forRegExp(regexp.stringRepresentation, objectId(regexp))
+    case sym: SymbolNode => RemoteObject.forSymbol(sym.description, objectId(sym))
     case EmptyNode => RemoteObject.nullValue
     case fun: FunctionNode => RemoteObject.forFunction(fun.name, fun.source, objectId(fun))
     case err: ErrorValue => RemoteObject.forError(err.data.name, err.data.message, err.data.stackIncludingMessage, objectId(err))

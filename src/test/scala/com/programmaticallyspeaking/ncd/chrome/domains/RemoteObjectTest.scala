@@ -62,6 +62,12 @@ class RemoteObjectTest extends UnitTest {
       }
     }
 
+    "forSymbol" - {
+      "should handle description and object ID" in {
+        RemoteObject.forSymbol("Symbol(foo)", "sym-id") should be (RemoteObject("symbol", None, None, Some("Symbol(foo)"), None, None, Some("sym-id")))
+      }
+    }
+
     "forArray" - {
       "should handle an empty array" in {
         RemoteObject.forArray(0, None, "arr-id") should be (RemoteObject("object", Some("array"), Some("Array"), Some("Array[0]"), None, None, Some("arr-id")))

@@ -89,6 +89,12 @@ case class ObjectNode(className: String, objectId: ObjectId) extends ComplexNode
 case class DateNode(stringRepresentation: String, objectId: ObjectId) extends ComplexNode
 
 /**
+  * Represents an ES6 Symbol.
+  * @param description the Symbol description
+  */
+case class SymbolNode(description: String, objectId: ObjectId) extends ComplexNode
+
+/**
   * Represents JavaScript RegExp.
   *
   * @param stringRepresentation the string representation of the RegExp

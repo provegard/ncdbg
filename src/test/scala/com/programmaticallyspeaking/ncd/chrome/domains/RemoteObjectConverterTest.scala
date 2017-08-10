@@ -96,6 +96,11 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
       val regexp = RegExpNode(stringRep, ObjectId("obj-1"))
       converter.toRemoteObject(regexp).description should be (Some(stringRep))
     }
+
+    "convert SymbolNode to a RemoteObject with a description" in {
+      val sym = SymbolNode("Symbol(foo)", ObjectId("obj-1"))
+      converter.toRemoteObject(sym).description should be (Some("Symbol(foo)"))
+    }
   }
 
   def valueConverter[A <: ValueNode](objectId: ObjectId, data: Map[String, A]) = RemoteObjectConverter.byValue(new MapBasedObjectInteraction(Map(objectId -> data)))

@@ -22,6 +22,10 @@ trait RemoteObjectBuilder {
     RemoteObject("object", None, Some("Object"), Some("Object"), Some(value), None, None)
   }
 
+  def forSymbol(description: String, objectId: String) = {
+    RemoteObject("symbol", None, None, Some(description), None, None, Some(objectId))
+  }
+
   def forArray(length: Int, typedClassName: Option[String], objectId: String) = {
     require(length >= 0, "array length must be non-negative")
     val className = typedClassName.getOrElse("Array")

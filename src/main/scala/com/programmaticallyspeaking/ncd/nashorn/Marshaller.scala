@@ -24,6 +24,7 @@ object Marshaller {
 
   val ConsStringClassName = "jdk.nashorn.internal.runtime.ConsString"
   val ScriptObjectClassName = "jdk.nashorn.internal.runtime.ScriptObject"
+  val SymbolClassName = "jdk.nashorn.internal.runtime.Symbol"
 }
 
 object MappingRegistry {
@@ -95,6 +96,7 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
   }
 
   private def isConsString(str: ObjectReference) = str.`type`().name == ConsStringClassName
+  private def isSymbol(sym: ObjectReference) = sym.`type`().name == SymbolClassName
 
   private def toStringOf(obj: ObjectReference) = {
     val invoker = Invokers.shared.getDynamic(obj)
@@ -115,6 +117,8 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
       MarshallerResult(vn, extra)
     case str: ObjectReference if isConsString(str) =>
       toStringOf(str)
+    case sym: ObjectReference if isSymbol(sym) =>
+      marshalSymbol(sym)
     case obj: ObjectReference =>
       // Scala/Java object perhaps?
       ObjectNode(obj.`type`().name(), objectId(obj))
@@ -136,6 +140,8 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
     }
     Option(v).map(marshal)
   }
+
+  private def marshalSymbol(reference: ObjectReference) = SymbolNode(toStringOf(reference).valueNode.asString, objectId(reference))
 
   private def marshalScriptObject(value: Value): ValueNode = {
     val scriptObject = value.asInstanceOf[ObjectReference]
