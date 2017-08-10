@@ -95,6 +95,20 @@ case class DateNode(stringRepresentation: String, objectId: ObjectId) extends Co
 case class SymbolNode(description: String, objectId: ObjectId) extends ComplexNode
 
 /**
+  * Represents ES6 Map and WeakMap.
+  * @param size the size of the map (unless it's weak, in which case the size is always -1)
+  * @param weak if it's a WeakMap
+  */
+case class MapNode(size: Int, weak: Boolean, objectId: ObjectId) extends ComplexNode
+
+/**
+  * Represents ES6 Set and WeakSet.
+  * @param size the size of the set (unless it's weak, in which case the size is always -1)
+  * @param weak if it's a WeakSet
+  */
+case class SetNode(size: Int, weak: Boolean, objectId: ObjectId) extends ComplexNode
+
+/**
   * Represents JavaScript RegExp.
   *
   * @param stringRepresentation the string representation of the RegExp

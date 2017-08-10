@@ -68,6 +68,26 @@ class RemoteObjectTest extends UnitTest {
       }
     }
 
+    "forMap" - {
+      "should handle a Map" in {
+        RemoteObject.forMap(3, weak = false, "map-id") should be (RemoteObject("object", Some("map"), Some("Map"), Some("Map(3)"), None, None, Some("map-id")))
+      }
+
+      "should handle a WeakMap" in {
+        RemoteObject.forMap(-1, weak = true, "map-id") should be (RemoteObject("object", Some("weakmap"), Some("WeakMap"), Some("WeakMap"), None, None, Some("map-id")))
+      }
+    }
+
+    "forSet" - {
+      "should handle a Set" in {
+        RemoteObject.forSet(3, weak = false, "set-id") should be (RemoteObject("object", Some("set"), Some("Set"), Some("Set(3)"), None, None, Some("set-id")))
+      }
+
+      "should handle a WeakSet" in {
+        RemoteObject.forSet(-1, weak = true, "set-id") should be (RemoteObject("object", Some("weakset"), Some("WeakSet"), Some("WeakSet"), None, None, Some("set-id")))
+      }
+    }
+
     "forArray" - {
       "should handle an empty array" in {
         RemoteObject.forArray(0, None, "arr-id") should be (RemoteObject("object", Some("array"), Some("Array"), Some("Array[0]"), None, None, Some("arr-id")))

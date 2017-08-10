@@ -152,6 +152,10 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
       case "Error" => toError(mirror)
       case "Date" => toDate(mirror)
       case "RegExp" => toRegExp(mirror)
+      case "Map" => toMap(mirror, weak = false)
+      case "WeakMap" => toMap(mirror, weak = true)
+      case "Set" => toSet(mirror, weak = false)
+      case "WeakSet" => toSet(mirror, weak = true)
       case _ => toObject(mirror)
     }
   }
@@ -227,6 +231,18 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
 
   private def toRegExp(mirror: ScriptObjectMirror) = {
     RegExpNode(mirror.actualToString, objectId(mirror.scriptObject))
+  }
+
+  private def toMap(mirror: ScriptObjectMirror, weak: Boolean) = {
+    // Size isn't used by DevTools for WeakMap, so skip the extra call in that case
+    val size = if (weak) -1 else mirror.getInt("size", 0)
+    MapNode(size, weak, objectId(mirror.scriptObject))
+  }
+
+  private def toSet(mirror: ScriptObjectMirror, weak: Boolean) = {
+    // Size isn't used by DevTools for WeakSet, so skip the extra call in that case
+    val size = if (weak) -1 else mirror.getInt("size", 0)
+    SetNode(size, weak, objectId(mirror.scriptObject))
   }
 
   private def toObject(mirror: ScriptObjectMirror) = ObjectNode(mirror.typeOfObject(), objectId(mirror.scriptObject))

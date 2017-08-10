@@ -17,6 +17,19 @@ trait RemoteObjectBuilder {
     RemoteObject("object", None, Some(className), Some(className), None, None, validObjectId(objectId))
   }
 
+  def forMap(size: Int, weak: Boolean, objectId: String) = {
+    val subtype = if (weak) "weakmap" else "map"
+    val cn = if (weak) "WeakMap" else "Map"
+    val sizeStr = if (weak) "" else s"($size)"
+    RemoteObject("object", Some(subtype), Some(cn), Some(cn + sizeStr), None, None, validObjectId(objectId))
+  }
+  def forSet(size: Int, weak: Boolean, objectId: String) = {
+    val subtype = if (weak) "weakset" else "set"
+    val cn = if (weak) "WeakSet" else "Set"
+    val sizeStr = if (weak) "" else s"($size)"
+    RemoteObject("object", Some(subtype), Some(cn), Some(cn + sizeStr), None, None, validObjectId(objectId))
+  }
+
   def forObject(value: Map[String, Any]) = {
     // Note: I don't know if object ID should be omitted here. The protocol doesn't say.
     RemoteObject("object", None, Some("Object"), Some("Object"), Some(value), None, None)
