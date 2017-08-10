@@ -1,9 +1,9 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ObjectPreview, PropertyPreview, RemoteObject}
+import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.Undefined
-import com.programmaticallyspeaking.ncd.infra.StringAnyMap
+import com.programmaticallyspeaking.ncd.infra.StringAnySeq
 
 object RemoteObjectConverter {
   def byValue(objectInteraction: ObjectInteraction) = new ByValueRemoteObjectConverter(objectInteraction)
@@ -50,7 +50,7 @@ class ByValueRemoteObjectConverter(objectInteraction: ObjectInteraction) extends
       }
     case obj: ObjectNode =>
       extractor.extract(obj) match {
-        case StringAnyMap(aMap) => RemoteObject.forObject(aMap)
+        case StringAnySeq(aSeq) => RemoteObject.forObject(aSeq.toMap)
         case other =>
           throw new IllegalStateException("Unexpected extracted value from ObjectNode: " + other)
       }
