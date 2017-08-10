@@ -21,7 +21,7 @@ object StackBuilder {
 }
 
 class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, mappingRegistry: MappingRegistry, codeEval: CodeEval, boxer: Boxer,
-                   breakableLocationLookup: BreakableLocationLookup) extends Logging {
+                   breakableLocationLookup: BreakableLocationLookup, preventGC: (Value) => Unit) extends Logging {
   import scala.collection.JavaConverters._
 
   private def scopeWithFreeVariables(scopeObject: Value, freeVariables: Map[String, AnyRef])(implicit marshaller: Marshaller): Value = {
@@ -53,6 +53,7 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
     scopeObjFactory += "return obj;}).call(this)"
 
     val anObject = codeEval.eval(scopeObject, null, scopeObjFactory).asInstanceOf[ObjectReference]
+    preventGC(anObject)
     val mirror = new ScriptObjectMirror(anObject)
     freeVariables.foreach {
       case (name, value) =>

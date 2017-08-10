@@ -316,7 +316,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   private val boxer = new Boxer(typeLookup)
   protected val codeEval = new CodeEval(typeLookup)
   private val stackBuilder = new StackBuilder(stackframeIdGenerator, typeLookup, mappingRegistry, codeEval, boxer,
-    (location: Location) => findBreakableLocation(location))
+    (location: Location) => findBreakableLocation(location), v => disableGarbageCollectionFor(v))
 
   /**
     * Associate a handler to be executed when an event for the request is observed.
