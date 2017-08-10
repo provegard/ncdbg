@@ -295,7 +295,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
   override def createScriptHost(): ScriptHost = {
     val host = super.createScriptHost()
 
-    when(host.getObjectProperties(any[ObjectId], any[Boolean], any[Boolean])).thenReturn(Map.empty[String, ObjectPropertyDescriptor])
+    when(host.getObjectProperties(any[ObjectId], any[Boolean], any[Boolean])).thenReturn(Seq.empty[(String, ObjectPropertyDescriptor)])
 
     host
   }

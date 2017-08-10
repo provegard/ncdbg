@@ -6,13 +6,13 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 
 trait ObjectInteraction {
-  def getOwnProperties(objectId: ObjectId): Map[String, ObjectPropertyDescriptor]
+  def getOwnProperties(objectId: ObjectId): Seq[(String, ObjectPropertyDescriptor)]
 
   def invokePropertyGetter(objectId: ObjectId, getter: FunctionNode): Try[ValueNode]
 }
 
 class ScriptHostBasedObjectInteraction(scriptHost: ScriptHost) extends ObjectInteraction {
-  override def getOwnProperties(objectId: ObjectId): Map[String, ObjectPropertyDescriptor] =
+  override def getOwnProperties(objectId: ObjectId): Seq[(String, ObjectPropertyDescriptor)] =
     scriptHost.getObjectProperties(objectId, onlyOwn = true, onlyAccessors = false)
 
   override def invokePropertyGetter(objectId: ObjectId, getter: FunctionNode): Try[ValueNode] = {
@@ -28,7 +28,7 @@ class ValueNodeExtractor(objectInteraction: ObjectInteraction) {
 
   def extract(v: ValueNode): Any = extract(v, Set.empty)
 
-  private def propertyMap(oid: ObjectId, observedObjectIds: Set[ObjectId]): Map[String, Any] = {
+  private def propertyList(oid: ObjectId, observedObjectIds: Set[ObjectId]): Seq[(String, Any)] = {
     val props = objectInteraction.getOwnProperties(oid)
     props.map { e =>
       val propName = e._1
@@ -55,15 +55,15 @@ class ValueNodeExtractor(objectInteraction: ObjectInteraction) {
     case lzy: LazyNode => extract(lzy.resolve(), observedObjectIds)
     case ArrayNode(_, _, oid) if observedObjectIds.contains(oid) => s"<Error: cycle detected for array '${oid.id}'>"
     case ArrayNode(size, _, oid) =>
-      val propMap = propertyMap(oid, observedObjectIds)
+      val propList = propertyList(oid, observedObjectIds)
       val array = new Array[Any](size)
-      propMap.foreach {
+      propList.foreach {
         case (UnsignedIntString(idx), value) if idx < size => array(idx) = value
         case _ =>
       }
       array
     case ObjectNode(_, oid) if observedObjectIds.contains(oid) => s"<Error: cycle detected for object '${oid.id}'>"
-    case ObjectNode(_, oid) => propertyMap(oid, observedObjectIds)
+    case ObjectNode(_, oid) => propertyList(oid, observedObjectIds)
     case EmptyNode => null
     case DateNode(stringRep, _) => stringRep
     case FunctionNode(name, _, _) => s"<function $name() {}>"

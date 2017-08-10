@@ -29,7 +29,7 @@ object FakeScriptHost extends ScriptHost {
   override def step(stepType: StepType): Unit = notImpl
   override def pauseOnBreakpoints(): Unit = notImpl
   override def ignoreBreakpoints(): Unit = notImpl
-  override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, types.ObjectPropertyDescriptor] = Map.empty
+  override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Seq[(String, types.ObjectPropertyDescriptor)] = Seq.empty
   override def pauseOnExceptions(pauseType: ExceptionPauseType): Unit = notImpl
   
   private def notImpl[R]: R = throw new UnsupportedOperationException("FakeScriptHost is not complete")

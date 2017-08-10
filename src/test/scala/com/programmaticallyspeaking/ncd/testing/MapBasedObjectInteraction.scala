@@ -7,11 +7,11 @@ import scala.util.{Failure, Try}
 
 class MapBasedObjectInteraction(data: Map[ObjectId, Map[String, ValueNode]]) extends ObjectInteraction {
 
-  override def getOwnProperties(objectId: ObjectId): Map[String, ObjectPropertyDescriptor] = data.get(objectId) match  {
+  override def getOwnProperties(objectId: ObjectId): Seq[(String, ObjectPropertyDescriptor)] = data.get(objectId) match  {
     case Some(objectData) =>
       objectData.map { e =>
         e._1 -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, false, true, Some(e._2), None, None)
-      }
+      }.toSeq
     case None => throw new IllegalArgumentException("Unknown object ID: " + objectId.id)
   }
 

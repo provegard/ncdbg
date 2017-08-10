@@ -16,7 +16,7 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
 
   override def disableObjectPropertiesCache(): Unit = objectPropertiesCacheEnabled = false
 
-  override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = pausedData match {
+  override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Seq[(String, ObjectPropertyDescriptor)] = pausedData match {
     case Some(pd) =>
       implicit val marshaller = pd.marshaller
       implicit val thread = marshaller.thread
@@ -35,7 +35,7 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
         case Some(desc: ObjectDescriptor) =>
           // Get object properties, via a cache.
           val cacheKey = ObjectPropertiesKey(objectId, actualOnlyOwn, onlyAccessors)
-          def getProperties = createPropertyHolder(objectId, desc, includeProto).map(_.properties(actualOnlyOwn, onlyAccessors)).getOrElse(Map.empty)
+          def getProperties = createPropertyHolder(objectId, desc, includeProto).map(_.properties(actualOnlyOwn, onlyAccessors)).getOrElse(Seq.empty)
           val objectProperties = if (objectPropertiesCacheEnabled)
             pausedData.get.objectPropertiesCache.getOrElseUpdate(cacheKey, getProperties)
           else getProperties
@@ -52,7 +52,7 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
 
         case None =>
           log.warn (s"Unknown object ($objectId), cannot get properties")
-          Map.empty
+          Seq.empty
       }
     case None =>
       throw new IllegalStateException("Property extraction can only be done in a paused state.")
@@ -69,7 +69,7 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
       val factory = scriptBasedPropertyHolderFactory()
       val holder = factory.create(ref, propBlacklistRegex, isNative = true)
       new PropertyHolder {
-        override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+        override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Seq[(String, ObjectPropertyDescriptor)] = {
           holder.properties(onlyOwn, onlyAccessors).map(accessorToDataForLocals(objectId))
         }
       }

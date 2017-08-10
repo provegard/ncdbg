@@ -124,7 +124,15 @@ trait ScriptHost {
     */
   def ignoreBreakpoints(): Unit
 
-  def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor]
+  /**
+    * Returns a list of named object property descriptors, including symbol properties.
+    *
+    * @param objectId the ID of the object whose properties to get
+    * @param onlyOwn true if only own properties should be extracted
+    * @param onlyAccessors true if only accessors should be extracted
+    * @return a list of named object property descriptors
+    */
+  def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Seq[(String, ObjectPropertyDescriptor)]
 
   def pauseOnExceptions(pauseType: ExceptionPauseType): Unit
 

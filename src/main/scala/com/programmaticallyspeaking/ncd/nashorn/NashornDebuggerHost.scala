@@ -226,7 +226,7 @@ private[nashorn] class PausedData(val thread: ThreadReference, val marshaller: M
   /** We assume that we can cache object properties as long as we're in a paused state. Since we're connected to a
     * Java process, an arbitrary Java object may change while in this state, so we only cache JS objects.
     */
-  val objectPropertiesCache = mutable.Map[ObjectPropertiesKey, Map[String, ObjectPropertyDescriptor]]()
+  val objectPropertiesCache = mutable.Map[ObjectPropertiesKey, Seq[(String, ObjectPropertyDescriptor)]]()
 
   val propertyHolderCache = mutable.Map[ObjectId, Option[PropertyHolder]]()
 

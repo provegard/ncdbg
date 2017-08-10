@@ -59,7 +59,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
 //    ObjectPreview("object", s"Array[$length]", false, Some("typedarray"), Seq(propertyPreview: _*))
 //  }
 
-  def getPreview(obj: RemoteObject, props: Map[String, ObjectPropertyDescriptor]): Option[ObjectPreview] = {
+  def getPreview(obj: RemoteObject, props: Seq[(String, ObjectPropertyDescriptor)]): Option[ObjectPreview] = {
     val generator = new PreviewGenerator(_ => props, PreviewGenerator.Options(maxStringLength, maxProperties, maxIndices))
     generator.withPreviewForObject(obj).preview
   }
@@ -139,7 +139,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
   "Preview generation" - {
     forAll(testCases) { (desc, obj, expected) =>
       desc in {
-        val props = obj.objectId.flatMap(propertyMaps.get).getOrElse(Map.empty)
+        val props = obj.objectId.flatMap(propertyMaps.get).map(_.toSeq).getOrElse(Seq.empty)
         getPreview(obj, props) should be (expected)
       }
     }
@@ -148,7 +148,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
       def preview = {
         val objId = objectIdString("toomanyprops")
         val obj = forObject(objId)
-        val props = propertyMaps.getOrElse(objId, Map.empty)
+        val props = propertyMaps.getOrElse(objId, Map.empty).toSeq
         getPreview(obj, props)
       }
 
@@ -164,7 +164,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     "with index count over the max count" - {
       def preview = {
         val objId = objectIdString("toomanyindices")
-        val props = propertyMaps.getOrElse(objId, Map.empty)
+        val props = propertyMaps.getOrElse(objId, Map.empty).toSeq
         val obj = RemoteObject.forArray(props.size, None, objId)
         getPreview(obj, props)
       }

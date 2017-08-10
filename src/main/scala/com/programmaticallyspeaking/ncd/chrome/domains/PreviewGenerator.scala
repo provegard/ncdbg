@@ -8,7 +8,7 @@ import com.programmaticallyspeaking.ncd.host.{EmptyNode, FunctionNode, ObjectId,
 import scala.util.{Failure, Success, Try}
 
 object PreviewGenerator {
-  type PropertyFetcher = (ObjectId) => Map[String, ObjectPropertyDescriptor]
+  type PropertyFetcher = (ObjectId) => Seq[(String, ObjectPropertyDescriptor)]
 
   case class Options(maxStringLength: Int, maxProperties: Int, maxIndices: Int)
 
@@ -62,7 +62,7 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
     // Internal and map/set/iterator entries not supported
   }
 
-  private def appendPropertyDescriptors(obj: RemoteObject, preview: ObjectPreview, props: Map[String, ObjectPropertyDescriptor]): ObjectPreview = {
+  private def appendPropertyDescriptors(obj: RemoteObject, preview: ObjectPreview, props: Seq[(String, ObjectPropertyDescriptor)]): ObjectPreview = {
     props.foldLeft(preview)((old, nameAndDescriptor) => appendPropertyDescriptor(obj, old, nameAndDescriptor._1, nameAndDescriptor._2))
   }
 

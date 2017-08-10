@@ -5,13 +5,14 @@ import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, Pr
 import com.sun.jdi._
 
 import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 trait PropertyHolder {
-  def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor]
+  def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Seq[(String, ObjectPropertyDescriptor)]
 }
 
 class ArrayPropertyHolder(array: ArrayReference)(implicit marshaller: Marshaller) extends PropertyHolder {
-  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Seq[(String, ObjectPropertyDescriptor)] = {
     // Note: A ValueNode shouldn't be null/undefined, so use Some(...) rather than Option(...) for the value
     def createProp(value: ValueNode) =
       ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
@@ -22,7 +23,7 @@ class ArrayPropertyHolder(array: ArrayReference)(implicit marshaller: Marshaller
       val theValue = marshaller.marshal(array.getValue(idx))
       idx.toString -> createProp(theValue)
     } :+ ("length" -> createProp(SimpleValue(array.length())))
-    props.toMap
+    props
   }
 }
 
@@ -32,23 +33,23 @@ class ArbitraryObjectPropertyHolder(obj: ObjectReference)(implicit marshaller: M
   import scala.collection.JavaConverters._
   private val refType = obj.referenceType()
 
-  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Seq[(String, ObjectPropertyDescriptor)] = {
     var props = javaBeansMap(onlyOwn)
     if (!onlyAccessors) props = fieldMap(onlyOwn) ++ props
     props
   }
 
-  private def fieldMap(onlyOwn: Boolean): Map[String, ObjectPropertyDescriptor] = {
+  private def fieldMap(onlyOwn: Boolean): Seq[(String, ObjectPropertyDescriptor)] = {
     val fields = if (onlyOwn) refType.fields() else refType.allFields()
     fields.asScala.map { f =>
       val isOwn = f.declaringType() == refType
       val theValue = marshaller.marshal(obj.getValue(f))
       f.name() -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
         isWritable = !f.isFinal, isOwn = isOwn, Some(theValue), None, None)
-    }.toMap
+    }
   }
 
-  private def javaBeansMap(onlyOwn: Boolean): Map[String, ObjectPropertyDescriptor] = {
+  private def javaBeansMap(onlyOwn: Boolean): Seq[(String, ObjectPropertyDescriptor)] = {
     val methods = if (onlyOwn) refType.methods() else refType.allMethods() //TODO: Test non-all here!
     methods.asScala
       .flatMap(methodToJavaBeanMethod) // filter out JavaBean methods
@@ -60,7 +61,7 @@ class ArbitraryObjectPropertyHolder(obj: ObjectReference)(implicit marshaller: M
         val isOwn = g._2.head.method.declaringType() == refType
         g._1 -> ObjectPropertyDescriptor(PropertyDescriptorType.Accessor,
           false, true, setter.isDefined, isOwn, None, getter, setter)
-      }
+      }.toSeq
   }
 }
 
@@ -239,7 +240,7 @@ class ScriptBasedPropertyHolder(obj: ObjectReference, extractor: Extractor)(impl
     case EmptyNode | SimpleValue(Undefined) => None
     case other => Some(other)
   }
-  private def populateFromArray(arr: ArrayReference, map: mutable.Map[String, ObjectPropertyDescriptor]): Unit = {
+  private def populateFromArray(arr: ArrayReference, list: ListBuffer[(String, ObjectPropertyDescriptor)]): Unit = {
     val values = arr.getValues.asScala
     values.grouped(6).map(_.toList).foreach {
       case (key: StringReference) :: (flags: StringReference) :: value :: getter :: setter :: symbol :: Nil =>
@@ -256,25 +257,25 @@ class ScriptBasedPropertyHolder(obj: ObjectReference, extractor: Extractor)(impl
         val isWritable = flagsStr.contains('w')
         val isOwn = flagsStr.contains('o')
         val sym = Option(symbol).map(marshaller.marshal).collect { case sn: SymbolNode => sn }
-        map(keyStr) = ObjectPropertyDescriptor(descType, isConfigurable, isEnumerable, isWritable, isOwn, vn, gn, sn, sym)
+        list += keyStr -> ObjectPropertyDescriptor(descType, isConfigurable, isEnumerable, isWritable, isOwn, vn, gn, sn, sym)
       case other =>
         throw new RuntimeException("Unexpected result from the extractor function: " + other)
     }
   }
 
 
-  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Map[String, ObjectPropertyDescriptor] = {
+  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Seq[(String, ObjectPropertyDescriptor)] = {
     implicit val thread = marshaller.thread
     val ret = extractor.extract(obj, onlyOwn, onlyAccessors)
 
-    val map = mutable.Map[String, ObjectPropertyDescriptor]()
+    val list = ListBuffer[(String, ObjectPropertyDescriptor)]()
     ret match {
-      case arr: ArrayReference => populateFromArray(arr, map)
+      case arr: ArrayReference => populateFromArray(arr, list)
       case obj: ObjectReference =>
         val inv = Invokers.shared.getDynamic(obj)
         // Call NativeArray.asObjectArray()
         inv.asObjectArray() match {
-          case arr: ArrayReference => populateFromArray(arr, map)
+          case arr: ArrayReference => populateFromArray(arr, list)
           case other =>
             throw new RuntimeException("Not an array from NativeArray.asObjectArray: " + other)
         }
@@ -283,6 +284,6 @@ class ScriptBasedPropertyHolder(obj: ObjectReference, extractor: Extractor)(impl
       case other =>
         throw new RuntimeException("Object property extractor returned unknown: " + other)
     }
-    map.toMap
+    list
   }
 }

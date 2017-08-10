@@ -9,7 +9,7 @@ class SymbolPropertiesTest extends RealMarshallerTestFixture with RunningJava9 w
 
     "should have a property descriptor with the symbol description as name" in {
       testProperties(expr, onlyOwn = true) { props =>
-        val propNames = props.keys
+        val propNames = props.toMap.keys
         propNames should contain ("Symbol(foo)")
       }
     }
@@ -22,7 +22,24 @@ class SymbolPropertiesTest extends RealMarshallerTestFixture with RunningJava9 w
     }
   }
 
-  //TODO: Symbol + prop same name
+  "Object with a symbol property and a regular property with the same name" - {
+    val expr = "(function (s) { var o = {}; o[s] = 'test'; o[s.toString()] = 'test again'; return o; })(Symbol('foo'))"
+
+    "should return two property descriptors with the same name" in {
+      testProperties(expr, onlyOwn = true) { props =>
+        val count = props.map(_._1).count(_ == "Symbol(foo)")
+        count should be (2)
+      }
+    }
+
+    "should only have one property descriptor with a symbol" in {
+      testProperties(expr, onlyOwn = true) { props =>
+        val count = props.map(_._2).count(_.symbol.isDefined)
+        count should be (1)
+      }
+    }
+  }
+
   //TODO: Props of Symbol
   //TODO: Symbol __proto__ ??
 }

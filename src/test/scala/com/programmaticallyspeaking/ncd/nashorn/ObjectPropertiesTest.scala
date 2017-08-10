@@ -82,7 +82,7 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
       """.stripMargin, Map("bar" -> 42, "__proto__" -> Map("foo" -> 41, "__proto__" -> AnyObject)))
   )
 
-  def testProperties(clazz: Class[_])(handler: (Map[String, ObjectPropertyDescriptor] => Unit)): Unit = {
+  def testProperties(clazz: Class[_])(handler: (Seq[(String, ObjectPropertyDescriptor)] => Unit)): Unit = {
     val expr = s"createInstance('${clazz.getName}')"
     testProperties(expr)(handler)
   }
