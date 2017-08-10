@@ -23,7 +23,8 @@ package object types {
   }
   case class ObjectPropertyDescriptor(descriptorType: PropertyDescriptorType, isConfigurable: Boolean, isEnumerable: Boolean, isWritable: Boolean,
                                       isOwn: Boolean,
-                                      value: Option[ValueNode], getter: Option[ValueNode], setter: Option[ValueNode]) {
+                                      value: Option[ValueNode], getter: Option[ValueNode], setter: Option[ValueNode],
+                                      symbol: Option[SymbolNode] = None) {
     // Validate input
     descriptorType match {
       case PropertyDescriptorType.Generic =>

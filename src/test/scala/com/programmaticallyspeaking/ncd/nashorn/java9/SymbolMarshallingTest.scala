@@ -4,7 +4,7 @@ import com.programmaticallyspeaking.ncd.host.SymbolNode
 import com.programmaticallyspeaking.ncd.nashorn.RealMarshallerTestFixture
 import org.scalatest.Inside
 
-class RealMarshallerTest extends RealMarshallerTestFixture with Inside with RunningJava9 {
+class SymbolMarshallingTest extends RealMarshallerTestFixture with Inside with RunningJava9 {
 
   "Marshalling to ValueNode works for" - {
     "local Symbol" in {

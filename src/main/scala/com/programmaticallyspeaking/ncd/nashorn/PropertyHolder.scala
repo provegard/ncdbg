@@ -127,15 +127,16 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
   private val extractorFunctionSource =
     """(function () {
       |  var hasJava = !!Java;
+      |  var hasSymbols = !!Object.getOwnPropertySymbols;
       |  return function __getprops(target, isNative, onlyOwn, onlyAccessors, strPropertyBlacklistRegExp) {
-      |    var result = [], proto;
+      |    var result = [], proto, i, j;
       |    if (isNative) {
       |      var blacklistRegExp = strPropertyBlacklistRegExp ? new RegExp(strPropertyBlacklistRegExp) : null;
       |      var includeProp = function (prop) blacklistRegExp ? !prop.match(blacklistRegExp) : true
       |      var current = target, own = true;
       |      while (current) {
       |        var names = Object.getOwnPropertyNames(current);
-      |        for (var i = 0, j = names.length; i < j; i++) {
+      |        for (i = 0, j = names.length; i < j; i++) {
       |          var k = names[i];
       |          if (!includeProp(k)) continue;
       |          var desc = Object.getOwnPropertyDescriptor(current, k);
@@ -149,6 +150,17 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |          result.push(desc.value);
       |          result.push(desc.get);
       |          result.push(desc.set);
+      |          result.push(null); // symbol
+      |        }
+      |        var symbols = hasSymbols && !onlyAccessors ? Object.getOwnPropertySymbols(current) : [];
+      |        for (i = 0, j = symbols.length; i < j; i++) {
+      |          var sym = symbols[i];
+      |          result.push(sym.toString());
+      |          result.push(own ? "o" : ""); // how do we know the rest??
+      |          result.push(null);
+      |          result.push(null);
+      |          result.push(null);
+      |          result.push(sym);
       |        }
       |        if (own && !onlyAccessors && includeProp("__proto__") && (proto = safeGetProto(current))) {
       |          result.push("__proto__");
@@ -156,6 +168,7 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |          result.push(proto);
       |          result.push(null);
       |          result.push(null);
+      |          result.push(null); // symbol
       |        }
       |        if (own && onlyOwn) current = null; else {
       |          current = current.__proto__;
@@ -170,12 +183,14 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |          result.push(target[i]);
       |          result.push(null);
       |          result.push(null);
+      |          result.push(null); // symbol
       |        }
       |        result.push("length");
       |        result.push("o");
       |        result.push(target.length);
       |        result.push(null);
       |        result.push(null);
+      |        result.push(null); // symbol
       |      } else {
       |        for (var k in target) {
       |          result.push(k.toString());
@@ -183,6 +198,7 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |          result.push(target[k]);
       |          result.push(null);
         |        result.push(null);
+        |        result.push(null); // symbol
       |        }
       |      }
       |    }
@@ -225,8 +241,8 @@ class ScriptBasedPropertyHolder(obj: ObjectReference, extractor: Extractor)(impl
   }
   private def populateFromArray(arr: ArrayReference, map: mutable.Map[String, ObjectPropertyDescriptor]): Unit = {
     val values = arr.getValues.asScala
-    values.grouped(5).map(_.toList).foreach {
-      case (key: StringReference) :: (flags: StringReference) :: value :: getter :: setter :: Nil =>
+    values.grouped(6).map(_.toList).foreach {
+      case (key: StringReference) :: (flags: StringReference) :: value :: getter :: setter :: symbol :: Nil =>
         val keyStr = key.value()
         val flagsStr = flags.value()
         var vn = toOption(marshaller.marshal(value))
@@ -239,7 +255,8 @@ class ScriptBasedPropertyHolder(obj: ObjectReference, extractor: Extractor)(impl
         val isEnumerable = flagsStr.contains('e')
         val isWritable = flagsStr.contains('w')
         val isOwn = flagsStr.contains('o')
-        map(keyStr) = ObjectPropertyDescriptor(descType, isConfigurable, isEnumerable, isWritable, isOwn, vn, gn, sn)
+        val sym = Option(symbol).map(marshaller.marshal).collect { case sn: SymbolNode => sn }
+        map(keyStr) = ObjectPropertyDescriptor(descType, isConfigurable, isEnumerable, isWritable, isOwn, vn, gn, sn, sym)
       case other =>
         throw new RuntimeException("Unexpected result from the extractor function: " + other)
     }

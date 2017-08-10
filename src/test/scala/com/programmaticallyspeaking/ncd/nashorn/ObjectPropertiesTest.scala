@@ -6,7 +6,7 @@ import com.programmaticallyspeaking.ncd.infra.StringAnyMap
 import org.scalatest.Inside
 import org.scalatest.prop.TableDrivenPropertyChecks
 
-class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with TableDrivenPropertyChecks {
+class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with TableDrivenPropertyChecks with ObjectPropertyTesting {
   import RealMarshallerTest._
 
   val complexValues = Table(
@@ -82,16 +82,9 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
       """.stripMargin, Map("bar" -> 42, "__proto__" -> Map("foo" -> 41, "__proto__" -> AnyObject)))
   )
 
-  def testProperties(clazz: Class[_])(handler: (Map[String, ObjectPropertyDescriptor] => Unit)) = {
+  def testProperties(clazz: Class[_])(handler: (Map[String, ObjectPropertyDescriptor] => Unit)): Unit = {
     val expr = s"createInstance('${clazz.getName}')"
-    evaluateExpression(expr) {
-      case (host, c: ComplexNode) =>
-        val props = host.getObjectProperties(c.objectId, false, false)
-
-        handler(props - "class")
-
-      case (host, other) => fail("Unknown: " + other)
-    }
+    testProperties(expr)(handler)
   }
 
   "Object property expansion works for" - {
