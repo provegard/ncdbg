@@ -1,5 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn.java9
 
+import com.programmaticallyspeaking.ncd.host.SimpleValue
 import com.programmaticallyspeaking.ncd.nashorn.{ObjectPropertyTesting, RealMarshallerTestFixture}
 
 class SymbolPropertiesTest extends RealMarshallerTestFixture with RunningJava9 with ObjectPropertyTesting {
@@ -18,6 +19,13 @@ class SymbolPropertiesTest extends RealMarshallerTestFixture with RunningJava9 w
       testProperties(expr, onlyOwn = true) { props =>
         val symNode = props.find(_._1 == "Symbol(foo)").flatMap(_._2.symbol)
         symNode.map(_.description) should be (Some("Symbol(foo)"))
+      }
+    }
+
+    "should have a symbol property descriptor with a value" in {
+      testProperties(expr, onlyOwn = true) { props =>
+        val valueNode = props.find(_._1 == "Symbol(foo)").flatMap(_._2.value)
+        valueNode should be (Some(SimpleValue("test")))
       }
     }
   }

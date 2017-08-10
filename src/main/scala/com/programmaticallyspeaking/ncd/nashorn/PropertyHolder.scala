@@ -125,6 +125,9 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
   // - the object properties proto test end up in infinite recursion (this one can be fixed though...)
 
   // Note 2: The property blacklist RegExp is currently only used for a native ScriptObject.
+
+  // Note 3: Nashorn in Java 9 (build 9+181) doesn't support Object.getOwnPropertyDescriptor with a Symbol,
+  // which Node does, so currently we get the property value by accessing the symbol property of the object.
   private val extractorFunctionSource =
     """(function () {
       |  var hasJava = !!Java;
@@ -157,8 +160,8 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |        for (i = 0, j = symbols.length; i < j; i++) {
       |          var sym = symbols[i];
       |          result.push(sym.toString());
-      |          result.push(own ? "o" : ""); // how do we know the rest??
-      |          result.push(null);
+      |          result.push(own ? "o" : "");
+      |          result.push(current[sym]); // see Note 3 above
       |          result.push(null);
       |          result.push(null);
       |          result.push(sym);
