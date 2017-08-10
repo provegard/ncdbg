@@ -205,6 +205,9 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
                     case other => other
                   }
                 } catch {
+                  case ex: ObjectCollectedException =>
+                    log.error("Object was garbage collected", ex)
+                    throw new RuntimeException("Code evaluation error", ex)
                   case ex: Exception =>
                     // Don't log this at error level, because the error may be "ok". For example, if the user hovers over
                     // a property of a variable that contains undefined then DevTools will ask about the property value
