@@ -90,8 +90,10 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
   protected def summarizeProgress() = progress.asScala.mkString("\n")
   protected def clearProgress() = progress.clear()
 
+  protected def javaHome: Option[String] = None
+
   private def start(): Unit = {
-    vm = launchVm()
+    vm = launchVm(javaHome)
     vmStdinWriter = new PrintWriter(new OutputStreamWriter(vm.process().getOutputStream()), true)
     val debugger = new NashornDebugger()
     host = debugger.create(vm)
@@ -179,11 +181,24 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
 
   protected def getHost = Option(host).getOrElse(throw new IllegalStateException("Host not set"))
 
-  private def launchVm(): VirtualMachine = {
+  private def launchVm(javaHome: Option[String]): VirtualMachine = {
     val conn = findLaunchingConnector()
     val args = conn.defaultArguments()
+    val homeArg = args.get("home")
+    val currentHome = homeArg.value()
 
-    val cp = System.getProperty("java.class.path")
+    val classPath = System.getProperty("java.class.path")
+    val cp = javaHome match {
+      case Some(jh) =>
+        val pathSeparator = System.getProperty("path.separator")
+        classPath.split(pathSeparator).map { part =>
+          if (part.startsWith(currentHome)) part.replace(currentHome, jh)
+          else part
+        }.mkString(pathSeparator)
+      case None => classPath
+    }
+    javaHome.foreach(homeArg.setValue)
+
     val className = scriptExecutor.getClass.getName.replaceAll("\\$$", "")
     val mainArg = args.get("main")
     mainArg.setValue(s"""-Dnashorn.args=--language=es6 -cp "$cp" $className""")
