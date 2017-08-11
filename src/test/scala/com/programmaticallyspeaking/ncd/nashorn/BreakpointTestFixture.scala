@@ -18,8 +18,7 @@ class BreakpointTestFixture extends UnitTest with NashornScriptHostTestFixture {
       case bp: HitBreakpoint => stackframesPromise.trySuccess(bp)
       case _ => // ignore
     }
-    observeAndRunScriptAsync(script, observer) { host =>
-      hostSetup(host)
+    observeAndRunScriptAsync(script, observer, hostSetup) { host =>
       stackframesPromise.future.map(bp => {
         try tester(host, bp) finally host.resume()
       })
@@ -35,8 +34,7 @@ class BreakpointTestFixture extends UnitTest with NashornScriptHostTestFixture {
         }
 
     }
-    observeAndRunScriptAsync(script, observer) { host =>
-      hostSetup(host)
+    observeAndRunScriptAsync(script, observer, hostSetup) { host =>
       eventPromise.future
     }
   }

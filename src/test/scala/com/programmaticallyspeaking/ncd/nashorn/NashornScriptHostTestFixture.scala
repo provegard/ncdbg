@@ -261,7 +261,11 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
     subscriptions.enqueue(eventSubject.subscribe(observer))
   }
 
-  protected def observeAndRunScriptAsync[R](script: String, observer: Observer[ScriptEvent] = null)(handler: (NashornScriptHost) => Future[R]): Unit = {
+  protected def observeAndRunScriptSync[R](script: String, observer: Observer[ScriptEvent])(handler: (NashornScriptHost) => R): Unit = {
+    observeAndRunScriptAsync(script, observer) { host => Future { handler(host) }}
+  }
+
+  protected def observeAndRunScriptAsync[R](script: String, observer: Observer[ScriptEvent] = null, beforeTest: (NashornScriptHost) => Unit = _ => {})(handler: (NashornScriptHost) => Future[R]): Unit = {
     Option(observer).foreach(addObserver)
 
     // Wait separately for the VM to run. Otherwise, a slow-started VM may "eat up" the test timeout.
@@ -273,13 +277,15 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
     vmScriptDonePromise = Promise[Unit]()
 
     clearProgress() // New progress for each test.
-    log.info(">>>>>> TEST START")
-    log.info("VM running, sending script")
-    sendToVm(script, encodeBase64 = true)
 
     // Reset things
     host.setSkipAllPauses(false)
     host.pauseOnExceptions(ExceptionPauseType.None)
+    beforeTest(host)
+
+    log.info(">>>>>> TEST START")
+    log.info("VM running, sending script")
+    sendToVm(script, encodeBase64 = true)
 
     var thrownEx: Throwable = null
     var hasTimeout: Boolean = false
@@ -311,10 +317,6 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
         }
       }
     }
-  }
-
-  protected def observeAndRunScriptSync[R](script: String, observer: Observer[ScriptEvent])(handler: (NashornScriptHost) => R): Unit = {
-    observeAndRunScriptAsync(script, observer) { host => Future { handler(host) }}
   }
 }
 
