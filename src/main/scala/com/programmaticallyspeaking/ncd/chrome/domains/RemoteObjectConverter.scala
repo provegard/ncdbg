@@ -3,7 +3,7 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.Undefined
-import com.programmaticallyspeaking.ncd.infra.{StringAnyMap, StringAnySeq}
+import com.programmaticallyspeaking.ncd.infra.StringAnyMap
 
 object RemoteObjectConverter {
   def byValue(objectInteraction: ObjectInteraction) = new ByValueRemoteObjectConverter(objectInteraction)
