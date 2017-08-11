@@ -63,7 +63,9 @@ class ValueNodeExtractor(objectInteraction: ObjectInteraction) {
       }
       array
     case ObjectNode(_, oid) if observedObjectIds.contains(oid) => s"<Error: cycle detected for object '${oid.id}'>"
-    case ObjectNode(_, oid) => propertyList(oid, observedObjectIds)
+    case ObjectNode(_, oid) =>
+      // Unsure how Chrome does it when there is a Symbol and a string key with the same string rep...
+      propertyList(oid, observedObjectIds).toMap
     case EmptyNode => null
     case DateNode(stringRep, _) => stringRep
     case FunctionNode(name, _, _) => s"<function $name() {}>"

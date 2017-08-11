@@ -273,7 +273,7 @@ object RealMarshallerTest {
           case PropertyDescriptorType.Accessor =>
             val props = e._2.getter.map(_ => "get").toSeq ++ e._2.setter.map(_ => "set")
             e._1 -> props.map(p => p -> "<function>").toMap
-        })
+        }).toMap
       case EmptyNode => null
       case SimpleValue(simple) => simple
       case other => throw new Exception("Unhandled: " + other)

@@ -539,7 +539,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         case Some(props) =>
           props.map { e =>
             e._1 -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, true, true, Some(SimpleValue(e._2)), None, None)
-          }
+          }.toSeq
 
         case None => throw new IllegalArgumentException("Unknown object ID: " + objectId)
       }

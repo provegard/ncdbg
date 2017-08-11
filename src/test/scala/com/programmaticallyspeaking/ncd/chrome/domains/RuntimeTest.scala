@@ -66,7 +66,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
                   generatePreview: Option[Boolean] = None)(fun: (Any) => Unit) = {
 
         when(currentScriptHost.getObjectProperties(any[ObjectId], any[Boolean], any[Boolean])).thenAnswer((invocation: InvocationOnMock) => ret match {
-          case Right(value) => value
+          case Right(value) => value.toSeq
           case Left(ex) => throw ex
         })
 
