@@ -65,6 +65,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
 
   implicit val executionContext: ExecutionContext
 
+  val runVMTimeout: FiniteDuration = 12.seconds
   val resultTimeout: FiniteDuration = 12.seconds
   val scriptDoneTimeout: FiniteDuration = 5.seconds
 
@@ -264,7 +265,7 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
     Option(observer).foreach(addObserver)
 
     // Wait separately for the VM to run. Otherwise, a slow-started VM may "eat up" the test timeout.
-    val host = try Await.result(vmRunningPromise.future, resultTimeout) catch {
+    val host = try Await.result(vmRunningPromise.future, runVMTimeout) catch {
       case _: TimeoutException => throw new TimeoutException("Timed out waiting for the VM to start running. Progress:\n" + summarizeProgress())
     }
 
