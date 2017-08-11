@@ -6,6 +6,7 @@ import com.programmaticallyspeaking.ncd.infra.IdGenerator
 import com.programmaticallyspeaking.ncd.nashorn.mirrors._
 import com.sun.jdi._
 import jdk.nashorn.api.scripting.NashornException
+import jdk.nashorn.internal.runtime.PrototypeObject
 
 import scala.collection.mutable
 import scala.language.implicitConversions
@@ -146,17 +147,24 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
   private def marshalScriptObject(value: Value): ValueNode = {
     val scriptObject = value.asInstanceOf[ObjectReference]
     val mirror = new ScriptObjectMirror(scriptObject)
-    if (mirror.isRegularOrTypedArray) toArray(mirror)
-    else mirror.className match {
-      case "Function" => toFunction(mirror.asFunction)
-      case "Error" => toError(mirror)
-      case "Date" => toDate(mirror)
-      case "RegExp" => toRegExp(mirror)
-      case "Map" => toMap(mirror, weak = false)
-      case "WeakMap" => toMap(mirror, weak = true)
-      case "Set" => toSet(mirror, weak = false)
-      case "WeakSet" => toSet(mirror, weak = true)
-      case _ => toObject(mirror)
+
+    // Check if this is a prototype first. For example, NativeArray$Prototype has class name Array, but we don't
+    // want to treat it as a regular array.
+    if (inherits(scriptObject, classOf[PrototypeObject].getName)) {
+      ObjectNode(mirror.className, objectId(scriptObject))
+    } else {
+      if (mirror.isRegularOrTypedArray) toArray(mirror)
+      else mirror.className match {
+        case "Function" => toFunction(mirror.asFunction)
+        case "Error" => toError(mirror)
+        case "Date" => toDate(mirror)
+        case "RegExp" => toRegExp(mirror)
+        case "Map" => toMap(mirror, weak = false)
+        case "WeakMap" => toMap(mirror, weak = true)
+        case "Set" => toSet(mirror, weak = false)
+        case "WeakSet" => toSet(mirror, weak = true)
+        case _ => toObject(mirror)
+      }
     }
   }
 
