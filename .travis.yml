@@ -8,11 +8,7 @@ addons:
       - oracle-java9-installer
 
 before_install:
-  #- sudo add-apt-repository ppa:webupd8team/java
-  #- sudo apt-get update
-  #- s
   - export JAVA9_HOME=/usr/lib/jvm/java-9-oracle
-  - java -version
 
 
 jdk: oraclejdk8
