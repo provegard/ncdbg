@@ -683,6 +683,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     case None =>
   }
 
+  private def relevantForPostponingClassScan(referenceType: ReferenceType) = {
+    val name = referenceType.name()
+    wantedTypes.contains(name) || name.startsWith(ScriptClassNamePrefix)
+  }
+
   def handleOperation(eventQueueItem: NashornScriptOperation): Unit = eventQueueItem match {
     case NashornEventSet(es) if hasDeathOrDisconnectEvent(es) =>
       signalComplete()
@@ -722,7 +727,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               if (hasScannedClasses) {
                 // A new class, added after we have scanned
                 considerReferenceType(ev.referenceType(), InitialScriptResolveAttempts)
-              } else {
+              } else if (relevantForPostponingClassScan(ev.referenceType())) {
                 // Bump the class counter - when we handle PostponeInitialize, if the class cound has stabilized,
                 // we do a full scan.
                 log.trace(s"New class (${ev.referenceType().name()}), counting it to await full scan when class count has stabilized.")
