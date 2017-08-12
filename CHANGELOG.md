@@ -1,6 +1,6 @@
 # Changelog
 
-# Unreleased
+# 0.5.3 (2017-08-13)
 
 * Properly pause on uncaught exceptions (issue #52)
 * Fix variable setting when stack contains recusion (issue #53)
