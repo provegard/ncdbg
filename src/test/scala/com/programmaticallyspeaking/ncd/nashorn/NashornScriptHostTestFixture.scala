@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import ch.qos.logback.classic.Level
 import com.programmaticallyspeaking.ncd.host.{ExceptionPauseType, ScriptEvent}
+import com.programmaticallyspeaking.ncd.infra.AwaitAndExplain
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
 import com.programmaticallyspeaking.ncd.testing.{MemoryAppender, SharedInstanceActorTesting, StringUtils, UnitTest}
 import com.sun.jdi.connect.LaunchingConnector
@@ -269,9 +270,7 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
     Option(observer).foreach(addObserver)
 
     // Wait separately for the VM to run. Otherwise, a slow-started VM may "eat up" the test timeout.
-    val host = try Await.result(vmRunningPromise.future, runVMTimeout) catch {
-      case _: TimeoutException => throw new TimeoutException("Timed out waiting for the VM to start running. Progress:\n" + summarizeProgress())
-    }
+    val host = AwaitAndExplain.result(vmRunningPromise.future, runVMTimeout, "Timed out waiting for the VM to start running. Progress:\n" + summarizeProgress())
 
     // This promise is resolved when we observe that the VM is done with script execution.
     vmScriptDonePromise = Promise[Unit]()

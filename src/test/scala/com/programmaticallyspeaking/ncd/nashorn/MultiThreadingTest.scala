@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.script.Compilable
 
 import com.programmaticallyspeaking.ncd.host._
+import com.programmaticallyspeaking.ncd.infra.AwaitAndExplain
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.{SharedInstanceActorTesting, UnitTest}
 import jdk.nashorn.api.scripting.NashornScriptEngineFactory
@@ -17,7 +18,8 @@ trait MultiThreadingTestFixture extends UnitTest with Logging with SharedInstanc
   override val scriptExecutor: ScriptExecutorBase = MultiThreadedScriptExecutor
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
-  def ready = vmRunningPromise.future
+  def waitUntilVMRunning() =
+    AwaitAndExplain.result(vmRunningPromise.future, runVMTimeout, "Timed out waiting for the VM to start running. Progress:\n" + summarizeProgress())
 }
 
 class MultiThreadingTest extends MultiThreadingTestFixture {
@@ -42,18 +44,17 @@ class MultiThreadingTest extends MultiThreadingTestFixture {
       override def onComplete(): Unit = {}
     })
 
-    whenReady(ready) { host =>
-      whenReady(scriptAddedPromise.future) { script =>
-        val scriptLocation = host.getBreakpointLocations(ScriptIdentity.fromId(script.id), location(1), None).headOption match {
-          case Some(l) => l
-          case None => fail(s"No line numbers for script ${script.id}")
-        }
-        host.setBreakpoint(ScriptIdentity.fromURL(script.url), scriptLocation, None)
-        whenReady(hitBreakpointPromise.future) { _ =>
-          // Ugly, but wait for a while to see if the counter increases over 1 (which it shouldn't).
-          Thread.sleep(200)
-          breakpointCounter.get() should be (1)
-        }
+    val host = waitUntilVMRunning()
+    whenReady(scriptAddedPromise.future) { script =>
+      val scriptLocation = host.getBreakpointLocations(ScriptIdentity.fromId(script.id), location(1), None).headOption match {
+        case Some(l) => l
+        case None => fail(s"No line numbers for script ${script.id}")
+      }
+      host.setBreakpoint(ScriptIdentity.fromURL(script.url), scriptLocation, None)
+      whenReady(hitBreakpointPromise.future) { _ =>
+        // Ugly, but wait for a while to see if the counter increases over 1 (which it shouldn't).
+        Thread.sleep(200)
+        breakpointCounter.get() should be (1)
       }
     }
   }
