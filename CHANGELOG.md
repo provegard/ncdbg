@@ -5,6 +5,10 @@
 * Properly pause on uncaught exceptions (issue #52)
 * Fix variable setting when stack contains recusion (issue #53)
 * Emit Runtime.exceptionThrown for uncaught errors.
+* Support marshalling of ES6 Symbol (Java 9) (issue 54)
+* Support marshalling of ES6 Map, Set, WeakMap and WeakSet (Java 9) (issue 56)
+* Stability fixes
+* Marshal __proto__ correctly
 
 # 0.5.2 (2017-07-31)
 
