@@ -314,9 +314,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     def apply(name: String): Option[ClassType] = foundWantedTypes.get(name)
   }
   private val boxer = new Boxer(typeLookup)
-  protected val codeEval = new CodeEval(typeLookup)
+  protected val codeEval = new CodeEval(typeLookup, preventGC)
   private val stackBuilder = new StackBuilder(stackframeIdGenerator, typeLookup, mappingRegistry, codeEval, boxer,
-    (location: Location) => findBreakableLocation(location), v => disableGarbageCollectionFor(v))
+    (location: Location) => findBreakableLocation(location))
 
   /**
     * Associate a handler to be executed when an event for the request is observed.
@@ -808,6 +808,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       val targetList = if (entireSession) objectReferencesWithDisabledGCForTheEntireSession else objectReferencesWithDisabledGC
       targetList += objRef
     case _ =>
+  }
+
+  private def preventGC(value: Value, lifecycle: Lifecycle.EnumVal): Unit = {
+    disableGarbageCollectionFor(value, lifecycle == Lifecycle.Session)
   }
 
   private def createMarshaller()(implicit threadReference: ThreadReference): Marshaller = {

@@ -21,7 +21,7 @@ object StackBuilder {
 }
 
 class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, mappingRegistry: MappingRegistry, codeEval: CodeEval, boxer: Boxer,
-                   breakableLocationLookup: BreakableLocationLookup, preventGC: (Value) => Unit) extends Logging {
+                   breakableLocationLookup: BreakableLocationLookup) extends Logging {
   import scala.collection.JavaConverters._
 
   private def scopeWithFreeVariables(scopeObject: Value, freeVariables: Map[String, AnyRef])(implicit marshaller: Marshaller): Value = {
@@ -52,8 +52,7 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
     }
     scopeObjFactory += "return obj;}).call(this)"
 
-    val anObject = codeEval.eval(scopeObject, null, scopeObjFactory).asInstanceOf[ObjectReference]
-    preventGC(anObject)
+    val anObject = codeEval.eval(scopeObject, null, scopeObjFactory, Lifecycle.Paused).asInstanceOf[ObjectReference]
     val mirror = new ScriptObjectMirror(anObject)
     freeVariables.foreach {
       case (name, value) =>
@@ -197,7 +196,7 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
                 val scopeToUse = scopeWithFreeVariables(localScope, namedValues)
 
                 try {
-                  val ret = codeEval.eval(originalThis, scopeToUse, code)
+                  val ret = codeEval.eval(originalThis, scopeToUse, code, Lifecycle.Paused)
                   marshaller.marshal(ret) match {
                     case SimpleValue(str: String) if str == EvaluatedCodeMarker =>
                       // A non-expression statements such as "var x = 42" causes the evaluation marker to leak as an

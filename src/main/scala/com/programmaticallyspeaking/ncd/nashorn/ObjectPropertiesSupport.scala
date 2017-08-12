@@ -98,11 +98,7 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
     maybeScriptBasedPropertyHolderFactory match {
       case Some(f) => f
       case None =>
-        val codeEvalFun: (String) => Value = src => {
-          val v = codeEval.eval(null, null, src)
-          disableGarbageCollectionFor(v, entireSession = true)
-          v
-        }
+        val codeEvalFun: (String) => Value = src => codeEval.eval(null, null, src, Lifecycle.Session)
         val funExec: (Value, Seq[Any]) => Value = (fun, args) => {
           foundWantedTypes.get(NIR_ScriptRuntime) match {
             case Some(ct) =>

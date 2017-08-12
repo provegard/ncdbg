@@ -3,10 +3,22 @@ package com.programmaticallyspeaking.ncd.nashorn
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost._
 import com.sun.jdi._
 
-class CodeEval(typeLookup: TypeLookup) {
+class CodeEval(typeLookup: TypeLookup, preventGC: (Value, Lifecycle.EnumVal) => Unit) {
 
-  def eval(thisObject: Value, scopeObject: Value, code: String)(implicit thread: ThreadReference): Value = {
-    DebuggerSupport_eval_custom(thisObject, scopeObject, code)
+  def eval(thisObject: Value, scopeObject: Value, code: String, lifecycle: Lifecycle.EnumVal)(implicit thread: ThreadReference): Value = {
+    // We've observed ObjectCollectedException while disabling GC... Try a few times before giving up!
+    eval(thisObject, scopeObject, code, lifecycle, 3)
+  }
+
+  private def eval(thisObject: Value, scopeObject: Value, code: String, lifecycle: Lifecycle.EnumVal, attemptsLeft: Int)(implicit thread: ThreadReference): Value = {
+    val v = DebuggerSupport_eval_custom(thisObject, scopeObject, code)
+    try {
+      preventGC(v, lifecycle)
+      v
+    } catch {
+      case e: ObjectCollectedException if attemptsLeft > 0 =>
+        eval(thisObject, scopeObject, code, lifecycle, attemptsLeft - 1)
+    }
   }
 
   /** Custom version of jdk.nashorn.internal.runtime.DebuggerSupport.eval that makes a difference between a returned
