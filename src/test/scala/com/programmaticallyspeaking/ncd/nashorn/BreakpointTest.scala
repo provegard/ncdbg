@@ -235,8 +235,10 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
           bp <- getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(line, col), None)
         } yield bp
 
-        donePromise.complete(Try(handler(maybeBreakpoint)))
+        // Remove the breakpoint right away, so we won't hit it
         maybeBreakpoint.foreach(b => getHost.removeBreakpointById(b.breakpointId))
+
+        donePromise.complete(Try(handler(maybeBreakpoint)))
       }
       observeAndRunScriptAsync(script, observer) { _ =>
         donePromise.future
