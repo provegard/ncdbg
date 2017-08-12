@@ -15,9 +15,9 @@ object PauseSupport {
 }
 
 trait PauseSupport { self: NashornDebuggerHost with Logging =>
+  import NashornDebuggerHost._
   import scala.collection.JavaConverters._
   import PauseSupport._
-  val ScriptClassPrefix = "jdk.nashorn.internal.scripts.Script"
 
   protected def enableExceptionPausing(): Unit = {
     log.info(s"Enabling breaking on exceptions in script classes.")
@@ -29,7 +29,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
     val request = erm.createExceptionRequest(null, true, true)
     request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD) // TODO: Duplicate code
     // We're only interested in exceptions
-    request.addClassFilter(ScriptClassPrefix + "*")
+    request.addClassFilter(ScriptClassNamePrefix + "*")
     request.setEnabled(true)
   }
 
@@ -76,7 +76,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
     request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
     // TODO: Should StepRequestClassFilter be this string?? But then maybe it won't be possible to step over _to_
     // TODO: a debugger statement. Check if we have a test for that!
-    request.addClassFilter(ScriptClassPrefix + "*")
+    request.addClassFilter(ScriptClassNamePrefix + "*")
     request.addCountFilter(1)
     request.setEnabled(true)
     request
