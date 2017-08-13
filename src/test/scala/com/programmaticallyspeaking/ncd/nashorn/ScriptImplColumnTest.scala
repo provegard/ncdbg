@@ -16,7 +16,9 @@ class ScriptImplColumnTest extends UnitTest with TableDrivenPropertyChecks {
     ("space before arg list", "function () { return 42; };", Seq(1, 15)),
     ("tight function body", "function(){return 42; };", Seq(1, 12)),
     ("IIFE", "(function() { return 42; })();", Seq(1, 15)),
-    ("empty line", "", Seq.empty)
+    ("empty line", "", Seq.empty),
+    ("arrow function", "() => { return 42; }", Seq(1, 9)),
+    ("arrow function (ext syntax)", "() => 42", Seq(1, 7))
   )
   //TODO: More!
 
