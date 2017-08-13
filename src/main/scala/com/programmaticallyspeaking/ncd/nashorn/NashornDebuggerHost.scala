@@ -956,13 +956,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       // different from the one stored in a BreakableLocation.
       val id = ScriptIdentity.fromURL(script.url)
       findBreakableLocationsAtLine(id, location.lineNumber()).flatMap { bls =>
-        bls.find(_.location == location) match {
-          case Some(bl) => Some(bl)
-          case None =>
-            // Fallback
-            bls.find(bl => sameMethodAndLine(bl.location, location))
-        }
-
+        bls.find(_.location == location).orElse(bls.find(bl => sameMethodAndLine(bl.location, location)))
       }
     }
   }
