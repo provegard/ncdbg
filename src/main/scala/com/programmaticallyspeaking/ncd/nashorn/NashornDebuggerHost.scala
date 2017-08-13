@@ -950,10 +950,20 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   protected def findBreakableLocation(location: Location): Option[BreakableLocation] = {
     scriptByPath.get(scriptPathFromLocation(location)).flatMap { script =>
-      // We cannot compare locations directly because the passed-in Location may have a code index that is
-      // different from the one stored in a BreakableLocation - so do a line comparison.
+      // There may be multiple breakable locations for the same line (even in the same method - e.g. for a 'while'
+      // statement that is last in a method). Try to find an exact match first, then fall back to finding a location
+      // on the correct line. The fallback is necessary since the passed-in Location may have a code index that is
+      // different from the one stored in a BreakableLocation.
       val id = ScriptIdentity.fromURL(script.url)
-      findBreakableLocationsAtLine(id, location.lineNumber()).flatMap(_.find(bl => sameMethodAndLine(bl.location, location)))
+      findBreakableLocationsAtLine(id, location.lineNumber()).flatMap { bls =>
+        bls.find(_.location == location) match {
+          case Some(bl) => Some(bl)
+          case None =>
+            // Fallback
+            bls.find(bl => sameMethodAndLine(bl.location, location))
+        }
+
+      }
     }
   }
 
