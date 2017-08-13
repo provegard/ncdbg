@@ -1211,7 +1211,9 @@ case class ActiveBreakpoint(id: String, breakableLocations: Seq[BreakableLocatio
 
   def toBreakpoint: Breakpoint = {
     val script = firstBreakableLocation.script
-    Breakpoint(id, script.id, Some(script.url), breakableLocations.map(_.scriptLocation))
+    // There may be multiple breakable locations for a line (each with its own Location), but to DevTools we
+    // only report unique locations.
+    Breakpoint(id, script.id, Some(script.url), breakableLocations.map(_.scriptLocation).distinct)
   }
 
   def disable(): Unit = breakableLocations.foreach(_.disable())

@@ -204,17 +204,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     }
   }
 
-  "given a script with multiple breakable locations on the same line" - {
-    val script =
-      """function fun() {
-        |  var foo = function() { return 42; } // multiple breakable here
-        |  return foo;
-        |}
-        |fun()();  // ensure compilation of fun and foo
-        |debugger; // where we will set breakpoints
-        |fun()();  // two calls, should hit two breakpoints...
-      """.stripMargin
-
+  "given breakable locations" - {
     def createObserver(handler: ((MultiBreakpointsData) => Unit)): Observer[ScriptEvent] = {
       var breakpointsHitSoFar = 0
       val observer = Observer.from[ScriptEvent] {
@@ -226,7 +216,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
       observer
     }
 
-    def testSetBreakpoint(line: Int, col: Option[Int])(handler: (Option[Breakpoint]) => Unit): Unit = {
+    def testSetBreakpoint(script: String, line: Int, col: Option[Int])(handler: (Option[Breakpoint]) => Unit): Unit = {
       val donePromise = Promise[Unit]()
       val observer = createObserver { data =>
         val scriptId = data.bp.stackFrames.head.scriptId
@@ -245,55 +235,85 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
       }
     }
 
-    "setting a breakpoint with no column returns all locations" in {
-      testSetBreakpoint(2, None) { bp =>
-        val columnNumbers = bp.map(_.locations.flatMap(_.columnNumber1Based))
-        columnNumbers should be (Some(Seq(3, 26)))
+    def columnNumbers(bp: Option[Breakpoint]) = bp.map(_.locations.flatMap(_.columnNumber1Based)).getOrElse(Seq.empty)
+
+    "in a script with a 'with' statement last in a function" - {
+      val script =
+        """(function () {
+          |  debugger;
+          |  var obj = {};
+          |  with (obj) {
+          |    obj.toString();
+          |  }
+          |})();
+        """.stripMargin
+
+      "only a single location is returned for the 'with' line" in {
+        testSetBreakpoint(script, 4, None) { bp =>
+          columnNumbers(bp) should be(Seq(3))
+        }
       }
     }
 
-    "setting a breakpoint with a column returns a single location" in {
-      testSetBreakpoint(2, Some(3)) { bp =>
-        val columnNumbers = bp.map(_.locations.flatMap(_.columnNumber1Based))
-        columnNumbers should be (Some(Seq(3)))
+    "in a script with multiple on the same line" - {
+      val script =
+        """function fun() {
+          |  var foo = function() { return 42; } // multiple breakable here
+          |  return foo;
+          |}
+          |fun()();  // ensure compilation of fun and foo
+          |debugger; // where we will set breakpoints
+          |fun()();  // two calls, should hit two breakpoints...
+        """.stripMargin
+
+      "setting a breakpoint with no column returns all locations" in {
+        testSetBreakpoint(script, 2, None) { bp =>
+          columnNumbers(bp) should be (Seq(3, 26))
+        }
       }
-    }
 
-    "setting a breakpoint with an incorrect column returns no breakpoint" in {
-      testSetBreakpoint(2, Some(7)) { bp =>
-        bp should be ('empty)
+      "setting a breakpoint with a column returns a single location" in {
+        testSetBreakpoint(script, 2, Some(3)) { bp =>
+          columnNumbers(bp) should be (Seq(3))
+        }
       }
-    }
 
-    "a breakpoint set for all locations on that line will get hit twice" in {
-      val donePromise = Promise[Unit]()
-      val breakpointIds = ListBuffer[String]()
-      val observer = createObserver { data =>
-        val scriptId = data.bp.stackFrames.head.scriptId
-        val breakpointId = data.bp.breakpointId
-
-        if (data.hitsSoFar == 1) {
-          // debugger
-          (for {
-            s <- getHost.findScript(ScriptIdentity.fromId(scriptId))
-            bp <- getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(2, None), None)
-          } yield bp) match {
-            case Some(bps) => breakpointIds += bps.breakpointId
-            case None => donePromise.failure(new Exception("No script or breakpoint"))
-          }
-        } else breakpointIds += breakpointId
-
-        if (data.hitsSoFar == 3) {
-          // should be done!
-          if (breakpointIds.distinct.size == 1) {
-            donePromise.success(())
-          } else {
-            donePromise.failure(new Exception(s"Breakpoint ID mismatch, ${breakpointIds.mkString(", ")}"))
-          }
-        } else getHost.resume()
+      "setting a breakpoint with an incorrect column returns no breakpoint" in {
+        testSetBreakpoint(script, 2, Some(7)) { bp =>
+          bp should be ('empty)
+        }
       }
-      observeAndRunScriptAsync(script, observer) { _ =>
-        donePromise.future
+
+      "a breakpoint set for all locations on that line will get hit twice" in {
+        val donePromise = Promise[Unit]()
+        val breakpointIds = ListBuffer[String]()
+        val observer = createObserver { data =>
+          val scriptId = data.bp.stackFrames.head.scriptId
+          val breakpointId = data.bp.breakpointId
+
+          if (data.hitsSoFar == 1) {
+            // debugger
+            (for {
+              s <- getHost.findScript(ScriptIdentity.fromId(scriptId))
+              bp <- getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(2, None), None)
+            } yield bp) match {
+              case Some(bps) => breakpointIds += bps.breakpointId
+              case None => donePromise.failure(new Exception("No script or breakpoint"))
+            }
+          } else breakpointIds += breakpointId
+
+          if (data.hitsSoFar == 3) {
+            // should be done!
+            if (breakpointIds.distinct.size == 1) {
+              donePromise.success(())
+            } else {
+              donePromise.failure(new Exception(s"Breakpoint ID mismatch, ${breakpointIds.mkString(", ")}"))
+            }
+          } else getHost.resume()
+        }
+        observeAndRunScriptAsync(script, observer) { _ =>
+          donePromise.future
+        }
       }
     }
   }
