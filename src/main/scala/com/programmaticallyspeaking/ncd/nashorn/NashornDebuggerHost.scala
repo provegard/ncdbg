@@ -384,20 +384,20 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     import com.programmaticallyspeaking.ncd.infra.TraversableExtensions._
     breakableLocationsByScriptUrl.get(script.url.toString) match {
       case Some(locations) =>
-        locations.distinctBy(_.location.method()).groupBy(_.scriptLocation.lineNumber1Based).foreach {
-          case (lineNo, locs) if locs.size > 1 =>
-            val sortedLocs = locs.sortWith((bl1, bl2) => {
-              val bl1Method = bl1.location.method()
-              val bl2Method = bl2.location.method()
+        locations.groupBy(_.scriptLocation.lineNumber1Based).foreach {
+          case (lineNo, locs) =>
+            val sortedLocs = locs.groupBy(_.location.method()).toSeq.sortWith((g1, g2) => {
+              val bl1Method = g1._1
+              val bl2Method = g2._1
 
               // # = CompilerConstants.NESTED_FUNCTION_SEPARATOR
               val bl1MethodNameParts = bl1Method.name().split("#")
               val bl2MethodNameParts = bl2Method.name().split("#")
-              bl2MethodNameParts.startsWith(bl1MethodNameParts)
+              bl2MethodNameParts.size != bl1MethodNameParts.size && bl2MethodNameParts.startsWith(bl1MethodNameParts)
             })
             val columns = script.statementColumnsForLine(lineNo)
             sortedLocs.zip(columns).foreach {
-              case (bl, col) => bl.setColumn(col)
+              case (grp, col) => grp._2.foreach(_.setColumn(col))
             }
           case _ => // single loc
         }

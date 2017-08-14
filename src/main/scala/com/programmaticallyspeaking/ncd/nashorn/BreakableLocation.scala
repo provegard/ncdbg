@@ -8,9 +8,8 @@ object BreakableLocation {
   // TODO: Move elsewhere
   def scriptLocationFromScriptAndLocation(script: Script, location: Location): ScriptLocation = {
     val lineNo = location.lineNumber()
-    // Use index of first non-whitespace
-    val colNo = script.sourceLine(lineNo).map(line => 1 + line.indexWhere(!_.isWhitespace))
-    ScriptLocation(lineNo, colNo)
+    // Don't set column here - columns are guessed in NashornDebuggerHost.
+    ScriptLocation(lineNo, None)
   }
 }
 
