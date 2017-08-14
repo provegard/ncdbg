@@ -1,5 +1,11 @@
 # Changelog
 
+# 0.5.4 (2017-08-14)
+
+* Trying to make tests more stable wrt breakpoint columns.
+* Return only distinct locations when setting a breakpoing.
+* Parse ES6 arrow functions when guessing columns.
+
 # 0.5.3 (2017-08-13)
 
 * Properly pause on uncaught exceptions (issue #52)
