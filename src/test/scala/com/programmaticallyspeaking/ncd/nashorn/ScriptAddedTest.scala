@@ -104,12 +104,12 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
 
     lazy val f = testAddScriptWithWait(script, 500.millis)
 
-    "multiple breakable locations are reported" in {
+    "multiple breakable locations are no longer reported, since it's too fragile" in {
       whenReady(f) { scripts =>
         scripts.find(_.contents.contains("function fun")) match {
           case Some(s) =>
             getHost.getBreakpointLocations(ScriptIdentity.fromId(s.id), ScriptLocation(1, Some(1)), Some(ScriptLocation(2, Some(1)))) should
-              be(Seq(ScriptLocation(1, Some(1)), ScriptLocation(1, Some(18))))
+              be(Seq(ScriptLocation(1, Some(1))))
 
           case None => fail("no script")
         }
@@ -120,7 +120,7 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
       whenReady(f) { scripts =>
         scripts.find(_.contents.contains("function fun")) match {
           case Some(s) =>
-            getHost.getBreakpointLocations(ScriptIdentity.fromId(s.id), ScriptLocation(1, Some(3)), Some(ScriptLocation(2, Some(1)))) should have size (2)
+            getHost.getBreakpointLocations(ScriptIdentity.fromId(s.id), ScriptLocation(1, Some(3)), Some(ScriptLocation(2, Some(1)))) should have size (1)
 
           case None => fail("no script")
         }
@@ -138,7 +138,9 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
       """.stripMargin
     lazy val f = testAddScriptWithWait(script, 1000.millis)
 
-    "multiple breakable locations are reported" in {
+    // Note: Test kept but ignored (rather than changed) because it's redundant now but can be useful if we
+    // re-enable column guessing.
+    "multiple breakable locations are reported" ignore {
       whenReady(f) { scripts =>
         scripts.find(_.contents.contains("funnier")) match {
           case Some(s) =>
@@ -163,7 +165,9 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
       """.stripMargin
     lazy val f = testAddScriptWithWait(script, 1000.millis)
 
-    "multiple breakable locations for the different functions are reported" in {
+    // Note: Test kept but ignored (rather than changed) because it's redundant now but can be useful if we
+    // re-enable column guessing.
+    "multiple breakable locations for the different functions are reported" ignore {
       whenReady(f) { scripts =>
         scripts.find(_.contents.contains("value()")) match {
           case Some(s) =>

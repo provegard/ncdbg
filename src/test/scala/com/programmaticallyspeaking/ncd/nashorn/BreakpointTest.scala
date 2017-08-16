@@ -266,9 +266,9 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
           |fun()();  // two calls, should hit two breakpoints...
         """.stripMargin
 
-      "setting a breakpoint with no column returns all locations" in {
+      "setting a breakpoint with no column doesn't try to guess column numbers ATM..." in {
         testSetBreakpoint(script, 2, None) { bp =>
-          columnNumbers(bp) should be (Seq(3, 26))
+          columnNumbers(bp) should be (Seq(3))
         }
       }
 

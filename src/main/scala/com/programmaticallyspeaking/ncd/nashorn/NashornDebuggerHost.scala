@@ -380,42 +380,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def guessColumns(script: Script): Unit = {
-    import com.programmaticallyspeaking.ncd.infra.TraversableExtensions._
-    breakableLocationsByScriptUrl.get(script.url.toString) match {
-      case Some(locations) =>
-        locations.groupBy(_.scriptLocation.lineNumber1Based).foreach {
-          case (lineNo, locs) =>
-            val sortedLocs = locs.groupBy(_.location.method()).toSeq.sortWith((g1, g2) => {
-              val bl1Method = g1._1
-              val bl2Method = g2._1
-
-              // # = CompilerConstants.NESTED_FUNCTION_SEPARATOR
-              val bl1MethodNameParts = bl1Method.name().split("#")
-              val bl2MethodNameParts = bl2Method.name().split("#")
-              bl2MethodNameParts.size != bl1MethodNameParts.size && bl2MethodNameParts.startsWith(bl1MethodNameParts)
-            })
-            val columns = script.statementColumnsForLine(lineNo)
-            sortedLocs.zip(columns).foreach {
-              case (grp, col) => grp._2.foreach(_.setColumn(col))
-            }
-          case _ => // single loc
-        }
-
-      case None => // noop
-    }
-  }
-
   private def registerScript(script: Script, scriptPath: String, locations: Seq[Location]): Unit = {
     val isKnownScript = breakableLocationsByScriptUrl.contains(script.url.toString)
 
     val erm = virtualMachine.eventRequestManager()
     val breakableLocations = locations.map(l => new BreakableLocation(script, erm, l))
     addBreakableLocations(script, breakableLocations)
-    try guessColumns(script) catch {
-      case NonFatal(t) =>
-        log.error(s"Column guessing failed for ${script.url}", t)
-    }
 
     if (isKnownScript) {
       log.debug(s"Reusing script with URI '${script.url}' for script path '$scriptPath'")
