@@ -249,6 +249,8 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
 
   override val scriptExecutor = ScriptExecutor
 
+  private val seenScripts = mutable.Set[String]()
+
   private val subscriptions = mutable.Queue[Subscription]()
   private def unsubscribeAll(): Unit =
     while (subscriptions.nonEmpty) {
@@ -267,6 +269,12 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
   }
 
   protected def observeAndRunScriptAsync[R](script: String, observer: Observer[ScriptEvent] = null, beforeTest: (NashornScriptHost) => Unit = _ => {})(handler: (NashornScriptHost) => Future[R]): Unit = {
+    // if we have seen this script before, restart the VM to avoid test dependencies due to script reuse
+    if (seenScripts.contains(script)) {
+      log.info("Restarting VM before test since script has been seen before.")
+      restart()
+    } else seenScripts += script
+
     Option(observer).foreach(addObserver)
 
     // Wait separately for the VM to run. Otherwise, a slow-started VM may "eat up" the test timeout.
