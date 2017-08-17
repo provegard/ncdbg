@@ -23,15 +23,9 @@ object BreakableLocation {
   */
 class BreakableLocation(val script: Script, eventRequestManager: EventRequestManager, val location: Location) {
 
-  var _scriptLocation: ScriptLocation = BreakableLocation.scriptLocationFromScriptAndLocation(script, location)
-
-  def scriptLocation: ScriptLocation = _scriptLocation
+  val scriptLocation: ScriptLocation = BreakableLocation.scriptLocationFromScriptAndLocation(script, location)
 
   private var breakpointRequest: BreakpointRequest = _
-
-  def setColumn(column1Based: Int): Unit = {
-    _scriptLocation = _scriptLocation.copy(columnNumber1Based = Some(column1Based))
-  }
 
   def isEnabled = breakpointRequest != null
 
