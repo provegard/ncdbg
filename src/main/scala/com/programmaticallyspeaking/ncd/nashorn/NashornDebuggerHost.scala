@@ -409,6 +409,16 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       None
   }
 
+  private val nonSupportedScriptPaths = mutable.Set[String]()
+  private def logThatRelativeScriptPathsNotBeingSupported(scriptPath: String) = {
+    // Only log this once per unique path (a script may be recompiled so we may be called multiple times for the
+    // same script).
+    if (!nonSupportedScriptPaths.contains(scriptPath)) {
+      log.warn(s"Sorry, relative script paths ($scriptPath) are currently not supported.")
+      nonSupportedScriptPaths += scriptPath
+    }
+  }
+
   private def considerReferenceType(refType: ReferenceType, attemptsLeft: Int): Option[Script] = {
     if (attemptsLeft == 0) return None
 
@@ -441,15 +451,23 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           locations.headOption match {
             case Some(firstLocation) =>
               val scriptPath = scriptPathFromLocation(firstLocation)
+              if (looksAbsolute(scriptPath)) {
 
-              val triedScript: Try[Either[String, Script]] = Try {
-                // Note that we no longer try to use the script path for reading the source. If the script contains a
-                // sourceURL annotation, Nashorn will use that at script path, so we might end up reading CoffeeScript
-                // source instead of the real source.
-                scriptFromEval(refType, scriptPath, attemptsLeft)
+                val triedScript: Try[Either[String, Script]] = Try {
+                  // Note that we no longer try to use the script path for reading the source. If the script contains a
+                  // sourceURL annotation, Nashorn will use that at script path, so we might end up reading CoffeeScript
+                  // source instead of the real source.
+                  scriptFromEval(refType, scriptPath, attemptsLeft)
+                }
+
+                handleScriptResult(triedScript, refType, scriptPath, locations, attemptsLeft)
+              } else {
+                // A relative path is not supported because there is no foolproof way to get the current directory
+                // for the remove VM (we can invoke System.getProperties, but we need to see an event early on for
+                // that to work).
+                logThatRelativeScriptPathsNotBeingSupported(scriptPath)
+                None
               }
-
-              handleScriptResult(triedScript, refType, scriptPath, locations, attemptsLeft)
             case None =>
               log.info(s"Ignoring script type '${refType.name} because it has no line locations.")
               None
@@ -463,6 +481,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       }
     } else None
   }
+
+  private def looksAbsolute(path: String) = path.startsWith("/") || path.contains(':')
 
   private def watchAddedClasses(): Unit = {
     val request = virtualMachine.eventRequestManager().createClassPrepareRequest()
