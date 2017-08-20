@@ -227,7 +227,6 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
 
         // Remove the breakpoint right away, so we won't hit it
         maybeBreakpoint.foreach(b => getHost.removeBreakpointById(b.breakpointId))
-
         donePromise.complete(Try(handler(maybeBreakpoint)))
       }
       observeAndRunScriptAsync(script, observer) { _ =>

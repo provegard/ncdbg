@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.e2e
 
-import akka.actor.{ActorRef, PoisonPill}
+import akka.actor.{ActorRef, Inbox, PoisonPill}
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, EvaluateOnCallFrameResult, Location}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{CallArgument, RemoteObject}
 import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, Runtime => RuntimeD}
@@ -10,11 +10,11 @@ import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, SharedInstan
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
-import scala.concurrent.{Future, TimeoutException}
+import scala.concurrent.Future
+import scala.concurrent.duration._
 
 class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting with ScalaFutures with IntegrationPatience with TableDrivenPropertyChecks {
 
-  var initDoneFuture: Future[Unit] = _
   var debugger: ActorRef = _
 
   def enableDebugger: Unit = {
@@ -22,7 +22,7 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     if (debugger == null) {
       implicit val container = new Container(Seq(FakeFilePublisher, getHost))
       debugger = newActorInstance[Debugger]
-      sendRequestAndWait(debugger, Domain.enable)
+      sendRequest(Domain.enable)
     }
 
     // clean slate
@@ -36,7 +36,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
 
   "Debugging" - {
     "should support setVariableValue" in {
-      enableDebugger
       val script =
         """
           |this.x = 5;
@@ -68,7 +67,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     }
 
     "should set a variable in the correct stack frame" in {
-      enableDebugger
       // Note that the starting point 1.0 instead of 1 is important, since otherwise Nashorn will first attempt
       // an Integer-arged method, but will then recompile into a Double-arged method upon the next call, and the
       // different recompilations will result in unique locations which will cause the flawed Location-based stack
@@ -127,7 +125,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
 
     forAll(setVariableValueCases) { (typ, initial, toSet, expected) =>
       s"should support setVariableValue when a local variable of type $typ is targeted" in {
-        enableDebugger
         val script =
           s"""
              |var f = function (arg) {
@@ -158,7 +155,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     }
 
     "should support a conditional breakpoint (with column number)" in {
-      enableDebugger
       val script =
         """debugger;
           |var list = [];
@@ -189,7 +185,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     }
 
     "should support frame restart when paused at a debugger statement" in {
-      enableDebugger
       val script =
         """var f = function () {
           |  debugger; // stop here
@@ -215,7 +210,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     }
 
     "should support frame restart when paused at a regular breakpoint" in {
-      enableDebugger
       val script =
         """var f = function () {
           |  f.toString(); // regular breakpoint here
@@ -251,7 +245,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     }
 
     "should support continuing to a specific location" in {
-      enableDebugger
       val script =
         """debugger;
           |var x = 0;
@@ -273,7 +266,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     }
 
     "should support continuing to a specific location with column 0 (because that's what Chrome sends)" in {
-      enableDebugger
       val script =
         """debugger;
           |if (true) {
@@ -297,7 +289,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     }
 
     "should not leave an unwanted breakpoint after continuing to a location" in {
-      enableDebugger
       val script =
         """debugger;
           |var x = 0;
@@ -325,7 +316,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     }
 
     "should be able to continue to a location where there already is a breakpoint" in {
-      enableDebugger
       val script =
         """debugger;
           |var x = 0;
@@ -398,11 +388,9 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
         """.stripMargin
 
       "when breakpoints are enabled" in {
-        enableDebugger
         pauseAtNext(script, () => (), Seq(3, 4, 8))
       }
       "when breakpoints are disabled" in {
-        enableDebugger
         pauseAtNext(script, () => Debugger setBreakpointsActive false, Seq(3, 4, 8))
       }
     }
@@ -418,7 +406,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
           |debugger;
         """.stripMargin
 
-      enableDebugger
       pauseAtNext(script, () => (), Seq(2, 3))
     }
 
@@ -440,14 +427,12 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
           |}
         """.stripMargin
 
-      enableDebugger
       pauseAtNext(script, () => (), Seq(3, 4, 5, 9))
     }
 
 
 
     "should pause on exception when enabled even if pausing on breakpoint is disabled" in {
-      enableDebugger
       val script =
         """debugger; // disable breakpoint pausing here
           |debugger; // this one should be ignored
@@ -469,7 +454,6 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     }
 
     "should step even if pausing on breakpoint is disabled" in {
-      enableDebugger
       val script =
         """var i = 0;
           |debugger;  // disable breakpoint pausing here, then step
@@ -495,9 +479,17 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
     }
   }
 
-  protected override def restart(): Unit = {
-    Option(debugger).foreach(_ ! PoisonPill)
+  protected override def stopRunner(): Unit = {
+    Option(debugger).foreach { actorRef =>
+      val inbox = Inbox.create(system)
+      inbox.watch(actorRef)
+      inbox.send(actorRef, PoisonPill)
+      // wait a few seconds for the actor to die
+      inbox.receive(2.seconds)
+    }
     debugger = null
-    super.restart()
+    super.stopRunner()
   }
+
+  override protected def beforeEachTest(): Unit = enableDebugger
 }
