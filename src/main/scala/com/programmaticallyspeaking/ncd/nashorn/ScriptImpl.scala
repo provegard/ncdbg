@@ -56,6 +56,8 @@ class ScriptImpl(path: String, scriptData: Array[Byte], val id: String) extends 
 
   override def statementColumnsForLine(lineNumber1Based: Int): Seq[Int] = //statementCols.getOrElse(lineNumber1Based, Seq.empty)
     lines.lift(lineNumber1Based - 1).map(statementColumnsBase1For).getOrElse(Seq.empty)
+
+  override def toString: String = url.toString
 }
 
 object ScriptImpl {
