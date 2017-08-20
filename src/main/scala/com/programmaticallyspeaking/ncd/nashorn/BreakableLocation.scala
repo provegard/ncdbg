@@ -7,7 +7,11 @@ import com.sun.jdi.request.{BreakpointRequest, EventRequest, EventRequestManager
 object BreakableLocation {
   // TODO: Move elsewhere
   def scriptLocationFromScriptAndLocation(script: Script, location: Location): ScriptLocation = {
-    val lineNo = location.lineNumber()
+    scriptLocationFromScriptAndLine(script, location.lineNumber())
+  }
+
+  def scriptLocationFromScriptAndLine(script: Script, lineNumber1: Int): ScriptLocation = {
+    val lineNo = lineNumber1
     // Use index of first non-whitespace
     val colNo = script.sourceLine(lineNo).map(line => 1 + line.indexWhere(!_.isWhitespace))
     ScriptLocation(lineNo, colNo)
@@ -21,32 +25,45 @@ object BreakableLocation {
   * @param eventRequestManager [[EventRequestManager]] instance for creating/removing a breakpoint
   * @param location the location
   */
-class BreakableLocation(val script: Script, eventRequestManager: EventRequestManager, val location: Location) {
+class BreakableLocation private(val script: Script, eventRequestManager: EventRequestManager, val scriptLocation: ScriptLocation, val location: Option[Location]) {
 
-  val scriptLocation: ScriptLocation = BreakableLocation.scriptLocationFromScriptAndLocation(script, location)
+  def this(script: Script, eventRequestManager: EventRequestManager, location: Location) =
+    this(script, eventRequestManager, BreakableLocation.scriptLocationFromScriptAndLocation(script, location), Some(location))
+
+  def this(script: Script, eventRequestManager: EventRequestManager, lineNumber1: Int) =
+    this(script, eventRequestManager, BreakableLocation.scriptLocationFromScriptAndLine(script, lineNumber1), None)
 
   private var breakpointRequest: BreakpointRequest = _
 
-  def isEnabled = breakpointRequest != null
+  private var _isEnabled = false
+  def isEnabled = _isEnabled
 
   /**
-    * Instructs the VM to break at this location.
+    * Instructs the VM to break at this location. Won't actually set a breakpoint if the location is unknown
+    * (i.e. if this BreakableLocation is a placehoilder), though [[isEnabled]] will return true.
     */
   def enable(): Unit = {
-    breakpointRequest = eventRequestManager.createBreakpointRequest(location)
+    location.foreach { loc =>
+      breakpointRequest = eventRequestManager.createBreakpointRequest(loc)
 
-    // Assume script code runs in a single thread, so pausing that thread should be enough.
-    breakpointRequest.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
+      // Assume script code runs in a single thread, so pausing that thread should be enough.
+      breakpointRequest.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
 
-    breakpointRequest.enable()
+      breakpointRequest.enable()
+    }
+    _isEnabled = true
   }
 
   def disable(): Unit = {
-    eventRequestManager.deleteEventRequest(breakpointRequest)
+    Option(breakpointRequest).foreach(eventRequestManager.deleteEventRequest)
     breakpointRequest = null
+    _isEnabled = false
   }
 
 //  def toBreakpoint(id: String) = Breakpoint(id, script.id, Some(script.url), scriptLocation)
 
-  override def toString: String = script.id + "/" + scriptLocation.toString
+  override def toString: String = {
+    val candidateStr = location.map(_ => "").getOrElse(" (placeholder)")
+    script.id + "/" + scriptLocation.toString + candidateStr
+  }
 }

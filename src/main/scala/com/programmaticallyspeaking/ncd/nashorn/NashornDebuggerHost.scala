@@ -254,7 +254,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private val scriptByPath = mutable.Map[String, Script]()
 
-  protected val breakableLocationsByScriptUrl = mutable.Map[String, ListBuffer[BreakableLocation]]()
+  protected val breakableLocationsByScriptUrl = mutable.Map[String, Seq[BreakableLocation]]()
 
   protected val enabledBreakpoints = mutable.Map[String, ActiveBreakpoint]()
 
@@ -327,7 +327,27 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   }
 
   private def addBreakableLocations(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
-    breakableLocationsByScriptUrl.getOrElseUpdate(script.url.toString, ListBuffer.empty) ++= breakableLocations
+    val existing = breakableLocationsByScriptUrl.getOrElse(script.url.toString, Seq.empty)
+
+    // Remove existing ones where Location is unset and the line number exists among the new ones. These are placeholders
+    // added so that it's possible to set a breakpoint in a function before it has been executed, but now we have real
+    // locations for that function (supposedly).
+    // TODO: This may be broken if multiple one-liner functions are defined on the same line...
+    // However, if we have a placeholder that is enabled, enable the added locations on the same line.
+    val lineNumbersOfNewOnes = breakableLocations.map(_.scriptLocation.lineNumber1Based).toSet
+    def isObsolete(bl: BreakableLocation) = bl.location.isEmpty && lineNumbersOfNewOnes.contains(bl.scriptLocation.lineNumber1Based)
+
+    val groups = existing.groupBy(isObsolete)
+    val lineNumbesOfObsoleteEnabled = groups.getOrElse(true, Seq.empty).filter(_.isEnabled).map(_.scriptLocation.lineNumber1Based).toSet
+    def shouldEnable(bl: BreakableLocation) = lineNumbesOfObsoleteEnabled.contains(bl.scriptLocation.lineNumber1Based)
+
+    breakableLocations.filter(shouldEnable).foreach { bl =>
+      log.debug(s"Auto-enabling breakable location $bl since it replaces a placeholder.")
+      bl.enable()
+    }
+
+    val newList = existing.filterNot(isObsolete) ++ breakableLocations
+    breakableLocationsByScriptUrl(script.url.toString) = newList
   }
 
   private def enableBreakingAt(theType: ClassType, methodName: String, statementName: String): Unit = {
@@ -380,12 +400,30 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
+  private def potentiallyBreakableLines(script: Script): Seq[Int] = {
+    def hasRelevantContent(line: String) = {
+      val trimmed = line.trim()
+      trimmed != "" && trimmed != "{" && trimmed != "}"
+    }
+    def looksBreakable(line: Int) = script.sourceLine(line).exists(hasRelevantContent)
+    (1 to script.lineCount).filter(looksBreakable)
+  }
+
+  private def gatherBreakableLocations(script: Script, locations: Seq[Location]): Seq[BreakableLocation] = {
+    val erm = virtualMachine.eventRequestManager()
+    // Find all potentially breakable lines. Create breakable locations from actual locations. Then create
+    // candidates for the potentially breakable lines that weren't covered. Such a line may for example belong to
+    // a function that hasn't been executed yet.
+    var lineNumbers = potentiallyBreakableLines(script).toSet
+    val breakableLocations = locations.map(l => new BreakableLocation(script, erm, l))
+    breakableLocations.foreach(bl => lineNumbers -= bl.scriptLocation.lineNumber1Based)
+    breakableLocations ++ lineNumbers.map(line => new BreakableLocation(script, erm, line))
+  }
+
   private def registerScript(script: Script, scriptPath: String, locations: Seq[Location]): Unit = {
     val isKnownScript = breakableLocationsByScriptUrl.contains(script.url.toString)
 
-    val erm = virtualMachine.eventRequestManager()
-    val breakableLocations = locations.map(l => new BreakableLocation(script, erm, l))
-    addBreakableLocations(script, breakableLocations)
+    addBreakableLocations(script, gatherBreakableLocations(script, locations))
 
     if (isKnownScript) {
       log.debug(s"Reusing script with URI '${script.url}' for script path '$scriptPath'")
@@ -946,13 +984,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       // different from the one stored in a BreakableLocation.
       val id = ScriptIdentity.fromURL(script.url)
       findBreakableLocationsAtLine(id, location.lineNumber()).flatMap { bls =>
-        bls.find(_.location == location).orElse(bls.find(bl => sameMethodAndLine(bl.location, location)))
+        bls.find(_.location.contains(location)).orElse(bls.find(bl => sameMethodAndLine(bl.location, location)))
       }
     }
   }
 
-  private def sameMethodAndLine(l1: Location, l2: Location): Boolean = {
-    l1.method() == l2.method() && l1.lineNumber() == l2.lineNumber()
+  private def sameMethodAndLine(l1: Option[Location], l2: Location): Boolean = {
+    l1.exists(l => l.method() == l2.method() && l.lineNumber() == l2.lineNumber())
   }
 
   protected def findActiveBreakpoint(location: Location): Option[ActiveBreakpoint] = {
@@ -1161,7 +1199,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
             // Now get the current stack frame list and identify the correct target. This is needed since the old
             // stack frame list isn't valid anymore (due to thread resume due to marshalling).
-            pd.thread.frames().asScala.find(_.location() == location) match {
+            pd.thread.frames().asScala.find(f => location.contains(f.location())) match {
               case Some(jdiStackFrame) =>
                 log.debug(s"Popping stack frame at location ${jdiStackFrame.location()}")
 
