@@ -45,7 +45,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
       } else {
         log.info("Won't pause on exceptions")
       }
-    }
+    } else log.debug(s"Ignoring request to set same pause type $pauseType")
   }
 
   override def resume(): Unit = {
@@ -141,6 +141,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
   }
 
   override def setSkipAllPauses(skip: Boolean): Unit = {
+    log.info(if (skip) "Skipping all pauses" else "Not skipping all pauses")
     disablePausingAltogether = skip
   }
 
