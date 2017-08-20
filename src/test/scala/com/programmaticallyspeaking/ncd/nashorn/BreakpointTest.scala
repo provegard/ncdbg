@@ -216,14 +216,18 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
       observer
     }
 
+    def setBreakpoint(bp: HitBreakpoint, line: Int, col: Option[Int]): Option[Breakpoint] = {
+      val scriptId = bp.stackFrames.head.scriptId
+      for {
+        s <- getHost.findScript(ScriptIdentity.fromId(scriptId))
+        bp <- getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(line, col), None)
+      } yield bp
+    }
+
     def testSetBreakpoint(script: String, line: Int, col: Option[Int])(handler: (Option[Breakpoint]) => Unit): Unit = {
       val donePromise = Promise[Unit]()
       val observer = createObserver { data =>
-        val scriptId = data.bp.stackFrames.head.scriptId
-        val maybeBreakpoint = for {
-          s <- getHost.findScript(ScriptIdentity.fromId(scriptId))
-          bp <- getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(line, col), None)
-        } yield bp
+        val maybeBreakpoint = setBreakpoint(data.bp, line, col)
 
         // Remove the breakpoint right away, so we won't hit it
         maybeBreakpoint.foreach(b => getHost.removeBreakpointById(b.breakpointId))
@@ -309,6 +313,42 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
               donePromise.failure(new Exception(s"Breakpoint ID mismatch, ${breakpointIds.mkString(", ")}"))
             }
           } else getHost.resume()
+        }
+        observeAndRunScriptAsync(script, observer) { _ =>
+          donePromise.future
+        }
+      }
+    }
+
+    "in a function that hasn't yet been executed" - {
+      val script =
+        """function fun(foo) {
+          |  return foo;
+          |}
+          |debugger; // where we will set breakpoints
+          |fun(42);
+        """.stripMargin
+
+      "should be possible" in {
+        testSetBreakpoint(script, 2, None) { bp =>
+          columnNumbers(bp) should be(Seq(3))
+        }
+      }
+
+      "should be hit" in {
+        val donePromise = Promise[Unit]()
+        val observer = Observer.from[ScriptEvent] {
+          case bp: HitBreakpoint =>
+            val line = bp.stackFrames.head.location.lineNumber1Based
+            if (line == 2) donePromise.success(())
+            else if (line == 4) {
+              setBreakpoint(bp, 2, None) match {
+                case Some(_) => getHost.resume()
+                case None => donePromise.failure(new Exception("Failed to set breakpoint at line 2"))
+              }
+            }
+            else donePromise.failure(new Exception("Wrong line: " + line))
+          case _ => // ignore
         }
         observeAndRunScriptAsync(script, observer) { _ =>
           donePromise.future
