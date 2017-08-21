@@ -197,6 +197,12 @@ object NashornDebuggerHost {
     }
   }
 
+  object NoScriptReason {
+    sealed trait EnumVal
+    case object NoSource extends EnumVal
+    case object EvaluatedCode extends EnumVal
+  }
+
   case class StackFrameHolder(stackFrame: Option[StackFrame], location: Location) {
     val mayBeAtSpecialStatement = stackFrame.isEmpty
     val belongsToScript = stackFrame.isDefined
@@ -372,32 +378,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   private def enableBreakingAtDebuggerStatement(ct: ClassType): Unit =
     enableBreakingAt(ct, ScriptRuntime_DEBUGGER, "debugger")
 
-  private def scriptFromEval(refType: ReferenceType, scriptPath: String, attemptsLeft: Int): Either[String, Script] = {
-    shamelesslyExtractEvalSourceFromPrivatePlaces(refType) match {
-      case Some(src) =>
-        // NOTE: The Left here is untested. Our test setup doesn't allow us to connect multiple times to
-        // the same VM, in which case we could observe these "leftover" scripts.
-        if (src.contains(EvaluatedCodeMarker)) Left("it contains internally evaluated code")
-        else Right(getOrAddEvalScript(scriptPath, src))
-      case None =>
-        val willRetry = attemptsLeft > 2
-        if (willRetry) {
-
-          // Since a breakpoint may be hit before our retry attempt, we add the reference type to our list
-          // ouf source-less types. If we hit a breakpoint, we try to "resolve" all references in that list.
-          scriptTypesWaitingForSource += refType
-
-          // I couldn't get a modification watchpoint to work (be triggered). Perhaps it's because the 'source'
-          // field is set using reflection? So instead retry in a short while.
-          val item = ConsiderReferenceType(refType, attemptsLeft - 1)
-          DelayedFuture(50.milliseconds) {
-            asyncInvokeOnThis(_.handleOperation(item))
-          }
-        }
-
-        val retryStr = if (willRetry) ", will retry" else ""
-        Left(s"no source available (yet$retryStr)")
-    }
+  private def scriptFromEval(refType: ReferenceType, scriptPath: String): Either[NoScriptReason.EnumVal, Script] = {
+    shamelesslyExtractEvalSourceFromPrivatePlaces(refType).map { src =>
+      if (src.contains(EvaluatedCodeMarker)) Left(NoScriptReason.EvaluatedCode)
+      else Right(getOrAddEvalScript(scriptPath, src))
+    }.getOrElse(Left(NoScriptReason.NoSource))
   }
 
   private def potentiallyBreakableLines(script: Script): Seq[Int] = {
@@ -435,13 +420,53 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def handleScriptResult(result: Try[Either[String, Script]], refType: ReferenceType, scriptPath: String, locations: Seq[Location], attemptsLeft: Int): Option[Script] = result match {
+  private def handleScriptResult(maybeThread: Option[ThreadReference], result: Try[Either[NoScriptReason.EnumVal, Script]],
+                                 refType: ReferenceType, scriptPath: String, locations: Seq[Location], attemptsLeft: Int): Option[Script] = result match {
     case Success(Right(script)) =>
       registerScript(script, scriptPath, locations)
       Some(script)
-    case Success(Left(msg)) =>
-      log.debug(s"Ignoring script because $msg")
+    case Success(Left(NoScriptReason.EvaluatedCode)) =>
+      log.debug(s"Ignoring script because it contains evaluated code")
       None
+    case Success(Left(NoScriptReason.NoSource)) =>
+      val contextCodeInstallerType =
+        maybeThread.flatMap(t => t.frames.asScala.view.map(f => f.location().method().declaringType()).find(_.name().contains("Context$ContextCodeInstaller")))
+      contextCodeInstallerType match {
+        case Some(ciType) =>
+          log.debug(s"Will get source from ${refType.name()} via ContextCodeInstaller")
+          // Let the current method exit in order to hold of the source. This logic is based on the observation that
+          // we see the ClassPrepareEvent event inside Context$ContextCodeInstaller, on this line:
+          //     Field sourceField = clazz.getDeclaredField(CompilerConstants.SOURCE.symbolName());
+          // The actual setting of the source happens a few steps later.
+          val req = virtualMachine.eventRequestManager().createMethodExitRequest()
+          req.addClassFilter(ciType)
+          req.setEnabled(true)
+          beforeEventIsHandled(req) { ev =>
+            log.debug(s"Getting source from ${refType.name()} at method exit from ContextCodeInstaller")
+            virtualMachine.eventRequestManager().deleteEventRequest(req)
+            considerReferenceType(None, refType, InitialScriptResolveAttempts)
+            true // consume the event
+          }
+
+          None
+        case None =>
+          val willRetry = attemptsLeft > 2
+          if (willRetry) {
+            log.debug(s"Will get source from ${refType.name()} by trying again shortly.")
+            // Since a breakpoint may be hit before our retry attempt, we add the reference type to our list
+            // ouf source-less types. If we hit a breakpoint, we try to "resolve" all references in that list.
+            scriptTypesWaitingForSource += refType
+
+            // Consider the reference type in a short while
+            val item = ConsiderReferenceType(refType, attemptsLeft - 1)
+            DelayedFuture(50.milliseconds) {
+              asyncInvokeOnThis(_.handleOperation(item))
+            }
+          } else {
+            log.warn(s"Giving up on getting source from ${refType.name()}.")
+          }
+          None
+      }
     case Failure(t) =>
       log.error(s"Ignoring script at path '$scriptPath'", t)
       None
@@ -457,7 +482,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def considerReferenceType(refType: ReferenceType, attemptsLeft: Int): Option[Script] = {
+  private def considerReferenceType(thread: Option[ThreadReference], refType: ReferenceType, attemptsLeft: Int): Option[Script] = {
     if (attemptsLeft == 0) return None
 
     val className = refType.name()
@@ -491,14 +516,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               val scriptPath = scriptPathFromLocation(firstLocation)
               if (looksAbsolute(scriptPath)) {
 
-                val triedScript: Try[Either[String, Script]] = Try {
+                val triedScript: Try[Either[NoScriptReason.EnumVal, Script]] = Try {
                   // Note that we no longer try to use the script path for reading the source. If the script contains a
                   // sourceURL annotation, Nashorn will use that at script path, so we might end up reading CoffeeScript
                   // source instead of the real source.
-                  scriptFromEval(refType, scriptPath, attemptsLeft)
+                  scriptFromEval(refType, scriptPath)
                 }
 
-                handleScriptResult(triedScript, refType, scriptPath, locations, attemptsLeft)
+                handleScriptResult(thread, triedScript, refType, scriptPath, locations, attemptsLeft)
               } else {
                 // A relative path is not supported because there is no foolproof way to get the current directory
                 // for the remove VM (we can invoke System.getProperties, but we need to see an event early on for
@@ -550,12 +575,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def scanClasses(): Unit = {
+  private def scanClasses(thread: Option[ThreadReference]): Unit = {
     log.debug("Scanning all currently known classes...")
     val referenceTypes = virtualMachine.allClasses()
 
     // Go through reference types that exist so far. More may arrive later!
-    referenceTypes.asScala.foreach(considerReferenceType(_: ReferenceType, InitialScriptResolveAttempts))
+    referenceTypes.asScala.foreach(considerReferenceType(thread, _: ReferenceType, InitialScriptResolveAttempts))
 
     hasScannedClasses = true
   }
@@ -580,14 +605,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   }
 
   // toList => iterate over a copy since we mutate inside the foreach
-  private def attemptToResolveSourceLessReferenceTypes(): Unit = scriptTypesWaitingForSource.toList match {
+  private def attemptToResolveSourceLessReferenceTypes(thread: ThreadReference): Unit = scriptTypesWaitingForSource.toList match {
     case Nil => // noop
     case xs =>
       log.info(s"Attempting to source-resolve ${scriptTypesWaitingForSource.size} script type(s)")
       xs.foreach { refType =>
         // Only 1 attempt because we don't want retry on this, since we don't want multiple retry "loops" going on in
         // parallel.
-        considerReferenceType(refType, 1) match {
+        considerReferenceType(Some(thread), refType, 1) match {
           case Some(_) =>
             scriptTypesWaitingForSource -= refType
             scriptTypesToBreakRetryCycleFor += refType
@@ -614,7 +639,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private def handleStepOrMethodEvent(ev: LocatableEvent): Boolean = {
     var doResume = true
-    attemptToResolveSourceLessReferenceTypes()
+    attemptToResolveSourceLessReferenceTypes(ev.thread())
     virtualMachine.eventRequestManager().deleteEventRequest(ev.request())
     val bc = byteCodeFromLocation(ev.location())
     if (IlCodesToIgnoreOnStepEvent.contains(bc)) {
@@ -747,7 +772,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                     log.debug(s"Breakpoint event in the same location (${ev.location()}) as the previous step event. Ignoring!")
                   case _ =>
                     removeAnyStepRequest()
-                    attemptToResolveSourceLessReferenceTypes()
+                    attemptToResolveSourceLessReferenceTypes(ev.thread())
 
                     doResume = handleBreakpoint(ev, prepareForPausing(ev))
                 }
@@ -755,7 +780,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               case ev: ClassPrepareEvent =>
                 if (hasScannedClasses) {
                   // A new class, added after we have scanned
-                  considerReferenceType(ev.referenceType(), InitialScriptResolveAttempts)
+                  considerReferenceType(Some(ev.thread()), ev.referenceType(), InitialScriptResolveAttempts)
                 } else if (relevantForPostponingClassScan(ev.referenceType())) {
                   // Bump the class counter - when we handle PostponeInitialize, if the class cound has stabilized,
                   // we do a full scan.
@@ -763,7 +788,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                   seenClassPrepareRequests += 1
                 }
               case ev: ExceptionEvent if pausedData.isEmpty =>
-                attemptToResolveSourceLessReferenceTypes()
+                attemptToResolveSourceLessReferenceTypes(ev.thread())
 
                 val exceptionTypeName = ev.exception().referenceType().name()
                 val isECMAException = exceptionTypeName == NIR_ECMAException
@@ -805,10 +830,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       if (scriptTypesToBreakRetryCycleFor.contains(refType)) {
         scriptTypesToBreakRetryCycleFor -= refType
       } else {
-        considerReferenceType(refType, attemptsLeft)
+        considerReferenceType(None, refType, attemptsLeft)
       }
     case PostponeInitialize =>
-      if (lastSeenClassPrepareRequests == seenClassPrepareRequests) scanClasses()
+      if (lastSeenClassPrepareRequests == seenClassPrepareRequests) scanClasses(None)
       else {
         lastSeenClassPrepareRequests = seenClassPrepareRequests
         retryInitLater()
