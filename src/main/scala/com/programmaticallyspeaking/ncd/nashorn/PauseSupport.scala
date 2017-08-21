@@ -133,6 +133,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
         def eventHandler(ev: Event) = {
           val erm = virtualMachine.eventRequestManager()
           erm.deleteEventRequests(allRequests.asJava)
+          false // don't consume the event
         }
 
         // Associate the handler with each request
