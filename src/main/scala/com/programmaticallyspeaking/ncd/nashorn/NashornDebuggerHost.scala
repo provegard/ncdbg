@@ -44,15 +44,14 @@ object NashornDebuggerHost {
 
   val ECMAException_create = "create"
 
-  // Note that NIR_ECMAException isn't here because requiring it for init will prevent init from completing
-  // since we won't see the type until it's used. Also, we never use it in foundWantedTypes lookup.
-  val wantedTypes = Set(
-    NIR_ScriptRuntime,
-    NIR_Context,
-    JL_Boolean,
-    JL_Integer,
-    JL_Long,
-    JL_Double
+  val wantedTypes = Map(
+    NIR_ScriptRuntime -> true,
+    NIR_Context -> true,
+    JL_Boolean -> true,
+    JL_Integer -> true,
+    JL_Long -> true,
+    JL_Double -> true,
+    NIR_ECMAException -> false // don't stop init
   )
 
   type CodeEvaluator = (String, Map[String, AnyRef]) => ValueNode
@@ -298,7 +297,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     * Configure what we do when we encounter one of the wanted types.
     */
   private val actionPerWantedType: Map[String, (ClassType) => Unit] = Map(
-    NIR_ScriptRuntime -> enableBreakingAtDebuggerStatement _
+    NIR_ScriptRuntime -> enableBreakingAtDebuggerStatement _,
+    NIR_ECMAException -> enableExceptionPausing _
   )
 
   /**
@@ -496,8 +496,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           // Execute any function associated with the type
           actionPerWantedType.get(className).foreach(_.apply(ct))
 
-          // If we have all types, we're done
-          if (wantedTypes.forall(foundWantedTypes.contains)) {
+          // If we have all mandatory types, we're done
+          val mandatoryTypes = wantedTypes.filter(_._2).keys
+          if (mandatoryTypes.forall(foundWantedTypes.contains)) {
             considerInitializationToBeComplete()
           }
 
@@ -588,7 +589,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   private def considerInitializationToBeComplete(): Unit = {
     log.info("Host initialization is complete.")
     hostInitializationComplete = true
-    enableExceptionPausing()
     emitEvent(InitialInitializationComplete)
   }
 

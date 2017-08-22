@@ -4,7 +4,7 @@ import com.programmaticallyspeaking.ncd.host.ExceptionPauseType
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.isInfrastructureThread
 import com.sun.jdi.event.Event
 import com.sun.jdi.request.EventRequest
-import com.sun.jdi.{Location, Method, StackFrame}
+import com.sun.jdi.{ClassType, Location, Method, StackFrame}
 import org.slf4s.Logging
 
 import scala.language.reflectiveCalls
@@ -19,7 +19,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
   import scala.collection.JavaConverters._
   import PauseSupport._
 
-  protected def enableExceptionPausing(): Unit = {
+  protected def enableExceptionPausing(ct: ClassType): Unit = {
     log.info(s"Enabling breaking on exceptions in script classes.")
     val erm = virtualMachine.eventRequestManager()
     // Note that we want to pause on both caught and uncaught exceptions at all times, because we have
@@ -28,7 +28,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
     // We don't necessarily find ECMAException at VM startup, so we don't have it available here.
     val request = erm.createExceptionRequest(null, true, true)
     request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD) // TODO: Duplicate code
-    // We're only interested in exceptions
+    // We're only interested in exceptions thrown in scripts
     request.addClassFilter(ScriptClassNamePrefix + "*")
     request.setEnabled(true)
   }
