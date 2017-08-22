@@ -6,11 +6,16 @@ class SourceMapTest extends UnitTest {
 
   "SourceMap" - {
 
-    val json = """{"sources":["a.coffee","b.coffee"]}"""
-
     "exposes sources" in {
+      val json = """{"sources":["a.coffee","b.coffee"]}"""
       val sm = SourceMap.fromJson(json)
       sm.sources should be (Seq("a.coffee", "b.coffee"))
+    }
+
+    "ignores empty sources" in {
+      val json = """{"sources":["","b.coffee"]}"""
+      val sm = SourceMap.fromJson(json)
+      sm.sources should be (Seq("b.coffee"))
     }
   }
 }
