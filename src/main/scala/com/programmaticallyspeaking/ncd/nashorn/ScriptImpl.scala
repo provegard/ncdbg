@@ -54,27 +54,12 @@ class ScriptImpl(path: String, scriptData: Array[Byte], val id: String) extends 
     lines.lift(lineNumber1Based - 1)
   }
 
-  override def statementColumnsForLine(lineNumber1Based: Int): Seq[Int] = //statementCols.getOrElse(lineNumber1Based, Seq.empty)
-    lines.lift(lineNumber1Based - 1).map(statementColumnsBase1For).getOrElse(Seq.empty)
-
   override def toString: String = url.toString
 }
 
 object ScriptImpl {
 
   private val UTF8 = StandardCharsets.UTF_8
-
-  // Nashorn supports extended function syntax: function sqrt(x) x * x
-  private val funcBodyRegex = "function[^(]*?\\([^)]*\\)[ {]*".r
-  private val arrowFuncBodyRegex = "\\([^)]*\\) *=> *[ {]*".r
-
-  def statementColumnsBase1For(sourceLine: String): Seq[Int] = {
-    // Leftmost column
-    // + all function bodies
-    val nonWs = sourceLine.indexWhere(!_.isWhitespace)
-    if (nonWs < 0) Seq.empty else
-      (Seq(1 + nonWs) ++ Seq(funcBodyRegex, arrowFuncBodyRegex).flatMap(_.findAllMatchIn(sourceLine).map(_.end(0) + 1))).sorted
-  }
 
   def fromSource(path: String, source: String, id: String): Script = {
     val bytes = source.getBytes(UTF8)

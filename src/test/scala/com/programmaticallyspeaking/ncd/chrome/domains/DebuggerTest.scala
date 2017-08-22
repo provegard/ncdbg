@@ -44,8 +44,6 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     override def sourceUrl(): Option[ScriptURL] = None
 
     override def sourceLine(lineNumber1Based: Int): Option[String] = None
-
-    override def statementColumnsForLine(lineNumber1Based: Int): Seq[Int] = Seq.empty
   }
 
   private val objectProperties = mutable.Map[ObjectId, Map[String, Any]]()
