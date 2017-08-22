@@ -54,7 +54,7 @@ object ScriptURL {
       new URI(scheme, "", "/" + rest.substring(slashCount), null)
     } else {
       val u = new URI(something)
-      require(u.isAbsolute, "relative path/URI not supported")
+      require(u.isAbsolute, "relative path/URI not supported: " + something)
       u
     }
     normalized(new ScriptURL(uri))
