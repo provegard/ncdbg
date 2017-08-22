@@ -14,51 +14,49 @@ import org.slf4s.Logging
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 
-//trait MultiThreadingTestFixture extends UnitTest with Logging with SharedInstanceActorTesting with VirtualMachineLauncher with ScalaFutures with FairAmountOfPatience {
-//  override val scriptExecutor: ScriptExecutorBase = MultiThreadedScriptExecutor
-//  override implicit val executionContext: ExecutionContext = ExecutionContext.global
-//
-//  def waitUntilVMRunning() =
-//    AwaitAndExplain.result(vmRunningPromise.future, runVMTimeout, "Timed out waiting for the VM to start running. Progress:\n" + summarizeProgress())
-//}
-//
-//class MultiThreadingTest extends MultiThreadingTestFixture {
-//  def location(ln: Int) = ScriptLocation(ln, None)
-//
-//  "Breakpoint requests from other threads should be ignore in a paused state" in {
-//    val scriptAddedPromise = Promise[Script]()
-//    val hitBreakpointPromise = Promise[String]()
-//    val breakpointCounter = new AtomicInteger()
-//    eventSubject.subscribe(new Observer[ScriptEvent] {
-//
-//      override def onNext(item: ScriptEvent): Unit = item match {
-//        case ScriptAdded(script) => scriptAddedPromise.success(script)
-//        case hb: HitBreakpoint =>
-//          breakpointCounter.incrementAndGet()
-//          hitBreakpointPromise.trySuccess("")
-//        case _ =>
-//      }
-//
-//      override def onError(error: Throwable): Unit = {}
-//
-//      override def onComplete(): Unit = {}
-//    })
-//
-//    val host = waitUntilVMRunning()
-//    whenReady(scriptAddedPromise.future) { script =>
-//      val scriptLocation = host.getBreakpointLocations(ScriptIdentity.fromId(script.id), location(1), None).headOption match {
-//        case Some(l) => l
-//        case None => fail(s"No line numbers for script ${script.id}")
-//      }
-//      host.setBreakpoint(ScriptIdentity.fromURL(script.url), scriptLocation, None)
-//      whenReady(hitBreakpointPromise.future) { _ =>
-//        // Ugly, but wait for a while to see if the counter increases over 1 (which it shouldn't).
-//        Thread.sleep(200)
-//        breakpointCounter.get() should be (1)
-//      }
-//    }
-//  }
-//}
+trait MultiThreadingTestFixture extends UnitTest with Logging with SharedInstanceActorTesting with VirtualMachineLauncher with ScalaFutures with FairAmountOfPatience {
+  override val scriptExecutor: ScriptExecutorBase = MultiThreadedScriptExecutor
+  override implicit val executionContext: ExecutionContext = ExecutionContext.global
+}
+
+class MultiThreadingTest extends MultiThreadingTestFixture {
+  def location(ln: Int) = ScriptLocation(ln, None)
+
+  "Breakpoint requests from other threads should be ignore in a paused state" in {
+    val scriptAddedPromise = Promise[Script]()
+    val hitBreakpointPromise = Promise[String]()
+    val breakpointCounter = new AtomicInteger()
+    val host = getHost
+    observeScriptEvents(new Observer[ScriptEvent] {
+
+      override def onNext(item: ScriptEvent): Unit = item match {
+        case ScriptAdded(script) =>
+          scriptAddedPromise.success(script)
+        case hb: HitBreakpoint =>
+          breakpointCounter.incrementAndGet()
+          hitBreakpointPromise.trySuccess("")
+        case _ =>
+      }
+
+      override def onError(error: Throwable): Unit = {}
+
+      override def onComplete(): Unit = {}
+    })
+
+    whenReady(scriptAddedPromise.future) { script =>
+      val scriptLocation = host.getBreakpointLocations(ScriptIdentity.fromId(script.id), location(1), None).headOption match {
+        case Some(l) => l
+        case None => fail(s"No line numbers for script ${script.id}")
+      }
+      host.setBreakpoint(ScriptIdentity.fromURL(script.url), scriptLocation, None).orElse(fail("No breakpoint set!"))
+      whenReady(hitBreakpointPromise.future) { _ =>
+        // Ugly, but wait for a while to see if the counter increases over 1 (which it shouldn't).
+        Thread.sleep(200)
+        breakpointCounter.get() should be (1)
+      }
+    }
+  }
+}
 
 object MultiThreadedScriptExecutor extends App with ScriptExecutorBase {
   println("MultiThreadedScriptExecutor starting. Java version: " + System.getProperty("java.version"))

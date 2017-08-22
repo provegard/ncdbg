@@ -33,6 +33,9 @@ object ScriptExecutorRunner {
   case class ScriptFailure(reason: String)
   case object ScriptWillExecute
 
+  case class ObserveScriptEvents(observer: Observer[ScriptEvent])
+  case class ObserveScriptEventsResponse(subscription: Subscription)
+
   case object GetProgress
   case class ProgressResponse(progress: String)
 
@@ -91,6 +94,10 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
 
     case ReportProgress(p) =>
       reportProgress(p)
+
+    case ObserveScriptEvents(obs) =>
+      val sub = eventSubject.subscribe(obs)
+      sender ! ObserveScriptEventsResponse(sub)
   }
 
   override def receive: Receive = common orElse {

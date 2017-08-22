@@ -75,6 +75,14 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
     }
   }
 
+  protected def observeScriptEvents(observer: Observer[ScriptEvent]): Unit = {
+    assert(runner != null, "Runner is unset")
+
+    val inbox = Inbox.create(system)
+    inbox.send(runner, ScriptExecutorRunner.ObserveScriptEvents(observer))
+    inbox.receive(2.seconds)
+  }
+
   protected def executeScript[R](script: String, observer: Observer[ScriptEvent], handler: (NashornScriptHost) => Future[R]): R = {
     assert(runner != null, "Runner is unset")
 
