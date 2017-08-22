@@ -816,7 +816,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
             }
           }
         } catch {
-          case ex: Exception =>
+          case NonFatal(ex) =>
             log.error(s"Failed to handle event ${ev.getClass.getName}", ex)
         }
       }
