@@ -8,9 +8,13 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
   override def setBreakpoint(id: ScriptIdentity, location: ScriptLocation, condition: Option[String]): Option[Breakpoint] = {
     findBreakableLocationsAtLine(id, location.lineNumber1Based) match {
       case Some(bls) =>
-        // If we have a column number, find exactly that location. Otherwise grab all locations
+        // If we have a column number, try to find exactly that location, but fall back to locations on the line.
+        // The reason is that column numbers is not an exact science, especially when it comes to source maps.
         val candidates = location.columnNumber1Based match {
-          case Some(col) => bls.filter(_.scriptLocation.columnNumber1Based.contains(col))
+          case Some(col) => bls.filter(_.scriptLocation.columnNumber1Based.contains(col)).toList match {
+            case Nil => bls
+            case xs => xs
+          }
           case None => bls
         }
         if (candidates.nonEmpty) {
