@@ -1,26 +1,31 @@
 # Changelog
 
-# 0.5.4 (2017-08-14)
+## Unreleased
+
+* Remove column guessing&mdash;it's too fragile.
+* Make it possible to pause in a script/function that hasn't been compiled yet (issue #61)
+
+## 0.5.4 (2017-08-14)
 
 * Trying to make tests more stable wrt breakpoint columns.
 * Return only distinct locations when setting a breakpoing.
 * Parse ES6 arrow functions when guessing columns.
 
-# 0.5.3 (2017-08-13)
+## 0.5.3 (2017-08-13)
 
 * Properly pause on uncaught exceptions (issue #52)
 * Fix variable setting when stack contains recusion (issue #53)
 * Emit Runtime.exceptionThrown for uncaught errors.
-* Support marshalling of ES6 Symbol (Java 9) (issue 54)
-* Support marshalling of ES6 Map, Set, WeakMap and WeakSet (Java 9) (issue 56)
+* Support marshalling of ES6 Symbol (Java 9) (issue #54)
+* Support marshalling of ES6 Map, Set, WeakMap and WeakSet (Java 9) (issue #56)
 * Stability fixes
 * Marshal __proto__ correctly
 
-# 0.5.2 (2017-07-31)
+## 0.5.2 (2017-07-31)
 
 * More robust pause support (issue #51)
 
-# 0.5.1 (2017-07-18)
+## 0.5.1 (2017-07-18)
 
 * Support setting local variables of primitive type (issue #46)
 * Support Debugger.continueToLocation (issue #47)
@@ -28,7 +33,7 @@
 * Pause in certain situations even if breakpoints are disabled (issue #50)
 * Implement Debugger.setSkipAllPauses (issue #48)
 
-# 0.5.0 (2017-05-28)
+## 0.5.0 (2017-05-28)
 
 * Show a java.util.Hashtable as a JS object with properties, not as a native Java
   object (issue #36).
