@@ -1,12 +1,12 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.{StepInto, StepOut, StepOver, StepType}
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.StepRequestClassFilter
 import com.sun.jdi.ThreadReference
 import com.sun.jdi.request.StepRequest
 import org.slf4s.Logging
 
 trait StepSupport { self: NashornDebuggerHost with Logging =>
+  import NashornDebuggerHost._
   override def step(stepType: StepType): Unit = pausedData match {
     case Some(pd) =>
       log.info(s"Stepping with type $stepType")
@@ -29,7 +29,7 @@ trait StepSupport { self: NashornDebuggerHost with Logging =>
 
   private def createEnabledStepRequest(thread: ThreadReference, depth: Int, count: Int): Unit = {
     val sr = virtualMachine.eventRequestManager().createStepRequest(thread, StepRequest.STEP_LINE, depth)
-    sr.addClassFilter(StepRequestClassFilter)
+    sr.addClassFilter(ScriptClassNamePrefix + "*")
     if (count > 0) sr.addCountFilter(count)
     sr.enable()
   }

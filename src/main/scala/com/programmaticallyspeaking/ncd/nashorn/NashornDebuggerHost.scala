@@ -142,9 +142,6 @@ object NashornDebuggerHost {
     def from(ev: LocatableEvent) = StepLocationInfo(ev.location(), ev.thread().frameCount())
   }
 
-  // Filter for step requests for stopping in a script
-  val StepRequestClassFilter = "jdk.nashorn.internal.scripts.*"
-
   val ScriptClassNamePrefix = "jdk.nashorn.internal.scripts.Script$"
 
   /**
