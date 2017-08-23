@@ -167,6 +167,22 @@ class StepTest extends StepTestFixture {
           location.lineNumber1Based should be (2)
         }
       }
+
+      "enters a function _after stepping out from another_" in {
+        val script =
+          """var a = function () { return 42; };
+            |var b = function (x) { return x + 1 };
+            |var fun = function() {
+            |  debugger;
+            |  return b(a());
+            |};
+            |fun();
+          """.stripMargin
+        stepInScript(script, Seq(StepOver, StepInto, StepOut, StepInto)) { location =>
+          location.lineNumber1Based should be (2)
+        }
+      }
+
     }
   }
 }
