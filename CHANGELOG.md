@@ -4,6 +4,7 @@
 
 * Remove column guessing&mdash;it's too fragile.
 * Make it possible to pause in a script/function that hasn't been compiled yet (issue #61)
+* Fix step-into in Java 9 (issue #60)
 
 ## 0.5.4 (2017-08-14)
 
