@@ -30,7 +30,7 @@ class StepTest extends StepTestFixture {
         }
       }
 
-      "steps out of two functions" in {
+      "stops on a return after a call, staying in the callee" in {
         val script =
           """var foo = function() {
             |  debugger;
@@ -43,7 +43,7 @@ class StepTest extends StepTestFixture {
             |bar.toString();
           """.stripMargin
         stepInScript(script, Seq(StepOver, StepOver)) { location =>
-          location.lineNumber1Based should be (9)
+          location.lineNumber1Based should be (6)
         }
       }
 

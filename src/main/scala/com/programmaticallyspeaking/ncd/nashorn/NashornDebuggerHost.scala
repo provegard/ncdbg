@@ -129,8 +129,7 @@ object NashornDebuggerHost {
   def isRunningThread(t: ThreadReference) = t.status() == ThreadReference.THREAD_STATUS_RUNNING
 
   val IL_POP = 0x57     // pop result after function return
-  val IL_ARETURN = 0xb0 // return reference from function
-  val IlCodesToIgnoreOnStepEvent = Set(IL_POP, IL_ARETURN)
+  val IlCodesToIgnoreOnStepEvent = Set(IL_POP)
 
   /**
     * Information used to determine if a breakpoint request event is in the exact same location as the previous step
