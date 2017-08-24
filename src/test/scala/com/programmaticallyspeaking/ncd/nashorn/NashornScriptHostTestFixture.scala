@@ -69,8 +69,9 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
       inbox.receive(runnerTimeout) match {
         case ScriptExecutorRunner.Started(theHost) => host = theHost
         case ScriptExecutorRunner.StartError(progress, err) =>
-          err.foreach(t => throw t)
-          throw new RuntimeException("Startup failure: " + progress)
+          // The runner should stop itself - clear our ref so that we'll re-create it next time
+          runner = null
+          throw new RuntimeException("Startup failure: " + progress, err.orNull)
       }
     }
   }
@@ -147,11 +148,9 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
 
   override def afterAllTests(): Unit = stopRunner()
 
-  protected def getHost = Option(host) match {
-    case Some(host) => host
-    case None =>
-      startRunnerIfNecessary()
-      host
+  protected def getHost = Option(host).getOrElse {
+    startRunnerIfNecessary()
+    host
   }
 }
 

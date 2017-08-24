@@ -123,7 +123,9 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
             }
           }
 
-        case Failure(NonFatal(t)) => sender ! StartError("", Some(t))
+        case Failure(NonFatal(t)) =>
+          sender ! StartError("", Some(t))
+          self ! Stop
         case Failure(t) => throw t // fatal
       }
   }
