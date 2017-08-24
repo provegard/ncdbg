@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.5 (2017-08-24)
 
 * Remove column guessing&mdash;it's too fragile.
 * Make it possible to pause in a script/function that hasn't been compiled yet (issue #61)
