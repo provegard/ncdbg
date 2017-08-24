@@ -2,24 +2,35 @@ package com.programmaticallyspeaking.ncd.infra
 
 import java.util.concurrent.{Executors, TimeUnit}
 
-import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.concurrent.duration.FiniteDuration
-import scala.util.{Failure, Success}
+import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.{CanAwait, ExecutionContext, Future, Promise}
+import scala.util.Try
 
-// TODO: test
+class CancellableFuture[+A](fut: Future[A], canceller: () => Unit) extends Future[A] {
+  override def onComplete[U](f: (Try[A]) => U)(implicit executor: ExecutionContext): Unit = fut.onComplete(f)
+  override def isCompleted: Boolean = fut.isCompleted
+  override def value: Option[Try[A]] = fut.value
+  override def transform[S](f: (Try[A]) => Try[S])(implicit executor: ExecutionContext): Future[S] = fut.transform(f)
+  override def transformWith[S](f: (Try[A]) => Future[S])(implicit executor: ExecutionContext): Future[S] = fut.transformWith(f)
+  override def ready(atMost: Duration)(implicit permit: CanAwait): this.type = this
+  override def result(atMost: Duration)(implicit permit: CanAwait): A = fut.result(atMost)
+
+  def cancel(): Unit = canceller()
+}
+
 object DelayedFuture {
   private def executor = Executors.newSingleThreadScheduledExecutor()
 
-  def apply[R](delay: FiniteDuration)(fun: => R)(implicit executionContext: ExecutionContext): Future[R] = {
+  def apply[R](delay: FiniteDuration)(fun: => R)(implicit executionContext: ExecutionContext): CancellableFuture[R] = {
     val resultPromise = Promise[R]()
+    var isCancelled = false
     executor.schedule(new Runnable {
       override def run(): Unit = {
-        Future(fun).onComplete {
-          case Success(result) => resultPromise.success(result)
-          case Failure(t) => resultPromise.failure(t)
-        }
+        if (!isCancelled)
+          resultPromise.completeWith(Future(fun))
       }
     }, delay.toMillis, TimeUnit.MILLISECONDS)
-    resultPromise.future
+    def cancel() = isCancelled = true
+    new CancellableFuture[R](resultPromise.future, cancel)
   }
 }
