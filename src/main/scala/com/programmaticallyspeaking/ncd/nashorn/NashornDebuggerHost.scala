@@ -429,7 +429,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     case Success(Left(NoScriptReason.EvaluatedCode)) =>
       log.debug(s"Ignoring script because it contains evaluated code")
       None
-    case Success(Left(NoScriptReason.NoSource)) =>
+    case Success(Left(NoScriptReason.NoSource)) if attemptsLeft > 1 => // hm, was previously 2. Why??
       val contextCodeInstallerType =
         maybeThread.flatMap(t => t.frames.asScala.view.map(f => f.location().method().declaringType()).find(_.name().contains("Context$ContextCodeInstaller")))
       contextCodeInstallerType match {
@@ -451,23 +451,21 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
           None
         case None =>
-          val willRetry = attemptsLeft > 2
-          if (willRetry) {
-            log.debug(s"Will get source from ${refType.name()} by trying again shortly.")
-            // Since a breakpoint may be hit before our retry attempt, we add the reference type to our list
-            // ouf source-less types. If we hit a breakpoint, we try to "resolve" all references in that list.
-            scriptTypesWaitingForSource += refType
+          log.debug(s"Will get source from ${refType.name()} by trying again shortly.")
+          // Since a breakpoint may be hit before our retry attempt, we add the reference type to our list
+          // ouf source-less types. If we hit a breakpoint, we try to "resolve" all references in that list.
+          scriptTypesWaitingForSource += refType
 
-            // Consider the reference type in a short while
-            val item = ConsiderReferenceType(refType, attemptsLeft - 1)
-            DelayedFuture(50.milliseconds) {
-              asyncInvokeOnThis(_.handleOperation(item))
-            }
-          } else {
-            log.warn(s"Giving up on getting source from ${refType.name()}.")
+          // Consider the reference type in a short while
+          val item = ConsiderReferenceType(refType, attemptsLeft - 1)
+          DelayedFuture(50.milliseconds) {
+            asyncInvokeOnThis(_.handleOperation(item))
           }
           None
       }
+    case Success(Left(NoScriptReason.NoSource)) =>
+      log.warn(s"Giving up on getting source from ${refType.name()}.")
+      None
     case Failure(t) =>
       log.error(s"Ignoring script at path '$scriptPath'", t)
       None
