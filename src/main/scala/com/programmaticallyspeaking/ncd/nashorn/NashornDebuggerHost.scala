@@ -335,16 +335,21 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     // added so that it's possible to set a breakpoint in a function before it has been executed, but now we have real
     // locations for that function (supposedly).
     // TODO: This may be broken if multiple one-liner functions are defined on the same line...
-    // However, if we have a placeholder that is enabled, enable the added locations on the same line.
     val lineNumbersOfNewOnes = breakableLocations.map(_.scriptLocation.lineNumber1Based).toSet
+
+    // TODO: Identify BLs no longer relevant due to recompilation. Perhaps by function node ID? If such a BL
+    // TODO: is enabled, it needs to be disabled.
     def isObsolete(bl: BreakableLocation) = bl.location.isEmpty && lineNumbersOfNewOnes.contains(bl.scriptLocation.lineNumber1Based)
 
-    val groups = existing.groupBy(isObsolete)
-    val lineNumbesOfObsoleteEnabled = groups.getOrElse(true, Seq.empty).filter(_.isEnabled).map(_.scriptLocation.lineNumber1Based).toSet
-    def shouldEnable(bl: BreakableLocation) = lineNumbesOfObsoleteEnabled.contains(bl.scriptLocation.lineNumber1Based)
+    val lineNumbersOfEnabled = existing.filter(_.isEnabled).map(_.scriptLocation.lineNumber1Based).toSet
+
+    // Auto-enable a BL if we have an existing one that is enabled for the same line number - regardless of whether
+    // it's a placeholder or not. This is untested for non-placeholders, since we probably need a big test script
+    // to trigger this case.
+    def shouldEnable(bl: BreakableLocation) = lineNumbersOfEnabled.contains(bl.scriptLocation.lineNumber1Based)
 
     breakableLocations.filter(shouldEnable).foreach { bl =>
-      log.debug(s"Auto-enabling breakable location $bl since it replaces a placeholder.")
+      log.debug(s"Auto-enabling breakable location $bl since it's on the same line as a currently enabled one.")
       bl.enable()
     }
 
