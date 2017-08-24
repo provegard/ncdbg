@@ -47,6 +47,23 @@ class StepTest extends StepTestFixture {
         }
       }
 
+      "stops on a non-return after a call, staying in the callee" in {
+        val script =
+          """var foo = function() {
+            |  debugger;
+            |  return 42;
+            |};
+            |var bar = function() {
+            |  foo();
+            |};
+            |bar();
+            |bar.toString();
+          """.stripMargin
+        stepInScript(script, Seq(StepOver, StepOver)) { location =>
+          location.lineNumber1Based should be (6)
+        }
+      }
+
       "passes a function call" in {
         val script =
           """var fun = function() {

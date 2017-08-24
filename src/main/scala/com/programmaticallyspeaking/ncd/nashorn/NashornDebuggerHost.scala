@@ -129,7 +129,6 @@ object NashornDebuggerHost {
   def isRunningThread(t: ThreadReference) = t.status() == ThreadReference.THREAD_STATUS_RUNNING
 
   val IL_POP = 0x57     // pop result after function return
-  val IlCodesToIgnoreOnStepEvent = Set(IL_POP)
 
   /**
     * Information used to determine if a breakpoint request event is in the exact same location as the previous step
@@ -636,12 +635,25 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     if (bc < 0) bc + 256 else bc
   }
 
+  private def shouldIgnoreLocationOnStep(location: Location) = {
+    byteCodeFromLocation(location) match {
+      case IL_POP =>
+        // We should *maybe* ignore IL_POP. Most of the time, it's just popping the return value of a function.
+        // However, if that happens on the last line of the method, we'd like to pause inside the callee.
+        val lineOfLastLocation = location.method().allLineLocations().asScala.last.lineNumber()
+        val isLastLine = location.lineNumber() == lineOfLastLocation
+        !isLastLine
+      case _ => false
+    }
+
+  }
+
   private def handleStepOrMethodEvent(ev: LocatableEvent): Boolean = {
     var doResume = true
     attemptToResolveSourceLessReferenceTypes(ev.thread())
     virtualMachine.eventRequestManager().deleteEventRequest(ev.request())
     val bc = byteCodeFromLocation(ev.location())
-    if (IlCodesToIgnoreOnStepEvent.contains(bc)) {
+    if (shouldIgnoreLocationOnStep(ev.location())) {
       // We most likely hit an "intermediate" location after returning from a function.
       log.debug(s"Skipping step/method event at ${ev.location()} because byte code is ignored: 0x${bc.toHexString}")
       createEnabledStepOverRequest(ev.thread(), isAtDebuggerStatement = false)
