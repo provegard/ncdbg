@@ -248,6 +248,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport with BreakpointSupport with PauseSupport {
   import NashornDebuggerHost._
   import com.programmaticallyspeaking.ncd.infra.BetterOption._
+  import JDIExtensions._
 
   import ExecutionContext.Implicits._
   import scala.collection.JavaConverters._
@@ -629,20 +630,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     erm.deleteEventRequests(erm.stepRequests())
   }
 
-  private def byteCodeFromLocation(location: Location): Int =  {
-    val methodByteCodes = location.method().bytecodes()
-    val bc = methodByteCodes(location.codeIndex().toInt).toInt
-    if (bc < 0) bc + 256 else bc
-  }
-
   private def shouldIgnoreLocationOnStep(location: Location) = {
-    byteCodeFromLocation(location) match {
-      case IL_POP =>
-        // We should *maybe* ignore IL_POP. Most of the time, it's just popping the return value of a function.
-        // However, if that happens on the last line of the method, we'd like to pause inside the callee.
-        val lineOfLastLocation = location.method().allLineLocations().asScala.last.lineNumber()
-        val isLastLine = location.lineNumber() == lineOfLastLocation
-        !isLastLine
+    // We should *maybe* ignore IL_POP. Most of the time, it's just popping the return value of a function.
+    // However, if that happens on the last line of the method, we'd like to pause inside the callee.
+    location.byteCode match {
+      case IL_POP => !location.isLastLineInFunction
       case _ => false
     }
 
@@ -652,13 +644,12 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     var doResume = true
     attemptToResolveSourceLessReferenceTypes(ev.thread())
     virtualMachine.eventRequestManager().deleteEventRequest(ev.request())
-    val bc = byteCodeFromLocation(ev.location())
     if (shouldIgnoreLocationOnStep(ev.location())) {
       // We most likely hit an "intermediate" location after returning from a function.
-      log.debug(s"Skipping step/method event at ${ev.location()} because byte code is ignored: 0x${bc.toHexString}")
+      log.debug(s"Skipping step/method event at ${ev.location()} with byte code: 0x${ev.location().byteCode.toHexString}")
       createEnabledStepOverRequest(ev.thread(), isAtDebuggerStatement = false)
     } else {
-      log.debug(s"Considering step/method event at ${ev.location()} with byte code: 0x${bc.toHexString}")
+      log.debug(s"Considering step/method event at ${ev.location()} with byte code: 0x${ev.location().byteCode.toHexString}")
       doResume = handleBreakpoint(ev, prepareForPausing(ev))
       if (!doResume) infoAboutLastStep = Some(StepLocationInfo.from(ev))
     }
