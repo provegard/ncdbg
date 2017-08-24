@@ -8,7 +8,7 @@ import java.util.concurrent.TimeoutException
 import akka.actor.{Actor, ActorRef}
 import ch.qos.logback.classic.Level
 import com.programmaticallyspeaking.ncd.host.ScriptEvent
-import com.programmaticallyspeaking.ncd.infra.DelayedFuture
+import com.programmaticallyspeaking.ncd.infra.{CancellableFuture, DelayedFuture}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
 import com.programmaticallyspeaking.ncd.testing.{MemoryAppender, StringUtils}
 import com.sun.jdi.{Bootstrap, VirtualMachine}
@@ -68,6 +68,8 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
 
   private var startSender: ActorRef = _
   private var scriptSender: ActorRef = _
+  private var scriptTimeoutFuture: CancellableFuture[Unit] = _
+  private var startTimeoutFuture: CancellableFuture[Unit] = _
 
   private var logSubscription: Subscription = _
 
@@ -115,8 +117,7 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
           captureLogs()
           setupHost(host)
 
-          DelayedFuture(timeout) {
-            // If the VM started and became ready, startSender is null. Do nothing in that case.
+          startTimeoutFuture = DelayedFuture(timeout) {
             Option(startSender).foreach { s =>
               s ! StartError(summarizeProgress(), Some(new TimeoutException("Timed out waiting for VM to start")))
               self ! Stop
@@ -158,6 +159,8 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
       sendToVm(Signals.go)
       startSender ! Started(host)
       startSender = null
+      startTimeoutFuture.cancel()
+      startTimeoutFuture = null
   }
 
   def upAndRunning: Receive = common orElse {
@@ -165,6 +168,8 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
       if (output == Signals.scriptDone) {
         scriptSender ! ScriptExecutionDone
         scriptSender = null
+        scriptTimeoutFuture.cancel()
+        scriptTimeoutFuture = null
       } else {
         reportProgress("VM output: " + output)
       }
@@ -176,8 +181,7 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
       reportProgress("Sending script to VM!")
       scriptSender = sender
       sender ! ScriptWillExecute
-      DelayedFuture(timeout) {
-        // If script execution succeeded, scriptSender is null. Do nothing in that case.
+      scriptTimeoutFuture = DelayedFuture(timeout) {
         Option(scriptSender).foreach { s =>
           s ! ScriptFailure("Timed out waiting for the script: Progress:\n" + summarizeProgress())
           self ! Stop
