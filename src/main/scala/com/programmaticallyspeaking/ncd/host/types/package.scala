@@ -42,4 +42,8 @@ package object types {
         require(getter.isDefined || setter.isDefined, "Data descriptor must have getter and/or setter")
     }
   }
+
+  object ObjectPropertyDescriptor {
+    def isInternal(name: String): Boolean = name.startsWith("[[") && name.endsWith("]]")
+  }
 }

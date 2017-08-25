@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{CallArgument, ExceptionDetails, GetPropertiesResult, RemoteObject}
+import com.programmaticallyspeaking.ncd.chrome.domains.Runtime._
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.testing.UnitTest
@@ -96,7 +96,32 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
 
       "should return properties in the success case" in {
         testGet(Right(Map.empty), arbitraryObjectIdStr, None, None) { response =>
-          response should be (GetPropertiesResult(Seq.empty, None))
+          response should be (GetPropertiesResult(Seq.empty, None, Seq.empty))
+        }
+      }
+
+      "should treat [[-named properties as internal" in {
+        val props = Map(
+          "foo" -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, true, true, true, true, Some(SimpleValue("test")), None, None),
+          "[[bar]]" -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, true, true, true, true, Some(SimpleValue("internal")), None, None)
+        )
+        testGet(Right(props), arbitraryObjectIdStr, None, None) { response =>
+          response should be (GetPropertiesResult(
+            Seq(PropertyDescriptor("foo", true, true, true, true, Some(RemoteObject.forString("test")), None, None)),
+            None,
+            Seq(InternalPropertyDescriptor("[[bar]]", Some(RemoteObject.forString("internal")))))
+          )
+        }
+      }
+
+      "should ignore a [[-named properties that is not a data property" in {
+        val props = Map(
+          "[[bar]]" -> ObjectPropertyDescriptor(PropertyDescriptorType.Accessor, true, true, true, true, None, Some(FunctionNode("fun", "", ObjectId("x"))), None)
+        )
+        testGet(Right(props), arbitraryObjectIdStr, None, None) {
+          case GetPropertiesResult(_, _, internal) =>
+            internal should be (Seq.empty)
+          case other => fail("Unexpected: " + other)
         }
       }
 
@@ -104,7 +129,8 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         testGet(Left(new Exception("oops")), arbitraryObjectIdStr, None, None) { response =>
           // Note: Unsure if property descriptors should be empty sequence here or null. The protocol spec doesn't say.
           response should be (GetPropertiesResult(Seq.empty,
-            Some(ExceptionDetails(1, s"""Error: 'oops' for object '$arbitraryObjectIdStr'""", 0, 1, None, None, Runtime.StaticExecutionContextId))))
+            Some(ExceptionDetails(1, s"""Error: 'oops' for object '$arbitraryObjectIdStr'""", 0, 1, None, None, Runtime.StaticExecutionContextId)),
+            Seq.empty))
         }
       }
 
@@ -112,7 +138,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         val node = objectWithId("x")
         val aMap = Map("foo" -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, true, true, true, true, Some(node), None, None))
         testGet(Right(aMap), arbitraryObjectIdStr, None, None, generatePreview = Some(true)) {
-          case GetPropertiesResult(result, _) if result.nonEmpty =>
+          case GetPropertiesResult(result, _, _) if result.nonEmpty =>
             result.head.value.flatMap(_.preview) should be ('defined)
           case other => fail("Unexpected: " + other)
         }

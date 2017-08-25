@@ -1,6 +1,7 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
 import com.programmaticallyspeaking.ncd.host._
+import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
 import com.programmaticallyspeaking.ncd.infra.{IdGenerator, ObjectMapping}
 import org.slf4s.Logging
 
@@ -76,13 +77,15 @@ object Runtime {
 
   case class PropertyPreview(name: String, `type`: String, value: String, subtype: Option[String]) // subPreview
 
-  case class GetPropertiesResult(result: Seq[PropertyDescriptor], exceptionDetails: Option[ExceptionDetails])
+  case class GetPropertiesResult(result: Seq[PropertyDescriptor], exceptionDetails: Option[ExceptionDetails], internalProperties: Seq[InternalPropertyDescriptor])
 
   // TODO: wasThrown
   case class PropertyDescriptor(name: String, writable: Boolean, configurable: Boolean, enumerable: Boolean,
                                 isOwn: Boolean,
                                 value: Option[RemoteObject],
                                 get: Option[RemoteObject], set: Option[RemoteObject])
+
+  case class InternalPropertyDescriptor(string: String, value: Option[RemoteObject])
 
   case class ExecutionContextCreatedEventParams(context: ExecutionContextDescription)
 
@@ -113,6 +116,8 @@ object Runtime {
 
   object PropertyDescriptor extends PropertyDescriptorBuilder
 
+  object InternalPropertyDescriptor extends InternalPropertyDescriptorBuilder
+
   case class ConsoleAPICalledEventParams(`type`: String, args: Seq[RemoteObject], executionContextId: ExecutionContextId, timestamp: Timestamp)
 
   case class CallFrame(functionName: String, scriptId: ScriptId, url: String, lineNumber: Int, columnNumber: Option[Int])
@@ -139,12 +144,17 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       val objectId = ObjectId.fromString(strObjectId)
       tryHostCall(_.getObjectProperties(objectId, ownProperties.getOrElse(false), accessorPropertiesOnly.getOrElse(false))) match {
         case Success(props) =>
-          val propDescs = props.map((PropertyDescriptor.from _).tupled).toSeq
-          GetPropertiesResult(propDescs, None)
+          def isInternal(prop: (String, ObjectPropertyDescriptor)) = ObjectPropertyDescriptor.isInternal(prop._1)
+          val grouped = props.groupBy(isInternal)
+          val internal = grouped.getOrElse(true, Seq.empty)
+          val external = grouped.getOrElse(false, Seq.empty)
+          val propDescs = external.map((PropertyDescriptor.from _).tupled)
+          val internalPropDescs = internal.map((InternalPropertyDescriptor.from _).tupled).flatten
+          GetPropertiesResult(propDescs, None, internalPropDescs)
 
         case Failure(t) =>
           val exceptionDetails = ExceptionDetails(1, s"Error: '${t.getMessage}' for object '$strObjectId'", 0, 1, None)
-          GetPropertiesResult(Seq.empty, Some(exceptionDetails))
+          GetPropertiesResult(Seq.empty, Some(exceptionDetails), Seq.empty)
       }
 
     case Domain.enable =>
