@@ -80,6 +80,17 @@ class ScriptFunctionMirror(scriptObject: ObjectReference)(implicit marshaller: M
 
   lazy val name: String = invoker.getName().asString
   lazy val source: String = invoker.toSource().asString
+
+  private lazy val isBound: Boolean = invoker.isBoundFunction().asBool(false)
+
+  def boundTargetFunction: Option[ScriptFunctionMirror] = {
+    if (isBound) {
+      invoker.getTargetFunction() match {
+        case objRef: ObjectReference => Some(new ScriptObjectMirror(objRef).asFunction)
+        case other => throw new RuntimeException("Unexpected target function type: " + other)
+      }
+    } else None
+  }
 }
 
 object ScriptObjectMirror {

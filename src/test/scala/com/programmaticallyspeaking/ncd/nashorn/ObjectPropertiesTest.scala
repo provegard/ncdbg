@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.ComplexNode
+import com.programmaticallyspeaking.ncd.host.{ComplexNode, FunctionNode}
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.infra.StringAnyMap
 import org.scalatest.Inside
@@ -191,6 +191,19 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
             expand(host, c) should be (Map("a" -> "c"))
 
           case (_, other) => fail("Unknown: " + other)
+        }
+      }
+    }
+
+    "Bound function" - {
+      val expr = "(function () { function Add(a,b) { return a + b; }; return Add.bind(null, 1); })()"
+
+      "with an internal property 'TargetFunction'" in {
+        testProperties(expr) { props =>
+          inside(props.find(_._1 == "[[TargetFunction]]").map(_._2)) {
+            case Some(ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, false, true, Some(FunctionNode(name, _, _)), None, None, None)) =>
+              name should be ("Add")
+          }
         }
       }
     }

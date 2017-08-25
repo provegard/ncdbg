@@ -144,7 +144,7 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
 
   private def marshalSymbol(reference: ObjectReference) = SymbolNode(toStringOf(reference).valueNode.asString, objectId(reference))
 
-  private def marshalScriptObject(value: Value): ValueNode = {
+  private def marshalScriptObject(value: Value): MarshallerResult = {
     val scriptObject = value.asInstanceOf[ObjectReference]
     val mirror = new ScriptObjectMirror(scriptObject)
 
@@ -256,11 +256,17 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
   private def toObject(mirror: ScriptObjectMirror) = ObjectNode(mirror.typeOfObject(), objectId(mirror.scriptObject))
   private def toObject(mirror: JSObjectMirror) = ObjectNode(mirror.className, objectId(mirror.jsObject))
 
-  private def toFunction(mirror: ScriptFunctionMirror) = {
+  private def toFunction(mirror: ScriptFunctionMirror): MarshallerResult = {
     val name = mirror.name
     val source = mirror.source
 
-    FunctionNode(name, source, objectId(mirror.scriptObject))
+    val extra = mirror.boundTargetFunction match {
+      case Some(fun) =>
+        Map("TargetFunction" -> toFunction(fun).valueNode)
+      case None => Map.empty[String, ValueNode]
+    }
+
+    MarshallerResult(FunctionNode(name, source, objectId(mirror.scriptObject)), extra)
   }
 
   private def toFunction(mirror: JSObjectMirror) = {
