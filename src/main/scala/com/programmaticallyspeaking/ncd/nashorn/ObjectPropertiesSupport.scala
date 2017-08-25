@@ -40,10 +40,10 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
             pausedData.get.objectPropertiesCache.getOrElseUpdate(cacheKey, getProperties)
           else getProperties
 
-          // In addition, the node may contain extra entries that typically do not come from Nashorn. One example is
-          // the Java stack we add if we detect a Java exception.
+          // In addition, the node may contain extra entries that may not come from Nashorn. One example is
+          // the Java stack we add if we detect a Java exception. We also use this for internal properties!
           val extraProps = desc.extras.filterNot(_._1.startsWith(hiddenPrefix)).map(e => {
-            e._1 -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true, isWritable = false,
+            ObjectPropertyDescriptor.toInternal(e._1) -> ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true, isWritable = false,
               isOwn = true, Some(e._2), None, None)
           })
 

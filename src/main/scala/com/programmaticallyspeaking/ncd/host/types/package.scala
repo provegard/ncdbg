@@ -45,5 +45,6 @@ package object types {
 
   object ObjectPropertyDescriptor {
     def isInternal(name: String): Boolean = name.startsWith("[[") && name.endsWith("]]")
+    def toInternal(name: String): String = if (isInternal(name)) name else s"[[$name]]"
   }
 }
