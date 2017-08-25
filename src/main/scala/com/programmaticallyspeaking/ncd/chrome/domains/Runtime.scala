@@ -85,7 +85,7 @@ object Runtime {
                                 value: Option[RemoteObject],
                                 get: Option[RemoteObject], set: Option[RemoteObject])
 
-  case class InternalPropertyDescriptor(string: String, value: Option[RemoteObject])
+  case class InternalPropertyDescriptor(name: String, value: Option[RemoteObject])
 
   case class ExecutionContextCreatedEventParams(context: ExecutionContextDescription)
 
