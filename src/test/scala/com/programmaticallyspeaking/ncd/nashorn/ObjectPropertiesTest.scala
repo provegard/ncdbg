@@ -124,12 +124,6 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     "Java Exception" - {
       val expr = "(function(){try{throw new java.lang.IllegalArgumentException('oops');}catch(e){return e;}})()"
 
-      def getStringProperty(from: Map[String, Any], prop: String): String = from.get(prop) match {
-        case Some(st: String) => st
-        case Some(st) => fail(s"Unexpected $prop: " + st)
-        case None => fail(s"Missing $prop")
-      }
-
       def evaluateException(handler: (Map[String, Any] => Unit)) = {
         evaluateExpression(expr) { (host, actual) =>
           expand(host, actual) match {
@@ -139,16 +133,16 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
         }
       }
 
-      "with a property 'javaStack' (which cannot be evaluated yet...)" in {
+      "with an extra/internal property 'JavaStack' (which cannot be evaluated yet...)" in {
         evaluateException { aMap =>
-          val st = getStringProperty(aMap, "javaStack")
+          val st = getStringProperty(aMap, "[[JavaStack]]")
           st should startWith ("java.lang.IllegalArgumentException: oops")
         }
       }
 
-      "with a property 'message' (which cannot be evaluated yet...)" in {
+      "with an extra/internal property 'Message' (which cannot be evaluated yet...)" in {
         evaluateException { aMap =>
-          val st = getStringProperty(aMap, "message")
+          val st = getStringProperty(aMap, "[[Message]]")
           st should startWith ("oops")
         }
       }
@@ -202,6 +196,11 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     }
   }
 
+  def getStringProperty(from: Map[String, Any], prop: String): String = from.get(prop) match {
+    case Some(st: String) => st
+    case Some(st) => fail(s"Unexpected $prop: " + st)
+    case None => fail(s"Missing $prop")
+  }
 }
 
 class ClassWithVal {

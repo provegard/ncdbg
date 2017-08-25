@@ -114,7 +114,7 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
     case so if isJSObject(so) => marshalJSObject(so)
     case BoxedValue(vn) => vn
     case ExceptionValue((vn, maybeJavaStack)) =>
-      val extra = maybeJavaStack.map(st => "javaStack" -> SimpleValue(st)).toMap + ("message" -> SimpleValue(vn.data.message))
+      val extra = maybeJavaStack.map(st => "JavaStack" -> SimpleValue(st)).toMap + ("Message" -> SimpleValue(vn.data.message))
       MarshallerResult(vn, extra)
     case str: ObjectReference if isConsString(str) =>
       toStringOf(str)
