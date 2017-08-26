@@ -88,6 +88,45 @@ class RemoteObjectTest extends UnitTest {
       }
     }
 
+    "forScopes" - {
+      "should handle a length" in {
+        RemoteObject.forScopes(3, "dummy") should be (
+          RemoteObject("object", Some("internal#scopeList"), Some("Array"), Some("Scopes[3]"), None, None, Some("dummy"))
+        )
+      }
+    }
+
+    "forScope" - {
+      "should handle empty name" in {
+        RemoteObject.forScope("closure", "", "dummy") should be (
+          RemoteObject("object", Some("internal#scope"), Some("Object"), Some("Closure"), None, None, Some("dummy"))
+        )
+      }
+
+      "should handle non-empty name" in {
+        RemoteObject.forScope("closure", "Foo", "dummy") should be (
+          RemoteObject("object", Some("internal#scope"), Some("Object"), Some("Closure (Foo)"), None, None, Some("dummy"))
+        )
+      }
+    }
+
+    "isScope" - {
+      "should accept a RemoteObject that is created with forScope" in {
+        val ro = RemoteObject.forScope("closure", "Foo", "dummy")
+        RemoteObject.isScope(ro) should be (true)
+      }
+
+      "should reject a non-scope (string)" in {
+        val ro = RemoteObject.forString("foo")
+        RemoteObject.isScope(ro) should be (false)
+      }
+
+      "should reject a non-scope (typed array, i.e. with subtype)" in {
+        val ro = RemoteObject.forArray(3, Some("Int8Array"), "dummy")
+        RemoteObject.isScope(ro) should be (false)
+      }
+    }
+
     "forArray" - {
       "should handle an empty array" in {
         RemoteObject.forArray(0, None, "arr-id") should be (RemoteObject("object", Some("array"), Some("Array"), Some("Array[0]"), None, None, Some("arr-id")))
