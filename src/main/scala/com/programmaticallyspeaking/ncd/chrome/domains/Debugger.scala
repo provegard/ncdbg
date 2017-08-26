@@ -355,12 +355,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
       emitEvent("Debugger.resumed", null)
   }
 
-  private def scopeType(s: HostScope): String = s.scopeType match {
-    case ScopeType.Local => "local"
-    case ScopeType.Global => "global"
-    case ScopeType.Closure => "closure"
-    case ScopeType.With => "with"
-  }
+  private def scopeType(s: HostScope): String = s.scopeType.toString
 
   private def stackFramesToCallFrames(frames: Seq[StackFrame]): Seq[CallFrame] = {
     val converter = RemoteObjectConverter.byReference

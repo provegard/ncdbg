@@ -18,10 +18,10 @@ case class Breakpoint(breakpointId: String, scriptId: String, scriptURL: Option[
 
 sealed trait ScopeType
 object ScopeType {
-  object Local extends ScopeType
-  object Global extends ScopeType
-  object Closure extends ScopeType
-  object With extends ScopeType
+  object Local extends ScopeType { override def toString = "local" }
+  object Global extends ScopeType { override def toString = "global" }
+  object Closure extends ScopeType { override def toString = "closure" }
+  object With extends ScopeType { override def toString = "with" }
 }
 
 case class Scope(value: ValueNode, scopeType: ScopeType)
