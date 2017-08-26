@@ -67,7 +67,14 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
     ("desc", "expression", "expected"),
     ("JSObject object", s"createInstance('${classOf[ObjectLikeJSObject].getName}')", Map.empty[String, Any]),
     ("Hashtable-based object", s"createInstance('${classOf[HashtableDerivate].getName}')", Map.empty),
-    ("Scala instance with JavaBeans property", s"createInstance('${classOf[ClassWithJavaBeans].getName}')", Map("fooBar" -> Map("get" -> "<function>", "set" -> "<function>")))
+    ("Scala instance with JavaBeans property", s"createInstance('${classOf[ClassWithJavaBeans].getName}')", Map("fooBar" -> Map("get" -> "<function>", "set" -> "<function>"))),
+    ("Java Array",
+      """(function() {
+        |var arr = new (Java.type("java.lang.String[]"))(1);
+        |arr[0] = "testing";
+        |return arr;
+        |})()
+      """.stripMargin, Map.empty)
   )
 
   val complexValuesIncludingProto = Table(

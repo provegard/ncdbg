@@ -18,13 +18,14 @@ class ArrayPropertyHolder(array: ArrayReference)(implicit marshaller: Marshaller
       ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
         isWritable = true, isOwn = true, Some(value), None, None)
 
-    //TODO: Consider onlyAccessors!!
-    // Just return index properties + length.
-    val props = (0 until array.length()).map { idx =>
-      val theValue = marshaller.marshal(array.getValue(idx))
-      idx.toString -> createProp(theValue)
-    } :+ ("length" -> createProp(SimpleValue(array.length())))
-    props
+    if (onlyAccessors) Seq.empty
+    else {
+      // Just return index properties + length.
+      (0 until array.length()).map { idx =>
+        val theValue = marshaller.marshal(array.getValue(idx))
+        idx.toString -> createProp(theValue)
+      } :+ ("length" -> createProp(SimpleValue(array.length())))
+    }
   }
 }
 
