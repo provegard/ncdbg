@@ -62,18 +62,28 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       val arbitraryObjectId = ObjectId("x")
       val arbitraryObjectIdStr = arbitraryObjectId.toString
 
-      def testGet(ret: Either[Exception, Map[String, ObjectPropertyDescriptor]], requestedId: String, own: Option[Boolean], accessor: Option[Boolean],
-                  generatePreview: Option[Boolean] = None)(fun: (Any) => Unit) = {
+      def testGet2(propsById: Map[String, Either[Exception, Map[String, ObjectPropertyDescriptor]]], requestedId: String, own: Option[Boolean], accessor: Option[Boolean],
+                   generatePreview: Option[Boolean] = None)(fun: (Any) => Unit) = {
 
-        when(currentScriptHost.getObjectProperties(any[ObjectId], any[Boolean], any[Boolean])).thenAnswer((invocation: InvocationOnMock) => ret match {
-          case Right(value) => value.toSeq
-          case Left(ex) => throw ex
+        when(currentScriptHost.getObjectProperties(any[ObjectId], any[Boolean], any[Boolean])).thenAnswer((invocation: InvocationOnMock) => {
+          val objId = invocation.getArgument[ObjectId](0)
+          propsById.get(objId.toString) match {
+            case Some(Right(value)) => value.toSeq
+            case Some(Left(ex)) => throw ex
+            case None => throw new IllegalArgumentException("Unknown object Id: " + objId.id)
+          }
         })
 
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
         val response = requestAndReceiveResponse(runtime, "2", Runtime.getProperties(requestedId, own, accessor, generatePreview))
         fun(response)
+      }
+
+      def testGet(ret: Either[Exception, Map[String, ObjectPropertyDescriptor]], requestedId: String, own: Option[Boolean], accessor: Option[Boolean],
+                  generatePreview: Option[Boolean] = None)(fun: (Any) => Unit) = {
+
+        testGet2(Map(requestedId -> ret), requestedId, own, accessor, generatePreview)(fun)
       }
 
       "should call getObjectProperties on the host" in {
@@ -121,6 +131,23 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         testGet(Right(props), arbitraryObjectIdStr, None, None) {
           case GetPropertiesResult(_, _, internal) =>
             internal should be (Seq.empty)
+          case other => fail("Unexpected: " + other)
+        }
+      }
+
+      "doesn't generate a preview for an internal property, even if requested" in {
+        val obj = ObjectNode("Object", ObjectId("obj-1"))
+        val propDesc = ObjectPropertyDescriptor(PropertyDescriptorType.Data, true, true, true, true, Some(obj), None, None)
+        val props = Map(
+          arbitraryObjectIdStr -> Right(Map("[[bar]]" -> propDesc)),
+          obj.objectId.toString -> Right(Map.empty[String, ObjectPropertyDescriptor]) // contents are irrelevant
+        )
+        testGet2(props, arbitraryObjectIdStr, None, None, generatePreview = Some(true)) {
+          case GetPropertiesResult(_, _, internal) =>
+
+            val preview = internal.headOption.flatMap(_.value).flatMap(_.preview)
+            preview should be ('empty)
+
           case other => fail("Unexpected: " + other)
         }
       }

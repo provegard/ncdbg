@@ -132,13 +132,23 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
   private val compiledScriptIdGenerator = new IdGenerator("compscr")
   private implicit val host = scriptHost
 
+  private def mapInternalProperties(props: Seq[(String, ObjectPropertyDescriptor)]) = {
+    // It seems as if internal properties never have a preview.
+    implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview = false, byValue = false)
+    props.map((InternalPropertyDescriptor.from _).tupled).flatten
+  }
+
+  private def mapProperties(props: Seq[(String, ObjectPropertyDescriptor)], generatePreview: Boolean) = {
+    implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, byValue = false)
+    props.map((PropertyDescriptor.from _).tupled)
+  }
+
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case Runtime.getProperties(strObjectId, ownProperties, accessorPropertiesOnly, maybeGeneratePreview) =>
 
       log.debug(s"Runtime.getProperties: objectId = $strObjectId, ownProperties = $ownProperties, accessorPropertiesOnly = $accessorPropertiesOnly")
 
       val generatePreview = maybeGeneratePreview.getOrElse(false)
-      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, byValue = false)
 
       // Deserialize JSON object ID (serialized in RemoteObjectConverter)
       val objectId = ObjectId.fromString(strObjectId)
@@ -148,9 +158,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
           val grouped = props.groupBy(isInternal)
           val internal = grouped.getOrElse(true, Seq.empty)
           val external = grouped.getOrElse(false, Seq.empty)
-          val propDescs = external.map((PropertyDescriptor.from _).tupled)
-          val internalPropDescs = internal.map((InternalPropertyDescriptor.from _).tupled).flatten
-          GetPropertiesResult(propDescs, None, internalPropDescs)
+          GetPropertiesResult(mapProperties(external, generatePreview), None, mapInternalProperties(internal))
 
         case Failure(t) =>
           val exceptionDetails = ExceptionDetails(1, s"Error: '${t.getMessage}' for object '$strObjectId'", 0, 1, None)
