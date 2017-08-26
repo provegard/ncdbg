@@ -14,8 +14,20 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
     override def resolve(): ValueNode = v
   }
 
-  "RemoteObjectConverter should" - {
+  "RemoteObjectConverter will" - {
     def converter = RemoteObjectConverter.byReference
+
+    "convert ScopeList" in {
+      val sl = ScopeList(3, ObjectId("obj-1"))
+      val ro = converter.toRemoteObject(sl)
+      ro.subtype should be (Some("internal#scopeList"))
+    }
+
+    "convert ScopeObject" in {
+      val so = ScopeObject("closure", "test", ObjectId("obj-1"))
+      val ro = converter.toRemoteObject(so)
+      ro.subtype should be (Some("internal#scope"))
+    }
 
     "convert EmptyNode to RemoteObject.null" in {
       converter.toRemoteObject(EmptyNode) should be (RemoteObject.nullValue)
