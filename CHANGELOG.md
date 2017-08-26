@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+* Return internal properties (`[[Prop]]`) (issue #58):
+    * `[[TargetFunction]]` for a bound function
+    * `[[Scopes]]` for any function
+    * `[[JavaStack]]` for a Java exception (was previously a regular property)
+    * `[[Message]]` for a Java exception (was previously a regular property)
+* Don't return any Java array properties if only accessors are requested.
+
 ## 0.5.5 (2017-08-24)
 
 * Remove column guessing&mdash;it's too fragile.
