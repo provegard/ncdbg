@@ -3,9 +3,7 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 import com.programmaticallyspeaking.ncd.chrome.domains.PreviewGenerator.{Options, PropertyFetcher}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ObjectPreview, PropertyPreview, RemoteObject}
 import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
-import com.programmaticallyspeaking.ncd.host.{EmptyNode, FunctionNode, ObjectId, SimpleValue}
-
-import scala.util.{Failure, Success, Try}
+import com.programmaticallyspeaking.ncd.host._
 
 object PreviewGenerator {
   type PropertyFetcher = (ObjectId) => Seq[(String, ObjectPropertyDescriptor)]
@@ -26,6 +24,8 @@ object PreviewGenerator {
     // Append ellipsis (...)
     string.substring(0, maxLength) + "\u2026"
   }
+
+  val scopeDesc = "^([^ ]*)( \\((.*)\\))?$".r
 }
 
 /**
@@ -45,6 +45,7 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
   private val converter = RemoteObjectConverter.byReference
 
   def withPreviewForObject(remoteObject: RemoteObject): RemoteObject = remoteObject.objectId match {
+    case Some(_) if RemoteObject.isScope(remoteObject) => generateScopePreview(remoteObject)
     case Some(_) if remoteObject.`type` == "object" => generatePreview(remoteObject)
     case _ => remoteObject
   }
@@ -60,6 +61,25 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
     if (props == null) throw new IllegalStateException(s"No properties returned for object $objectId")
     obj.copy(preview = Some(appendPropertyDescriptors(obj, preview, props)))
     // Internal and map/set/iterator entries not supported
+  }
+
+  private def generateScopePreview(remoteObject: RemoteObject): RemoteObject = {
+    remoteObject.description match {
+      case Some(scopeDesc(typ, _, nameNull)) =>
+        val name = Option(nameNull).getOrElse("")
+
+        val props = Seq(
+          PropertyPreview("name", "string", name, None),
+          PropertyPreview("type", "string", typ.toLowerCase, None),
+          PropertyPreview("object", "object", "Object", None) // in Chrome, value can be 'Window'
+        )
+
+        val preview = remoteObject.emptyPreview.copy(properties = props)
+        remoteObject.copy(preview = Some(preview))
+
+      case other =>
+        throw new IllegalArgumentException("Unexpected scope description: " + other)
+    }
   }
 
   private def appendPropertyDescriptors(obj: RemoteObject, preview: ObjectPreview, props: Seq[(String, ObjectPropertyDescriptor)]): ObjectPreview = {
@@ -89,6 +109,7 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
         PropertyPreview(name, "string", abbreviateString(s, options.maxStringLength, middle = false), None)
       case Some(value) =>
         val valueAsRemote = converter.toRemoteObject(value)
+
         val tempPreview = valueAsRemote.emptyPreview
         // For non-simple (non-primitive) values, the description should be empty. Dev Tools will use the type/subtype
         // to show something.

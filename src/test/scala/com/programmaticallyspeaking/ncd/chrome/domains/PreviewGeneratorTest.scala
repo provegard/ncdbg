@@ -177,5 +177,33 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
         preview.map(_.overflow) should be (Some(true))
       }
     }
+
+    "of a scope object" - {
+      def preview(scopeType: String, name: String) = {
+        val objId = objectIdString("obj-1")
+        val obj = RemoteObject.forScope(scopeType, name, objId)
+        getPreview(obj, Seq.empty)
+      }
+
+      def findProp(preview: Option[ObjectPreview], name: String) =
+        preview.flatMap(_.properties.find(_.name == name)).getOrElse(throw new IllegalArgumentException("No property: " + name))
+
+      "returns a property for the name" in {
+        findProp(preview("closure", "test"), "name").value should be ("test")
+      }
+
+      "returns a property for the type" in {
+        findProp(preview("closure", "test"), "type").value should be ("closure")
+      }
+
+      "returns a property for the object" in {
+        findProp(preview("closure", "test"), "object").value should be ("Object")
+      }
+
+      "returns 3 properties" in {
+        val p = preview("closure", "test")
+        p.map(_.properties.size) should be (Some(3))
+      }
+    }
   }
 }
