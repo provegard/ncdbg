@@ -90,6 +90,8 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
           factory.create(obj, "", isNative = false)
         case obj: ObjectReference =>
           new ArbitraryObjectPropertyHolder(obj)
+        case obj: LocalObject =>
+          new MapPropertyHolder(obj.values)
       }
     })
   }

@@ -24,7 +24,7 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
     }
 
     "convert ScopeObject" in {
-      val so = ScopeObject("closure", "test", ObjectId("obj-1"))
+      val so = ScopeObject(ScopeType.Closure, "test", ObjectId("obj-1"))
       val ro = converter.toRemoteObject(so)
       ro.subtype should be (Some("internal#scope"))
     }

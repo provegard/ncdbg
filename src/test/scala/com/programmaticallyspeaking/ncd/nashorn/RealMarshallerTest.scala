@@ -261,6 +261,8 @@ object RealMarshallerTest {
       case complex: ComplexNode if seenObjectIds.contains(complex.objectId) =>
         // In Nashorn, apparently the constructor of the prototype of a function is the function itself...
         Cycle(complex.objectId)
+      case scope: ScopeObject =>
+        Map("scope" -> true, "name" -> scope.name, "type" -> scope.scopeType.toString)
       case complex: ComplexNode =>
         seenObjectIds += complex.objectId
         host.getObjectProperties(complex.objectId, !includeInherited, onlyAccessors).filter(removeProps).map(e => e._2.descriptorType match {

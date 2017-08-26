@@ -84,6 +84,22 @@ case class ErrorValue(data: ExceptionData, isThrown: Boolean, objectId: ObjectId
   */
 case class ArrayNode(size: Int, typedClassName: Option[String], objectId: ObjectId) extends ComplexNode
 
+/**
+  * Special array-ish node that represents a list of scopes.
+  * @param size the number of scopes
+  * @param objectId the object ID
+  */
+case class ScopeList(size: Int, objectId: ObjectId) extends ComplexNode
+
+/**
+  * Represents an actual scope object.
+  *
+  * @param scopeType the type of the scope
+  * @param name the scope name
+  * @param objectId the object ID
+  */
+case class ScopeObject(scopeType: ScopeType, name: String, objectId: ObjectId) extends ComplexNode
+
 case class ObjectNode(className: String, objectId: ObjectId) extends ComplexNode
 
 case class DateNode(stringRepresentation: String, objectId: ObjectId) extends ComplexNode

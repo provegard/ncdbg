@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{ComplexNode, FunctionNode}
+import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.infra.StringAnyMap
 import org.scalatest.Inside
@@ -200,19 +200,82 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
 
       "with an internal property 'TargetFunction'" in {
         testProperties(expr) { props =>
-          inside(props.find(_._1 == "[[TargetFunction]]").map(_._2)) {
-            case Some(ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, false, true, Some(FunctionNode(name, _, _)), None, None, None)) =>
-              name should be ("Add")
+          getDescriptorFor(props, "[[TargetFunction]]").value match {
+            case Some(FunctionNode(name, _, _)) => name should be ("Add")
+            case other => fail("Unexpected: " + other)
+          }
+        }
+      }
+    }
+
+    "Regular function that captures something" - {
+      val expr = "(function (global) { function Add(a) { return a + global.x?0:1; }; return Add; })(this)"
+
+      "with an internal property 'Scopes' of size 1" in {
+        testProperties(expr) { props =>
+          getDescriptorFor(props, "[[Scopes]]").value match {
+            case Some(ScopeList(size, _)) => size should be (1)
+            case other => fail("Unexpected: " + other)
+          }
+        }
+      }
+
+      def getScopesProps(host: ScriptHost, props: Seq[(String, ObjectPropertyDescriptor)], onlyAccessors: Boolean) =
+        getDescriptorFor(props, "[[Scopes]]").value.map(expand(host, _, onlyAccessors = onlyAccessors)) match {
+          case Some(StringAnyMap(aMap)) => aMap
+          case other => fail("Unexpected [[Scopes]] expansion: " + other)
+        }
+
+      "with an actual scope in 'Scopes'" in {
+        evaluateExpression(expr) {
+          case (host, c: ComplexNode) =>
+            val props = host.getObjectProperties(c.objectId, true, false)
+            getScopesProps(host, props, false).get("0") match {
+              case Some(head) =>
+                head should be (Map("scope" -> true, "name" -> "", "type" -> "closure"))
+
+              case None => fail("no scopes")
+            }
+
+          case (_, other) => fail("Unknown: " + other)
+        }
+      }
+
+      "without Scopes properties if only accessor properties are requested" in {
+        evaluateExpression(expr) {
+          case (host, c: ComplexNode) =>
+            val props = host.getObjectProperties(c.objectId, true, false)
+            getScopesProps(host, props, true).size should be (0)
+
+          case (_, other) => fail("Unknown: " + other)
+        }
+
+      }
+    }
+
+    "Regular function that captures Nothing" - {
+      val expr = "(function Add(a,b) { return a + b; })"
+
+      "with an internal property 'Scopes' that is empty" in {
+        testProperties(expr) { props =>
+          getDescriptorFor(props, "[[Scopes]]").value match {
+            case Some(ScopeList(size, _)) => size should be (0)
+            case other => fail("Unexpected: " + other)
           }
         }
       }
     }
   }
 
+  def getDescriptorFor(props: Seq[(String, ObjectPropertyDescriptor)], name: String) = props.find(_._1 == name) match {
+    case Some((_, desc)) => desc
+    case None => fail(s"Missing $name")
+  }
+
   def getStringProperty(from: Map[String, Any], prop: String): String = from.get(prop) match {
     case Some(st: String) => st
     case Some(st) => fail(s"Unexpected $prop: " + st)
-    case None => fail(s"Missing $prop")
+    case None => fail(s"Missing $prop (available: ${from.keys.mkString(", ")})")
   }
 }
 

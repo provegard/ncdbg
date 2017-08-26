@@ -23,6 +23,7 @@ object StackBuilder {
 class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, mappingRegistry: MappingRegistry, codeEval: CodeEval, boxer: Boxer,
                    breakableLocationLookup: BreakableLocationLookup) extends Logging {
   import scala.collection.JavaConverters._
+  import JDIExtensions._
 
   private def scopeWithFreeVariables(scopeObject: Value, freeVariables: Map[String, AnyRef])(implicit marshaller: Marshaller): Value = {
     require(scopeObject != null, "Scope object must be non-null")
@@ -66,17 +67,6 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
     anObject
   }
 
-  private def scopeTypeFromValueType(value: Value): ScopeType = {
-    val typeName = value.`type`().name()
-    // jdk.nashorn.internal.objects.Global
-    if (typeName.endsWith(".Global"))
-      return ScopeType.Global
-    // jdk.nashorn.internal.runtime.WithObject
-    if (typeName.endsWith(".WithObject"))
-      return ScopeType.With
-    ScopeType.Closure
-  }
-
   private def prototypeOf(value: Value)(implicit thread: ThreadReference): Option[Value] = value match {
     case ref: ObjectReference =>
       val invoker = Invokers.shared.getDynamic(ref)
@@ -107,9 +97,9 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
     // Note: I tried to mimic how Chrome reports scopes, but it's a bit difficult. For example, if the current scope
     // is a 'with' scope, there is no way (that I know of) to determine if we're in a function (IIFE) inside a with
     // block or if we're inside a with block inside a function.
-    def toScope(v: Value) = Scope(marshaller.marshal(v), scopeTypeFromValueType(v))
+    def toScope(v: Value) = Scope(marshaller.marshal(v), v.scopeType)
     def findGlobalScope(): Option[Scope] = {
-      if (Option(thisValue).map(scopeTypeFromValueType).contains(ScopeType.Global)) {
+      if (Option(thisValue).map(_.scopeType).contains(ScopeType.Global)) {
         // this == global, so no need to call Context.getGlobal().
         Some(Scope(marshalledThisNode, ScopeType.Global))
       } else {

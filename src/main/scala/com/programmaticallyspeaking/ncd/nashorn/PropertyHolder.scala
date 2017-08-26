@@ -18,12 +18,25 @@ class ArrayPropertyHolder(array: ArrayReference)(implicit marshaller: Marshaller
       ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
         isWritable = true, isOwn = true, Some(value), None, None)
 
+    //TODO: Consider onlyAccessors!!
     // Just return index properties + length.
     val props = (0 until array.length()).map { idx =>
       val theValue = marshaller.marshal(array.getValue(idx))
       idx.toString -> createProp(theValue)
     } :+ ("length" -> createProp(SimpleValue(array.length())))
     props
+  }
+}
+
+class MapPropertyHolder(values: Map[String, ValueNode]) extends PropertyHolder {
+  // Note: A ValueNode shouldn't be null/undefined, so use Some(...) rather than Option(...) for the value
+  private def createProp(value: ValueNode) =
+    ObjectPropertyDescriptor(PropertyDescriptorType.Data, isConfigurable = false, isEnumerable = true,
+      isWritable = true, isOwn = true, Some(value), None, None)
+
+  override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Seq[(String, ObjectPropertyDescriptor)] = {
+    if (onlyAccessors) Seq.empty
+    else values.map(e => e._1 -> createProp(e._2)).toSeq
   }
 }
 

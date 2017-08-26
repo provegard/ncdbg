@@ -1,9 +1,10 @@
 package com.programmaticallyspeaking.ncd.nashorn.mirrors
 
-import com.programmaticallyspeaking.ncd.host.FunctionNode
+import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.nashorn.{Invokers, Marshaller}
 import com.sun.jdi._
 
+import scala.collection.immutable.Stream.Empty
 import scala.language.implicitConversions
 
 /**
@@ -76,6 +77,7 @@ class ScriptArrayMirror(scriptObject: ObjectReference)(implicit marshaller: Mars
 
 class ScriptFunctionMirror(scriptObject: ObjectReference)(implicit marshaller: Marshaller) extends ScriptObjectMirror(scriptObject) {
   import Mirrors._
+  import com.programmaticallyspeaking.ncd.nashorn.JDIExtensions._
   private implicit val thread: ThreadReference = marshaller.thread
 
   lazy val name: String = invoker.getName().asString
@@ -90,6 +92,13 @@ class ScriptFunctionMirror(scriptObject: ObjectReference)(implicit marshaller: M
         case other => throw new RuntimeException("Unexpected target function type: " + other)
       }
     } else None
+  }
+
+  //TODO: Correct to return Value here? Marshalling is non-trivial due to special target (ScopeObject), i.e.
+  //TODO: Marshaller doesn't auto-marshal to ScopeObject since it cannot recognize a scope object ref.
+  def scopes: Seq[Value] = {
+    val scopeValue = invoker.getScope()
+    if (scopeValue == null) Seq.empty else Seq(scopeValue)
   }
 }
 

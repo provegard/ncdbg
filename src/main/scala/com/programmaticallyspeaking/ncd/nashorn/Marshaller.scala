@@ -8,6 +8,7 @@ import com.sun.jdi._
 import jdk.nashorn.api.scripting.NashornException
 import jdk.nashorn.internal.runtime.PrototypeObject
 
+import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import scala.language.implicitConversions
 
@@ -63,6 +64,7 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
   import Marshaller._
 
   import scala.collection.JavaConverters._
+  import JDIExtensions._
 
   private implicit val marshaller: Marshaller = this
 
@@ -260,13 +262,39 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
     val name = mirror.name
     val source = mirror.source
 
-    val extra = mirror.boundTargetFunction match {
-      case Some(fun) =>
-        Map("TargetFunction" -> toFunction(fun).valueNode)
-      case None => Map.empty[String, ValueNode]
-    }
+    def boundExtra = mirror.boundTargetFunction.map(f => Seq("TargetFunction" -> toFunction(f).valueNode)).getOrElse(Seq.empty)
+    def scopes = Seq("Scopes" -> objectFromScopes(mirror.scopes))
 
-    MarshallerResult(FunctionNode(name, source, objectId(mirror.scriptObject)), extra)
+    val extra = boundExtra ++ scopes
+
+    MarshallerResult(FunctionNode(name, source, objectId(mirror.scriptObject)), Map(extra: _*))
+  }
+
+  private def objectFromScopes(scopes: Seq[Value]) = {
+    scopeList(scopes.map(scopeObject))
+  }
+
+  private def scopeObject(s: Value): ScopeObject = {
+    marshalInPrivate(s) match {
+      case MarshallerResult(c: ComplexNode, _) =>
+        // Hm, we reuse object ID, so this becomes a temporary "wrapper" that is stored in the scope-list object.
+        ScopeObject(s.scopeType, "", c.objectId)
+
+      case other => throw new IllegalStateException("Unexpected marshalled scope: " + other)
+    }
+  }
+
+  private def scopeList(valueNodes: Seq[ScopeObject]) = {
+    // Scope list has no 'length' property
+    val props = valueNodes.zipWithIndex.map(e => e._2.toString -> e._1)
+    // ListMap preserves order
+    val obj = new LocalObject(ListMap(props: _*))
+    registeredNode(obj, ScopeList(valueNodes.size, objectId(obj)))
+  }
+
+  private def registeredNode(v: Value, n: ComplexNode) = {
+    mappingRegistry.register(v, n, Map.empty)
+    n
   }
 
   private def toFunction(mirror: JSObjectMirror) = {
