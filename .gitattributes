@@ -1,2 +1,2 @@
 # gradlew is a Bash script and should never have CRLF
-gradlew text=false
+gradlew text eol=lf
