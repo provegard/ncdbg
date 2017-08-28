@@ -70,6 +70,7 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
   private var scriptSender: ActorRef = _
   private var scriptTimeoutFuture: CancellableFuture[Unit] = _
   private var startTimeoutFuture: CancellableFuture[Unit] = _
+  private var startTimeout: FiniteDuration = _
 
   private var logSubscription: Subscription = _
 
@@ -102,6 +103,24 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
       sender ! ObserveScriptEventsResponse(sub)
   }
 
+  private def bumpStartTimeout: Unit = Option(startSender) match {
+    case Some(_) =>
+      Option(startTimeoutFuture).foreach(_.cancel())
+      startTimeoutFuture = DelayedFuture(startTimeout) {
+        Option(startSender).foreach { s =>
+          s ! StartError(summarizeProgress(), Some(new TimeoutException("Timed out waiting for VM to start")))
+          self ! Stop
+        }
+      }
+    case None => // noop
+  }
+
+  private def cancelStartTimeout: Unit = {
+    Option(startTimeoutFuture).foreach(_.cancel())
+    startTimeoutFuture = null
+    startTimeout = null
+  }
+
   override def receive: Receive = common orElse {
     case Start(javaHome, timeout) =>
       Try(launchVm(javaHome)) match {
@@ -117,12 +136,8 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
           captureLogs()
           setupHost(host)
 
-          startTimeoutFuture = DelayedFuture(timeout) {
-            Option(startSender).foreach { s =>
-              s ! StartError(summarizeProgress(), Some(new TimeoutException("Timed out waiting for VM to start")))
-              self ! Stop
-            }
-          }
+          startTimeout = timeout
+          bumpStartTimeout
 
         case Failure(NonFatal(t)) =>
           sender ! StartError("", Some(t))
@@ -133,6 +148,7 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
 
   def vmStarted: Receive = common orElse {
     case StdOut(output) =>
+      bumpStartTimeout // Life sign
       if (output == Signals.ready) {
         // When we receive "ready", the VM is ready to listen for "go".
         reportProgress("Got the ready signal from the VM")
@@ -143,6 +159,8 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
     case StdErr(error) =>
       reportProgress("VM error: " + error)
     case HostInitComplete =>
+      bumpStartTimeout // Life sign
+
       // Host initialization is complete, so let ScriptExecutor know that it can continue.
       reportProgress("host initialization complete")
 
@@ -159,8 +177,7 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
       sendToVm(Signals.go)
       startSender ! Started(host)
       startSender = null
-      startTimeoutFuture.cancel()
-      startTimeoutFuture = null
+      cancelStartTimeout
   }
 
   def upAndRunning: Receive = common orElse {

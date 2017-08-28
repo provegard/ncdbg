@@ -45,7 +45,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
 
   // Long timeout for receiving a response from the runner actor. The runner actor uses the timeouts above to send
   // an error on timeout, so we need a wait timeout longer than those.
-  private val runnerTimeout: FiniteDuration = 1.minute
+  private val runnerTimeout: FiniteDuration = 2.minutes
 
   private var logSubscription: Subscription = _
   private var host: NashornScriptHost = _
