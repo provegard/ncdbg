@@ -137,6 +137,6 @@ helps also.
 
 ### When I restart a frame, the target application crashes
 
-Due to Java bug [JDK-8161579](http://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8161579),
+Due to Java bug [JDK-8179072](http://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8179072),
 `AbstractMethodError` may be thrown after the VM is resumed after stack frames have been popped. The bug entry
 comments suggest that 8u132 and later may be free from the bug.
