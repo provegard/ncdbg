@@ -40,6 +40,11 @@ class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with B
   var server: FileServer = _
   var wrapperServer: WebSocketServer = _
 
+  def requireContentType(file: File, ct: String) = {
+    val url = server.publisher.publish(file)
+    fetchHeaders(url.toString).map(_.get("Content-Type")) should be (Success(Some(List(ct))))
+  }
+
   "FileServer" - {
     "and an existing file" - {
       val file = createTextFile("success")
@@ -59,8 +64,39 @@ class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with B
       }
 
       "uses the appropriate content type" in {
-        val url = server.publisher.publish(file)
-        fetchHeaders(url.toString).map(_.get("Content-Type")) should be (Success(Some(List("text/plain"))))
+        requireContentType(file, "text/plain")
+      }
+    }
+
+    "and a CoffeeScript file" - {
+      val file = createTextFile("", ".coffee")
+
+      "uses the appropriate content type" in {
+        requireContentType(file, "application/vnd.coffeescript")
+      }
+    }
+
+    "and a JavaScript file" - {
+      val file = createTextFile("", ".js")
+
+      "uses the appropriate content type" in {
+        requireContentType(file, "application/javascript")
+      }
+    }
+
+    "and a JavaScript file with capital extension" - {
+      val file = createTextFile("", ".JS")
+
+      "uses the appropriate content type" in {
+        requireContentType(file, "application/javascript")
+      }
+    }
+
+    "and an arbitrary file" - {
+      val file = createTextFile("", ".bin")
+
+      "uses the appropriate content type" in {
+        requireContentType(file, "application/octet-stream")
       }
     }
   }
@@ -82,8 +118,8 @@ class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with B
     server.baseURL + pathPart
   }
 
-  def createTextFile(data: String): File = {
-    val file = File.createTempFile("test", ".txt")
+  def createTextFile(data: String, extension: String = ".txt"): File = {
+    val file = File.createTempFile("test", extension)
     file.deleteOnExit()
     Files.write(file.toPath, data.getBytes(StandardCharsets.UTF_8))
     file

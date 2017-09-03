@@ -4,8 +4,6 @@ import java.io._
 import java.net.{URI, URL}
 import java.nio.channels.Channels
 import java.util.concurrent.ConcurrentHashMap
-import javax.activation.FileTypeMap
-import javax.xml.ws._
 
 import com.programmaticallyspeaking.tinyws.Server
 import org.slf4s.Logging
@@ -31,15 +29,14 @@ trait FilePublisher {
   */
 class FileServer(host: String, port: Int) extends Logging with Server.FallbackHandler {
   import scala.collection.JavaConverters._
+  import FileServer._
   /**
     * The base URL for files, not including a trailing slash.
     */
   val baseURL: String = s"http://$host:$port/files"
 
   private val baseURI = new URI(baseURL)
-  private val fileTypeMap = FileTypeMap.getDefaultFileTypeMap
 
-  private var endpoint: Endpoint = _
   private val fileWhitelist = ConcurrentHashMap.newKeySet[File]()
 
   private def isOkToServe(file: File): Boolean = fileWhitelist.contains(file)
@@ -92,7 +89,7 @@ class FileServer(host: String, port: Int) extends Logging with Server.FallbackHa
 
   private def serveFile(connection: Server.Connection, file: File): Unit = {
     if (isOkToServe(file)) {
-      val ct = fileTypeMap.getContentType(file)
+      val ct = mimeTypeOf(file)
       val headers = Map("Content-Length" -> file.length().toString, "Content-Type" -> ct)
       connection.sendResponse(200, "OK", headers.asJava)
       if (connection.method() == "GET") {
@@ -108,5 +105,20 @@ class FileServer(host: String, port: Int) extends Logging with Server.FallbackHa
     } else {
       throw new FileNotFoundException(file.getAbsolutePath)
     }
+  }
+}
+
+object FileServer {
+  val mimeTypeByExtension = Map(
+    "js" -> "application/javascript",
+    "coffee" -> "application/vnd.coffeescript",
+    "txt" -> "text/plain"
+  )
+
+  def mimeTypeOf(file: File): String = {
+    val name = file.getName
+    val extIdx = name.lastIndexOf('.')
+    val ext = if (extIdx >= 0) name.substring(extIdx + 1) else ""
+    mimeTypeByExtension.getOrElse(ext.toLowerCase, "application/octet-stream")
   }
 }
