@@ -109,7 +109,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
           handlerResult match {
             case Success(_) => throw new RuntimeException("Unexpected: " + reason)
             case Failure(t: TimeoutException) =>
-              val t2 = new TimeoutException("Timed out waiting for result. Progress:\n" + summarizeProgress())
+              val t2 = new TimeoutException("Timed out waiting for result.")
               t2.addSuppressed(new RuntimeException("Unexpected: " + reason))
               throw t2
             case Failure(t) =>
@@ -138,12 +138,14 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
   }
 
   protected def summarizeProgress(): String = {
-    val inbox = Inbox.create(system)
-    inbox.send(runner, ScriptExecutorRunner.GetProgress)
-    inbox.receive(1.second) match {
-      case ScriptExecutorRunner.ProgressResponse(p) => p
-      case other => throw new RuntimeException("Unexpected: " + other)
-    }
+    Option(runner).map { r =>
+      val inbox = Inbox.create(system)
+      inbox.send(r, ScriptExecutorRunner.GetProgress)
+      inbox.receive(1.second) match {
+        case ScriptExecutorRunner.ProgressResponse(p) => p
+        case other => throw new RuntimeException("Unexpected: " + other)
+      }
+    }.getOrElse("(progress not available)")
   }
 
   override def afterAllTests(): Unit = stopRunner()
