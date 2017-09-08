@@ -1,11 +1,12 @@
 package com.programmaticallyspeaking.ncd.infra
 
 import java.lang.reflect.{InvocationHandler, InvocationTargetException, Method}
-import java.util.concurrent.Executor
+import java.util.concurrent.{ConcurrentHashMap, Executor}
 
 import org.slf4s.Logging
 
-import scala.concurrent.{Await, Future, Promise}
+import scala.collection.concurrent.TrieMap
+import scala.concurrent.{Await, Future, Promise, TimeoutException}
 import scala.reflect.ClassTag
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
@@ -19,7 +20,11 @@ class ExecutorProxy(executor: Executor) {
 
   class Handler(instance: AnyRef) extends InvocationHandler with Logging {
     import scala.concurrent.ExecutionContext.Implicits._
+    import scala.collection.JavaConverters._
     private val className = instance.getClass.getName
+
+    private val awaitingCalls = java.util.Collections.newSetFromMap(new ConcurrentHashMap[Method, java.lang.Boolean]()).asScala
+
     override def invoke(proxy: scala.Any, method: Method, args: Array[AnyRef]): AnyRef = {
       val resultPromise = Promise[AnyRef]()
 
@@ -41,7 +46,17 @@ class ExecutorProxy(executor: Executor) {
       }
 
       if (classOf[Future[_]].isAssignableFrom(method.getReturnType)) resultPromise.future
-      else Await.result(resultPromise.future, 30.seconds) //TODO: Configurable
+      else {
+        awaitingCalls += method
+        //TODO: Configurable timeout
+        try Await.result(resultPromise.future, 30.seconds) catch {
+          case _: TimeoutException =>
+            val other = awaitingCalls - method
+            throw new TimeoutException(s"Timed out waiting for $method to complete. Outstanding calls: ${other.mkString(", ")}")
+        } finally {
+          awaitingCalls -= method
+        }
+      }
     }
   }
 }
