@@ -4,7 +4,7 @@ import akka.actor.{ActorRef, Inbox, PoisonPill}
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, EvaluateOnCallFrameResult, Location}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{CallArgument, RemoteObject}
 import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, Runtime => RuntimeD}
-import com.programmaticallyspeaking.ncd.host.{ScriptIdentity, ScriptLocation}
+import com.programmaticallyspeaking.ncd.host.{Script, ScriptIdentity, ScriptLocation}
 import com.programmaticallyspeaking.ncd.ioc.Container
 import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, SharedInstanceActorTesting}
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
@@ -35,6 +35,15 @@ trait RealDebuggerTestFixture extends E2ETestFixture with SharedInstanceActorTes
     callFrames.headOption match {
       case Some(cf) => fun(cf)
       case None => fail("No call frames")
+    }
+  }
+
+  protected def withScript(callFrames: Seq[CallFrame])(f: (Script) => Unit) = {
+    withHead(callFrames) { cf =>
+      getHost.findScript(ScriptIdentity.fromId(cf.location.scriptId)) match {
+        case Some(s) => f(s)
+        case None => fail("Unknown script: " + cf.location.scriptId)
+      }
     }
   }
 
@@ -187,12 +196,8 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
         """.stripMargin
 
       runScript(script)(callFrames => {
-        withHead(callFrames) { cf =>
-          getHost.findScript(ScriptIdentity.fromId(cf.location.scriptId)) match {
-            case Some(s) =>
-              sendRequest(Debugger.setBreakpointByUrl(3, s.url.toString, Some(2), Some("i>0")))
-            case None => fail("Unknown script: " + cf.location.scriptId)
-          }
+        withScript(callFrames) { s =>
+          sendRequest(Debugger.setBreakpointByUrl(3, s.url.toString, Some(2), Some("i>0")))
         }
       }, callFrames => {
         withHead(callFrames) { cf =>
@@ -244,11 +249,8 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
         """.stripMargin
 
       runScript(script)(callFrames => {
-        withHead(callFrames) { cf =>
-          // At 'debugger', set the initial breakpoint
-          val scriptUrl = getHost.findScript(ScriptIdentity.fromId(cf.location.scriptId)).map(_.url.toString).getOrElse(
-            throw new IllegalArgumentException("No script with ID: " + cf.location.scriptId))
-          sendRequest(Debugger.setBreakpointByUrl(1, scriptUrl, None, None))
+        withScript(callFrames) { s =>
+          sendRequest(Debugger.setBreakpointByUrl(1, s.url.toString, None, None))
         }
       }, callFrames => {
         withHead(callFrames) { cf =>
