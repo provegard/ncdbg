@@ -415,7 +415,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       log.debug(s"Reusing script with URI '${script.url}' for script path '$scriptPath'")
     } else {
       // Reason for logging double at different levels: info typically goes to the console, debug to the log file.
-      log.debug(s"Adding script at path '$scriptPath' with ID '${script.id}' and URI '${script.url}'")
+      log.debug(s"Adding script at path '$scriptPath' with ID '${script.id}', URI '${script.url}' and hash '${script.contentsHash()}'")
       log.info(s"Adding script with URI '${script.url}'")
       emitEvent(ScriptAdded(script))
     }
@@ -963,9 +963,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   }
 
   private def getOrAddEvalScript(artificialPath: String, source: String): Script = {
-    val isRecompilation = artificialPath.contains("Recompilation")
     val newScript = ScriptImpl.fromSource(artificialPath, source, scriptIdGenerator.next)
-    if (!isRecompilation) return scriptByPath.getOrElseUpdate(artificialPath, newScript)
 
     // For a recompilation, we will (most likely) already have the original script that was recompiled (recompilation
     // happens for example when a function inside the eval script is called with known types). We find the original
