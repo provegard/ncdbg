@@ -109,8 +109,10 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
           handlerResult match {
             case Success(_) => throw new RuntimeException("Unexpected: " + reason)
             case Failure(t: TimeoutException) =>
-              val t2 = new TimeoutException("Timed out waiting for result.")
-              t2.addSuppressed(new RuntimeException("Unexpected: " + reason))
+              // A timeout exception only says "Timed out waiting for...". It's not very interesting, so treat it as
+              // secondary.
+              val t2 = new RuntimeException("Unexpected: " + reason)
+              t2.addSuppressed(t)
               throw t2
             case Failure(t) =>
               t.addSuppressed(new RuntimeException("Unexpected: " + reason))
