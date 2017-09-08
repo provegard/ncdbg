@@ -56,8 +56,7 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
   private var vmStdinWriter: PrintWriter = _
   private var hostEventSubscription: Subscription = _
   private var host: NashornScriptHost = _
-
-  private val vmReadyPromise = Promise[Unit]()
+  private var virtualMachine: VirtualMachine = _
 
   // Tracks progress for better timeout failure reporting
   private val progress = ListBuffer[String]()
@@ -125,16 +124,14 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
     case Start(javaHome, timeout) =>
       Try(launchVm(javaHome)) match {
         case Success(vm) =>
+          virtualMachine = vm
           // Save for later use
           startSender = sender
 
           vmStdinWriter = new PrintWriter(new OutputStreamWriter(vm.process().getOutputStream()), true)
-          val debugger = new NashornDebugger()
-          host = debugger.create(vm)(context.system)
 
           context.become(vmStarted)
           captureLogs()
-          setupHost(host)
 
           startTimeout = timeout
           bumpStartTimeout
@@ -152,32 +149,28 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
       if (output == Signals.ready) {
         // When we receive "ready", the VM is ready to listen for "go".
         reportProgress("Got the ready signal from the VM")
-        vmReadyPromise.success(())
+        self ! VmIsReady
       } else {
         reportProgress("VM output: " + output)
       }
     case StdErr(error) =>
       reportProgress("VM error: " + error)
     case HostInitComplete =>
-      bumpStartTimeout // Life sign
-
       // Host initialization is complete, so let ScriptExecutor know that it can continue.
-      reportProgress("host initialization complete")
+      reportProgress("host initialization complete, sending the 'go' signal to the VM")
 
-      // Wait until we observe that the VM is ready to receive the go command.
-      vmReadyPromise.future.onComplete {
-        case Success(_) =>
-          reportProgress("VM is ready to go!")
-          self ! VmIsReady
-
-        case Failure(t) => startSender ! StartError(summarizeProgress(), Some(t))
-      }
-    case VmIsReady =>
       context.become(upAndRunning)
       sendToVm(Signals.go)
       startSender ! Started(host)
       startSender = null
       cancelStartTimeout
+
+    case VmIsReady =>
+      bumpStartTimeout // Life sign
+      reportProgress("VM is ready, connecting the debugger")
+      val debugger = new NashornDebugger()
+      host = debugger.create(virtualMachine)(context.system)
+      setupHost(host)
   }
 
   def upAndRunning: Receive = common orElse {

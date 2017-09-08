@@ -161,7 +161,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
 trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInstanceActorTesting with VirtualMachineLauncher {
   implicit val executionContext: ExecutionContext
 
-  override val scriptExecutor = ScriptExecutor
+  override val scriptExecutor: ScriptExecutorBase = ScriptExecutor
 
   private val seenScripts = mutable.Set[String]()
 

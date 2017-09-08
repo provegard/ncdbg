@@ -10,10 +10,9 @@ import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, SharedInstan
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
 
-class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting with ScalaFutures with IntegrationPatience with TableDrivenPropertyChecks {
+trait RealDebuggerTestFixture extends E2ETestFixture with SharedInstanceActorTesting with ScalaFutures with IntegrationPatience {
 
   var debugger: ActorRef = _
 
@@ -32,6 +31,30 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
 
   def sendRequest(msg: AnyRef): Any = sendRequestAndWait(debugger, msg)
 
+  protected def withHead(callFrames: Seq[CallFrame])(fun: (CallFrame) => Unit) = {
+    callFrames.headOption match {
+      case Some(cf) => fun(cf)
+      case None => fail("No call frames")
+    }
+  }
+
+  protected override def stopRunner(): Unit = {
+    Option(debugger).foreach { actorRef =>
+      val inbox = Inbox.create(system)
+      inbox.watch(actorRef)
+      inbox.send(actorRef, PoisonPill)
+      // wait a few seconds for the actor to die
+      inbox.receive(2.seconds)
+    }
+    debugger = null
+    super.stopRunner()
+  }
+
+  override protected def beforeEachTest(): Unit = enableDebugger
+
+}
+
+class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyChecks {
 
 
   "Debugging" - {
@@ -471,25 +494,4 @@ class RealDebuggerTest extends E2ETestFixture with SharedInstanceActorTesting wi
       })
     }
   }
-
-  private def withHead(callFrames: Seq[CallFrame])(fun: (CallFrame) => Unit) = {
-    callFrames.headOption match {
-      case Some(cf) => fun(cf)
-      case None => fail("No call frames")
-    }
-  }
-
-  protected override def stopRunner(): Unit = {
-    Option(debugger).foreach { actorRef =>
-      val inbox = Inbox.create(system)
-      inbox.watch(actorRef)
-      inbox.send(actorRef, PoisonPill)
-      // wait a few seconds for the actor to die
-      inbox.receive(2.seconds)
-    }
-    debugger = null
-    super.stopRunner()
-  }
-
-  override protected def beforeEachTest(): Unit = enableDebugger
 }
