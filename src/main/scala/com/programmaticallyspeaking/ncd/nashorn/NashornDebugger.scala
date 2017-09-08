@@ -25,7 +25,10 @@ class NashornDebuggerConnector(hostName: String, port: Int) extends Logging {
     log.info(s"Connecting to $hostName:$port...")
     val vm = Connections.connect(hostName, port, 5000)
     log.info("Connected!")
-    log.info("VM information: " + vm.description())
+    val newline = System.lineSeparator()
+    // VM info is multiline, so prefix each line to make it stand out in the log
+    val desc = "(?m)^".r.replaceAllIn(vm.description(), "- ")
+    log.info(s"Remote VM information:$newline$desc")
 
     connectionPromise.success(vm)
   }

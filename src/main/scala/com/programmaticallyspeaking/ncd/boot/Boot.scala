@@ -20,6 +20,8 @@ object Boot extends App with Logging {
   implicit val system = ActorSystem()
   import system.dispatcher
 
+  log.info("Local Java version: " + System.getProperty("java.version"))
+
   val connectAddr = conf.connect()
   val connector = new NashornDebuggerConnector(connectAddr.host, connectAddr.port)
   val debuggerReady = connector.connect().map(vm => new NashornDebugger().create(vm))
