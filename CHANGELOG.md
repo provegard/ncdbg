@@ -9,6 +9,7 @@
     * `[[Message]]` for a Java exception (was previously a regular property)
 * Don't return any Java array properties if only accessors are requested.
 * Merge scripts based on contents hash regardless of recompilation/original order (issue #64)
+* Support script reload with changed contents and same path (issue #65)
 
 ## 0.5.5 (2017-08-24)
 
