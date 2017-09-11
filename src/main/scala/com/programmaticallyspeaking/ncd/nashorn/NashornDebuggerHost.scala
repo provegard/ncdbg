@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, Undefined}
-import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator}
+import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator, PathUtils}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{ObjectPropertiesKey, StackFrameHolder}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
@@ -978,7 +978,20 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
         scriptByPath += (artificialPath -> scriptWithSameSource)
         scriptWithSameSource
       case None =>
-        scriptByPath.getOrElseUpdate(artificialPath, newScript)
+        scriptByPath.get(artificialPath) match {
+          case Some(_) =>
+            // This is a new script with new contents but with the same path as an old one - it is likely a script
+            // that has been reloaded via Nashorn's 'load' function.
+            // The choice of using the ID as suffix is pretty arbitrary - it could also be a sequence number.
+            val newId = scriptIdGenerator.next
+            val newPath = PathUtils.insertNameSuffix(artificialPath, "_" + newId)
+
+            val replacement = ScriptImpl.fromSource(newPath, source, newId)
+            scriptByPath.getOrElseUpdate(newPath, replacement)
+
+          case None =>
+            scriptByPath.getOrElseUpdate(artificialPath, newScript)
+        }
     }
   }
 
