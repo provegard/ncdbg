@@ -1,14 +1,14 @@
 package com.programmaticallyspeaking.ncd.infra
 
 import java.lang.reflect.{InvocationHandler, InvocationTargetException, Method}
-import java.util.concurrent.{ConcurrentHashMap, Executor}
+import java.util.concurrent.Executor
+import java.util.concurrent.atomic.AtomicInteger
 
 import org.slf4s.Logging
 
-import scala.collection.concurrent.TrieMap
+import scala.concurrent.duration._
 import scala.concurrent.{Await, Future, Promise, TimeoutException}
 import scala.reflect.ClassTag
-import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 class ExecutorProxy(executor: Executor) {
@@ -20,15 +20,22 @@ class ExecutorProxy(executor: Executor) {
 
   class Handler(instance: AnyRef) extends InvocationHandler with Logging {
     import scala.concurrent.ExecutionContext.Implicits._
-    import scala.collection.JavaConverters._
     private val className = instance.getClass.getName
 
-    private val awaitingCalls = java.util.Collections.newSetFromMap(new ConcurrentHashMap[Method, java.lang.Boolean]()).asScala
+    private val idGen = new AtomicInteger(0)
+    private var awaitingCalls = Map[Int, String]()
 
     override def invoke(proxy: scala.Any, method: Method, args: Array[AnyRef]): AnyRef = {
       val resultPromise = Promise[AnyRef]()
 
       val before = System.nanoTime()
+
+      val id = idGen.getAndIncrement()
+      val argss = Option(args).getOrElse(Array.empty)
+      val desc = s"$method(${argss.mkString(", ")})[$id]"
+
+      // Snapshot of waiting calls prior to submitting to the executor
+      val waitingCallsAtEntry = awaitingCalls
 
       executor.execute(() => {
         Try(method.invoke(instance, args: _*)) match {
@@ -47,14 +54,18 @@ class ExecutorProxy(executor: Executor) {
 
       if (classOf[Future[_]].isAssignableFrom(method.getReturnType)) resultPromise.future
       else {
-        awaitingCalls += method
+        // Update with this call
+        awaitingCalls += (id -> desc)
         //TODO: Configurable timeout
         try Await.result(resultPromise.future, 30.seconds) catch {
           case _: TimeoutException =>
-            val other = awaitingCalls - method
-            throw new TimeoutException(s"Timed out waiting for $method to complete. Outstanding calls: ${other.mkString(", ")}")
+            val other = waitingCallsAtEntry.values
+            val msg = s"Timed out waiting for '$desc' to complete. Calls at entry: ${other.mkString("'", "', '", "'")}"
+            println(msg)
+            throw new TimeoutException(msg)
         } finally {
-          awaitingCalls -= method
+          // Done with this call
+          awaitingCalls -= id
         }
       }
     }
