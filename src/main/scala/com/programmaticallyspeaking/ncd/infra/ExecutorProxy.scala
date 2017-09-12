@@ -12,6 +12,7 @@ import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
 class ExecutorProxy(executor: Executor) {
+  import scala.collection.JavaConverters._
 
   def createFor[A <: AnyRef : ClassTag](instance: A): A = {
     val clazz = implicitly[ClassTag[A]].runtimeClass
@@ -61,7 +62,14 @@ class ExecutorProxy(executor: Executor) {
           case _: TimeoutException =>
             val other = waitingCallsAtEntry.values
             val msg = s"Timed out waiting for '$desc' to complete. Calls at entry: ${other.mkString("'", "', '", "'")}"
-            println(msg)
+            log.debug(msg)
+            Thread.getAllStackTraces.asScala.foreach { tup =>
+              val sb = new StringBuilder
+              sb.append("\n")
+              sb.append("THREAD ").append(tup._1.getName).append("\n")
+              tup._2.foreach(ste => sb.append("  ").append(ste).append("\n"))
+              log.debug(sb.toString())
+            }
             throw new TimeoutException(msg)
         } finally {
           // Done with this call
