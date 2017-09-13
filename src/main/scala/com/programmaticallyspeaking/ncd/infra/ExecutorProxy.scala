@@ -61,20 +61,21 @@ class ExecutorProxy(executor: Executor) {
         try Await.result(resultPromise.future, 30.seconds) catch {
           case _: TimeoutException =>
             val other = waitingCallsAtEntry.values
-            val msg = s"Timed out waiting for '$desc' to complete. Calls at entry: ${other.mkString("'", "', '", "'")}"
-            log.debug(msg)
-            Thread.getAllStackTraces.asScala.foreach { tup =>
-              val sb = new StringBuilder
-              sb.append("\n")
-              sb.append("THREAD ").append(tup._1.getName).append("\n")
-              tup._2.foreach(ste => sb.append("  ").append(ste).append("\n"))
-              log.debug(sb.toString())
-            }
-            throw new TimeoutException(msg)
+            val sb = new StringBuilder(s"Timed out waiting for '$desc' to complete. Calls at entry: ${other.mkString("'", "', '", "'")}. Stack:\n")
+            appendStackTraces(sb)
+            log.debug(sb.toString())
+            throw new TimeoutException("Timed out waiting for '$desc' to complete.")
         } finally {
           // Done with this call
           awaitingCalls -= id
         }
+      }
+    }
+
+    private def appendStackTraces(sb: StringBuilder): Unit = {
+      Thread.getAllStackTraces.asScala.foreach { tup =>
+        sb.append("\n> THREAD ").append(tup._1.getName).append("\n")
+        tup._2.foreach(ste => sb.append("  ").append(ste).append("\n"))
       }
     }
   }
