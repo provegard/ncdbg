@@ -548,12 +548,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                 None
               }
             case None =>
-              log.info(s"Ignoring script type '${refType.name} because it has no line locations.")
+              log.debug(s"Ignoring script type '${refType.name} because it has no line locations.")
               None
           }
-        case Failure(t: AbsentInformationException) =>
-          log.warn(s"No line locations for ${refType.name}")
-          None
         case Failure(t) =>
           log.warn(s"Failed to get line locations for ${refType.name}", t)
           None
