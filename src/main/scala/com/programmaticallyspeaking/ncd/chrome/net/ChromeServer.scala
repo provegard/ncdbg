@@ -134,11 +134,11 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
       log.debug(s"Ignoring message ($msg) from unknown dev tools sender")
 
     case response: Messages.Accepted =>
-      log.debug("Got accepted-response (no response data) from domain: " + response)
+      log.trace("Got accepted-response (no response data) from domain: " + response)
       sendToDevTools(Protocol.EmptyResponse(response.id))
 
     case response: Messages.Response =>
-      log.debug("Got response from domain: " + response)
+      log.trace("Got response from domain: " + response)
       sendToDevTools(Protocol.Response(response.id, response.msg))
 
     case response: Messages.ErrorResponse =>
