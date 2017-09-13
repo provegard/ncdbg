@@ -472,7 +472,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   }
 
   private val nonSupportedScriptPaths = mutable.Set[String]()
-  private def logThatRelativeScriptPathsNotBeingSupported(scriptPath: String) = {
+  private def logThatRelativeScriptPathsAreNotSupported(scriptPath: String) = {
     // Only log this once per unique path (a script may be recompiled so we may be called multiple times for the
     // same script).
     if (!nonSupportedScriptPaths.contains(scriptPath)) {
@@ -528,7 +528,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                 // A relative path is not supported because there is no foolproof way to get the current directory
                 // for the remove VM (we can invoke System.getProperties, but we need to see an event early on for
                 // that to work).
-                logThatRelativeScriptPathsNotBeingSupported(scriptPath)
+                logThatRelativeScriptPathsAreNotSupported(scriptPath)
                 None
               }
             case None =>
