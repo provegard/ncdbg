@@ -24,6 +24,7 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
                    breakableLocationLookup: BreakableLocationLookup) extends Logging {
   import scala.collection.JavaConverters._
   import JDIExtensions._
+  import TypeConstants._
 
   private def scopeWithFreeVariables(scopeObject: Value, freeVariables: Map[String, AnyRef])(implicit marshaller: Marshaller): Value = {
     require(scopeObject != null, "Scope object must be non-null")

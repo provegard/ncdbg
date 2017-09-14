@@ -1,9 +1,9 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{JL_Boolean, JL_Double, JL_Integer, JL_Long}
 import com.sun.jdi._
 
 class Boxer(typeLookup: TypeLookup) {
+  import TypeConstants._
 
   private def boxed(prim: PrimitiveValue, typeName: String, method: String)(implicit thread: ThreadReference): Value = {
     typeLookup(typeName) match {

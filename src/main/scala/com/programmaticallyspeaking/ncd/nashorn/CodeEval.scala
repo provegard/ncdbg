@@ -4,6 +4,7 @@ import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost._
 import com.sun.jdi._
 
 class CodeEval(typeLookup: TypeLookup, preventGC: (Value, Lifecycle.EnumVal) => Unit) {
+  import TypeConstants._
 
   def eval(thisObject: Value, scopeObject: Value, code: String, lifecycle: Lifecycle.EnumVal)(implicit thread: ThreadReference): Value = {
     // We've observed ObjectCollectedException while disabling GC... Try a few times before giving up!

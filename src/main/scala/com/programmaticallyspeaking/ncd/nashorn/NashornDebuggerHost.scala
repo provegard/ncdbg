@@ -20,17 +20,9 @@ import scala.util.{Failure, Success, Try}
 
 
 object NashornDebuggerHost {
-  import scala.collection.JavaConverters._
+  import TypeConstants._
 
   val InitialScriptResolveAttempts = 5
-
-  val NIR_ScriptRuntime = "jdk.nashorn.internal.runtime.ScriptRuntime"
-  val NIR_ECMAException = "jdk.nashorn.internal.runtime.ECMAException"
-  val NIR_Context = "jdk.nashorn.internal.runtime.Context"
-  val JL_Boolean = "java.lang.Boolean"
-  val JL_Integer = "java.lang.Integer"
-  val JL_Long = "java.lang.Long"
-  val JL_Double = "java.lang.Double"
 
   object JDWP_ERR_INVALID_SLOT {
     def unapply(v: Any): Option[Throwable] = v match {
@@ -38,9 +30,6 @@ object NashornDebuggerHost {
       case _ => None
     }
   }
-
-  // The name of the DEBUGGER method in the ScriptRuntime class
-  val ScriptRuntime_DEBUGGER = "DEBUGGER"
 
   val ECMAException_create = "create"
 
@@ -176,6 +165,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   import NashornDebuggerHost._
   import com.programmaticallyspeaking.ncd.infra.BetterOption._
   import JDIExtensions._
+  import TypeConstants._
 
   import ExecutionContext.Implicits._
   import scala.collection.JavaConverters._

@@ -10,6 +10,7 @@ import scala.util.{Failure, Success}
 
 trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerHost with Logging =>
   import NashornDebuggerHost._
+  import TypeConstants._
 
   private var maybeScriptBasedPropertyHolderFactory: Option[ScriptBasedPropertyHolderFactory] = None
   private var objectPropertiesCacheEnabled = true

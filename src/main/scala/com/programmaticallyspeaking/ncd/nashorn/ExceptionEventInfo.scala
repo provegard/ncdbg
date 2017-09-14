@@ -7,6 +7,8 @@ import com.sun.jdi.event.ExceptionEvent
 
 private[nashorn] class ExceptionEventInfo(event: ExceptionEvent, stackFrames: Seq[StackFrameHolder], marshaller: Marshaller) {
   import NashornDebuggerHost._
+  import TypeConstants._
+
   private val exception = event.exception()
   val exceptionTypeName = exception.referenceType().name()
   val isECMAException = exceptionTypeName == NIR_ECMAException
