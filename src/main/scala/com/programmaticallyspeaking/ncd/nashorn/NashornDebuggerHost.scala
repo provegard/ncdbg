@@ -160,10 +160,9 @@ object NashornDebuggerHost {
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
     extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport with BreakpointSupport with PauseSupport {
   import NashornDebuggerHost._
-  import com.programmaticallyspeaking.ncd.infra.BetterOption._
   import JDIExtensions._
   import TypeConstants._
-
+  import Breakpoints._
   import ExecutionContext.Implicits._
   import scala.collection.JavaConverters._
 
@@ -270,28 +269,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     val newList = existing.filterNot(isObsolete) ++ breakableLocations
     breakableLocationsByScriptUrl(script.url.toString) = newList
   }
-
-  private def enableBreakingAt(theType: ClassType, methodName: String, statementName: String): Unit = {
-    val typeName = theType.name()
-    val methodLoc = for {
-      theMethod <- theType.methodsByName(methodName).asScala.headOption.toEither(s"$typeName.$methodName method not found")
-      location <- theMethod.allLineLocations().asScala.headOption.toEither(s"no line location found in $typeName.$methodName")
-    } yield location
-
-    methodLoc match {
-      case Right(location) =>
-        log.info(s"Enabling automatic breaking at JavaScript '$statementName' statements")
-        // TODO: BreakableLocation also does this. Reuse code!
-        val br = virtualMachine.eventRequestManager().createBreakpointRequest(location)
-        br.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
-        br.setEnabled(true)
-      case Left(msg) =>
-        log.warn(s"Won't be able to break at JavaScript '$statementName' statements because $msg")
-    }
-  }
-
-  private def enableBreakingAtDebuggerStatement(ct: ClassType): Unit =
-    enableBreakingAt(ct, ScriptRuntime_DEBUGGER, "debugger")
 
   private def scriptFromEval(refType: ReferenceType, scriptPath: String): Either[NoScriptReason.EnumVal, Script] = {
     refType.shamelesslyExtractEvalSourceFromPrivatePlaces().map { src =>
