@@ -3,11 +3,11 @@ package com.programmaticallyspeaking.ncd.host
 trait ScriptEvent
 
 /**
-  * Emitted when the remote VM has paused, typically on a breakpoint. The breakpoint can be set by the user or be a
-  * 'debugger' statement.
+  * Emitted when the remote VM has paused, typically on a breakpoint. The breakpoint can be set by the user, be a
+  * 'debugger' statement, or be the result of a thrown exception when exception pausing is enabled.
   *
   * @param stackFrames the current script stack frames
-  * @param breakpointId the ID of the breakpoint; for a 'debugger' statement, the ID is not stable
+  * @param breakpointId the ID of the breakpoint; for a 'debugger' statement or exception, the ID is not stable
   */
 case class HitBreakpoint(stackFrames: Seq[StackFrame], breakpointId: String) extends ScriptEvent
 
@@ -24,7 +24,7 @@ case object Resumed extends ScriptEvent
 case class ScriptAdded(script: Script) extends ScriptEvent
 
 /**
-  * Emitted when an uncaught error is detected.
+  * Emitted when an uncaught error is detected, regardless of whether exception pausing is enabled or not.
   *
   * @param error the error
   */
