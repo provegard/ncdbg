@@ -7,7 +7,7 @@ import java.util.concurrent.TimeoutException
 
 import akka.actor.{Actor, ActorRef}
 import ch.qos.logback.classic.Level
-import com.programmaticallyspeaking.ncd.host.ScriptEvent
+import com.programmaticallyspeaking.ncd.host.{InitialInitializationComplete, ScriptEvent}
 import com.programmaticallyspeaking.ncd.infra.{CancellableFuture, DelayedFuture}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
 import com.programmaticallyspeaking.ncd.testing.{MemoryAppender, StringUtils}
