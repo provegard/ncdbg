@@ -21,6 +21,7 @@ import scala.util.{Failure, Success, Try}
 
 object NashornDebuggerHost {
   import TypeConstants._
+  import JDIExtensions._
 
   val InitialScriptResolveAttempts = 5
 
@@ -152,12 +153,8 @@ object NashornDebuggerHost {
   case class StackFrameHolder(stackFrame: Option[StackFrame], location: Location) {
     val mayBeAtSpecialStatement = stackFrame.isEmpty
     val belongsToScript = stackFrame.isDefined
-    val isAtDebuggerStatement = isDebuggerStatementLocation(location)
+    val isAtDebuggerStatement = location.isDebuggerStatement
   }
-
-  // Determines if the location is in ScriptRuntime.DEBUGGER.
-  private def isDebuggerStatementLocation(loc: Location) =
-    loc.declaringType().name() == NIR_ScriptRuntime && loc.method().name() == ScriptRuntime_DEBUGGER
 }
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])

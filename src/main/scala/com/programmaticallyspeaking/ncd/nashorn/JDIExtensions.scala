@@ -7,6 +7,7 @@ import scala.language.implicitConversions
 
 object JDIExtensions {
   import scala.collection.JavaConverters._
+  import TypeConstants._
 
   implicit def location2ExtLocation(l: Location): ExtLocation = new ExtLocation(l)
   implicit def value2ExtValue(v: Value): ExtValue = new ExtValue(v)
@@ -14,14 +15,21 @@ object JDIExtensions {
 
   class ExtLocation(location: Location) {
 
+    /**
+      * Determines if the location is in ScriptRuntime.DEBUGGER.
+      */
+    def isDebuggerStatement: Boolean =
+      location.declaringType().name() == NIR_ScriptRuntime && location.method().name() == ScriptRuntime_DEBUGGER
+
+
     lazy val byteCode: Int = {
       val methodByteCodes = location.method().bytecodes()
       val bc = methodByteCodes(location.codeIndex().toInt).toInt
       if (bc < 0) bc + 256 else bc
     }
 
-    private val lineOfLastLocation = location.method().allLineLocations().asScala.last.lineNumber()
-    val isLastLineInFunction: Boolean = location.lineNumber() == lineOfLastLocation
+    private lazy val lineOfLastLocation = location.method().allLineLocations().asScala.last.lineNumber()
+    def isLastLineInFunction: Boolean = location.lineNumber() == lineOfLastLocation
   }
 
   class ExtValue(v: Value) {
