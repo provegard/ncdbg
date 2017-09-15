@@ -84,6 +84,17 @@ object NashornDebuggerHost {
   val IL_POP = 0x57     // pop result after function return
 
   /**
+    * Scanning all classes in one go can be problematic since it may take a long time, thereby blocking host
+    * operations. This constant defines the time we spend scanning classes before we yield to other operations.
+    */
+  val SCAN_CLASSES_BATCH_LEN = 2.seconds
+
+  /**
+    * Operation queued when the scan-class batch length has been exceeded.
+    */
+  case object ContinueClassScan extends NashornScriptOperation
+
+  /**
     * Information used to determine if a breakpoint request event is in the exact same location as the previous step
     * event. When we do expensive step into after stepping using a StepRequest, it seems as if the BreakpointRequest
     * is hit in the current location right away.
@@ -196,6 +207,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   protected val foundWantedTypes = mutable.Map[String, ClassType]()
 
+  /**
+    * Populated/updated during a class scan to track the classes left to scan.
+    */
+  private var classesToScan = List.empty[ReferenceType]
+
   private val scriptTypesWaitingForSource = ListBuffer[ReferenceType]()
   private val scriptTypesToBreakRetryCycleFor = ListBuffer[ReferenceType]()
 
@@ -223,7 +239,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private var seenClassPrepareRequests = 0
   private var lastSeenClassPrepareRequests = -1L
-  private var hasScannedClasses = false
+  private var hasInitiatedClassScanning = false
 
   private val typeLookup = new TypeLookup {
     def apply(name: String): Option[ClassType] = foundWantedTypes.get(name)
@@ -363,7 +379,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   }
 
   private val nonSupportedScriptPaths = mutable.Set[String]()
-  private def logThatRelativeScriptPathsNotBeingSupported(scriptPath: String) = {
+  private def logThatRelativeScriptPathsAreNotSupported(scriptPath: String) = {
     // Only log this once per unique path (a script may be recompiled so we may be called multiple times for the
     // same script).
     if (!nonSupportedScriptPaths.contains(scriptPath)) {
@@ -419,16 +435,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                 // A relative path is not supported because there is no foolproof way to get the current directory
                 // for the remove VM (we can invoke System.getProperties, but we need to see an event early on for
                 // that to work).
-                logThatRelativeScriptPathsNotBeingSupported(scriptPath)
+                logThatRelativeScriptPathsAreNotSupported(scriptPath)
                 None
               }
             case None =>
-              log.info(s"Ignoring script type '${refType.name} because it has no line locations.")
+              log.debug(s"Ignoring script type '${refType.name} because it has no line locations.")
               None
           }
-        case Failure(t: AbsentInformationException) =>
-          log.warn(s"No line locations for ${refType.name}")
-          None
         case Failure(t) =>
           log.warn(s"Failed to get line locations for ${refType.name}", t)
           None
@@ -466,14 +479,41 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def scanClasses(thread: Option[ThreadReference]): Unit = {
-    log.debug("Scanning all currently known classes...")
+  private def scanClasses(): Unit = {
     val referenceTypes = virtualMachine.allClasses()
 
-    // Go through reference types that exist so far. More may arrive later!
-    referenceTypes.asScala.foreach(considerReferenceType(thread, _: ReferenceType, InitialScriptResolveAttempts))
+    hasInitiatedClassScanning = true
 
-    hasScannedClasses = true
+    classesToScan = referenceTypes.asScala.toList
+
+    scanOutstandingClasses()
+  }
+
+  private def scanOutstandingClasses(): Unit = {
+    log.debug(s"Scanning ${classesToScan.size} currently known classes...")
+
+    val nanosBefore = System.nanoTime()
+    var done = false
+    var count = 0
+    while (!done && classesToScan.nonEmpty) {
+      val refType = classesToScan.head
+      classesToScan = classesToScan.tail
+      count += 1
+
+      considerReferenceType(None, refType, InitialScriptResolveAttempts)
+
+      val elapsed = (System.nanoTime() - nanosBefore).nanos
+      if (elapsed >= SCAN_CLASSES_BATCH_LEN) {
+        // Yield to other operations, to prevent blocking so long that a timeout occurs in ExecutorProxy.
+        log.debug(s"Scanned $count classes in ${elapsed.toMillis} ms, temporarily yielding to other operations.")
+        asyncInvokeOnThis(_.handleOperation(ContinueClassScan))
+        done = true
+      }
+    }
+
+    if (classesToScan.isEmpty) {
+      log.info("Class scanning complete!")
+    }
   }
 
   private def considerInitializationToBeComplete(): Unit = {
@@ -671,8 +711,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                 }
 
               case ev: ClassPrepareEvent =>
-                if (hasScannedClasses) {
-                  // A new class, added after we have scanned
+                if (hasInitiatedClassScanning) {
+                  // A new class, added after we have initiated scanning
                   considerReferenceType(Some(ev.thread()), ev.referenceType(), InitialScriptResolveAttempts)
                 } else if (relevantForPostponingClassScan(ev.referenceType())) {
                   // Bump the class counter - when we handle PostponeInitialize, if the class cound has stabilized,
@@ -726,11 +766,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
         considerReferenceType(None, refType, attemptsLeft)
       }
     case PostponeInitialize =>
-      if (lastSeenClassPrepareRequests == seenClassPrepareRequests) scanClasses(None)
+      if (lastSeenClassPrepareRequests == seenClassPrepareRequests) scanClasses()
       else {
         lastSeenClassPrepareRequests = seenClassPrepareRequests
         retryInitLater()
       }
+    case ContinueClassScan =>
+      scanOutstandingClasses()
     case operation =>
       throw new IllegalArgumentException("Unknown operation: " + operation)
   }
