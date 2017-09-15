@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.6 (2017-09-15)
 
 * Return internal properties (`[[Prop]]`) (issue #58):
     * `[[TargetFunction]]` for a bound function
@@ -10,6 +10,7 @@
 * Don't return any Java array properties if only accessors are requested.
 * Merge scripts based on contents hash regardless of recompilation/original order (issue #64)
 * Support script reload with changed contents and same path (issue #65)
+* Scan classes in chunks to prevent locking up and preventing other operations (issue #63)
 
 ## 0.5.5 (2017-08-24)
 
