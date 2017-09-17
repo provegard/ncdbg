@@ -69,3 +69,10 @@ object ScriptURL {
     } else url // no normalization necessary
   }
 }
+
+object FileScriptURL {
+  def unapply(x: Any): Option[File] = x match {
+    case s: ScriptURL if s.isFile => Some(s.toFile)
+    case _ => None
+  }
+}

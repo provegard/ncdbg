@@ -87,4 +87,22 @@ class ScriptURLTest extends UnitTest with TableDrivenPropertyChecks {
       sut.isFile should be (false)
     }
   }
+
+  "FileUrl (unapply)" - {
+    "recognizes a file URL" in {
+      val sut = ScriptURL.create("/tmp/test.txt")
+      sut match {
+        case FileScriptURL(f) => f.getPath() should include ("test.txt")
+        case _ => fail("not a file URL")
+      }
+    }
+
+    "rejects a non-file URL" in {
+      val sut = ScriptURL.create("http://localhost/test.txt")
+      sut match {
+        case FileScriptURL(f) => fail(s"Non-file URL resulted in $f")
+        case _ => // ok
+      }
+    }
+  }
 }

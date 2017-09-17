@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 import com.programmaticallyspeaking.ncd.chrome.net.FilePublisher
 import com.programmaticallyspeaking.ncd.host.{Scope => HostScope, _}
-import com.programmaticallyspeaking.ncd.infra.{FileReader, FileSystemFileReader, ScriptURL, SourceMap}
+import com.programmaticallyspeaking.ncd.infra._
 import org.slf4s.Logging
 
 import scala.collection.mutable
@@ -122,9 +122,7 @@ object Debugger extends Logging {
 
   def scriptWithPublishedFiles(script: Script, filePublisher: FilePublisher)(implicit fileReader: FileReader): Script = {
     script.sourceMapUrl() match {
-      case Some(url) if url.isFile =>
-        val sourceMapFile = url.toFile
-
+      case Some(FileScriptURL(sourceMapFile)) =>
         // Publish the map file
         val externalUrl = filePublisher.publish(sourceMapFile)
 
@@ -144,6 +142,9 @@ object Debugger extends Logging {
             log.error(s"Failed to read source map file $sourceMapFile", t)
             script
         }
+      case Some(url) =>
+        log.warn("Ignoring non-file source map URL: " + url)
+        script
       case _ => script
     }
   }
