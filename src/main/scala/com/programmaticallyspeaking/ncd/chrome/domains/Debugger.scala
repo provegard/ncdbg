@@ -148,12 +148,6 @@ object Debugger extends Logging {
       case _ => script
     }
   }
-
-  private def uriToFile(uri: String): File = {
-    // Assume uri begins with file:// (TODO: Create a value type for it!)
-    val fileURI = new URI(uri.replace("file://", "file:/"))
-    new File(fileURI)
-  }
 }
 
 class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends DomainActor(scriptHost) with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
