@@ -52,10 +52,11 @@ object ScriptURL {
       rest = rest.substring(1) // skip the leading :
       val slashCount = rest.prefixLength(_ == '/')
       new URI(scheme, "", "/" + rest.substring(slashCount), null)
+    } else if (something.contains("..")) {
+      throw new IllegalArgumentException(s"Cannot create ScriptURL from path/URL with '..' ($something)")
     } else {
-      val u = new URI(something)
-      require(u.isAbsolute, "relative path/URI not supported: " + something)
-      u
+      val withUnixSlashes = something.replace("\\", "/")
+      new URI(withUnixSlashes)
     }
     normalized(new ScriptURL(uri))
   }

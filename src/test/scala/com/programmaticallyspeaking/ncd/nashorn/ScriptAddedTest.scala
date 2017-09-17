@@ -96,6 +96,20 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
     }
   }
 
+  "a loaded script with relative path results in a ScriptAdded event" in {
+    val script = "load({ script: 'this.foobar=42;', name: 'path/to/myscript.js' });"
+    testAddScript(script) { scripts =>
+      atLeast(1, scripts.map(_.contents)) should be ("this.foobar=42;")
+    }
+  }
+
+  "a loaded script with relative Windows path results in a ScriptAdded event" in {
+    val script = "load({ script: 'this.barbar=42;', name: 'path\\to\\yourscript.js' });"
+    testAddScript(script) { scripts =>
+      atLeast(1, scripts.map(_.contents)) should be ("this.barbar=42;")
+    }
+  }
+
   "given a script with multiple breakable locations on the same line" - {
     val script =
       """function fun() { return 42; } // 2 breakable here, one in 'program' and one in 'fun'

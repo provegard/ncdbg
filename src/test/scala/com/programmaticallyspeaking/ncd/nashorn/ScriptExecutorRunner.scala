@@ -223,7 +223,8 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
   }
 
   private def sendToVm(data: String, encodeBase64: Boolean = false): Unit = {
-    val dataToSend = if (encodeBase64) StringUtils.toBase64(data) else data
+    val escaped = data.replace("\\", "\\\\")
+    val dataToSend = if (encodeBase64) StringUtils.toBase64(escaped) else escaped
     log.info("Sending to VM: " + dataToSend)
     vmStdinWriter.println(dataToSend)
   }

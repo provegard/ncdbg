@@ -11,8 +11,10 @@ class ScriptURLTest extends UnitTest with TableDrivenPropertyChecks {
     Table(
       ("desc", "input", "output"),
       ("Windows path", "c:\\temp\\test.txt","file:///c:/temp/test.txt"),
+      ("relative Windows path", "temp\\test.txt","temp/test.txt"),
       ("Path with ..", "c:\\temp\\subdir\\..\\test.txt","file:///c:/temp/test.txt"),
       ("Unix path", "/tmp/test.txt", "file:///tmp/test.txt"),
+      ("relative Unix path", "tmp/test.txt", "tmp/test.txt"),
       ("Windows path on Unix form", "/c:/tmp/test.txt", "file:///c:/tmp/test.txt"),
       ("URL-like non-file path", "eval:/foo/bar", "eval:///foo/bar"),
       ("file URL without authority", "file:/foo/bar", "file:///foo/bar"),
@@ -44,10 +46,6 @@ class ScriptURLTest extends UnitTest with TableDrivenPropertyChecks {
       val url = new URL("http://localhost/test.txt")
       val sut = ScriptURL.create(url)
       sut.toString should be ("http://localhost/test.txt")
-    }
-
-    "rejects a relative file path" in {
-      assertThrows[IllegalArgumentException](ScriptURL.create("im/relative"))
     }
 
     "rejects a relative file path with .." in {
