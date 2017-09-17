@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+* Lift requirement that a script path must be absolute - support relative paths as well
+  (though relative source maps won't work).
+
 ## 0.5.6 (2017-09-15)
 
 * Return internal properties (`[[Prop]]`) (issue #58):
