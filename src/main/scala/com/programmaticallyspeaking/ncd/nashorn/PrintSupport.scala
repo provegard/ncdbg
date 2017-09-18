@@ -1,8 +1,8 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.PrintMessage
-import com.sun.jdi.{ArrayReference, ClassType, ThreadReference, Value}
 import com.sun.jdi.event.{BreakpointEvent, Event}
+import com.sun.jdi.{ArrayReference, ClassType, ThreadReference, Value}
 import org.slf4s.Logging
 
 object PrintSupport {
@@ -16,10 +16,11 @@ object PrintSupport {
   */
 trait PrintSupport { self: NashornDebuggerHost with Logging =>
 
-  import scala.collection.JavaConverters._
-  import TypeConstants._
   import PrintSupport._
+  import TypeConstants._
   import com.programmaticallyspeaking.ncd.nashorn.mirrors.Mirrors._
+
+  import scala.collection.JavaConverters._
 
   def enablePrintCapture(global: ClassType): Unit = {
     Breakpoints.enableBreakingAtGlobalPrint(global) { breakpointRequests =>
@@ -27,12 +28,11 @@ trait PrintSupport { self: NashornDebuggerHost with Logging =>
     }
   }
 
-  private def eventHandler(ev: Event, maybePausedData: Option[PausedData]): Boolean = {
+  private def eventHandler(ev: Event): Boolean = {
     ev match {
-      case b: BreakpointEvent if maybePausedData.isDefined =>
-        val pausedData = maybePausedData.get
-        implicit val marshaller: Marshaller = pausedData.marshaller
-        implicit val thread: ThreadReference = pausedData.thread
+      case b: BreakpointEvent =>
+        implicit val thread: ThreadReference = b.thread()
+        implicit val marshaller: Marshaller = new Marshaller(MappingRegistry.noop)
 
         // Try to use JSType.toString()
         val jsType = foundWantedTypes.get(NIR_JSType)

@@ -1,10 +1,9 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, Undefined}
+import com.programmaticallyspeaking.ncd.host.types.Undefined
 import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator, PathUtils}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{ObjectPropertiesKey, StackFrameHolder}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
 import com.sun.jdi.request.EventRequest
@@ -20,8 +19,8 @@ import scala.util.{Failure, Success, Try}
 
 
 object NashornDebuggerHost {
-  import TypeConstants._
   import JDIExtensions._
+  import TypeConstants._
 
   val InitialScriptResolveAttempts = 5
 
@@ -116,7 +115,7 @@ object NashornDebuggerHost {
   /**
     * The type of a handler for an event associated with an event request.
     */
-  type EventHandler = (Event, Option[PausedData]) => Boolean
+  type EventHandler = (Event) => Boolean
 
   case class StackFrameImpl(id: String, thisObj: ValueNode, scopeChain: Seq[Scope],
                             breakableLocation: BreakableLocation,
@@ -172,10 +171,11 @@ object NashornDebuggerHost {
 
 class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
     extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport with BreakpointSupport with PauseSupport with PrintSupport {
-  import NashornDebuggerHost._
-  import JDIExtensions._
-  import TypeConstants._
   import Breakpoints._
+  import JDIExtensions._
+  import NashornDebuggerHost._
+  import TypeConstants._
+
   import ExecutionContext.Implicits._
   import scala.collection.JavaConverters._
 
@@ -352,7 +352,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           val req = virtualMachine.eventRequestManager().createMethodExitRequest()
           req.addClassFilter(ciType)
           req.setEnabled(true)
-          beforeEventIsHandled(req) { (_, _) =>
+          beforeEventIsHandled(req) { _ =>
             log.debug(s"Getting source from ${refType.name()} at method exit from ContextCodeInstaller")
             virtualMachine.eventRequestManager().deleteEventRequest(req)
             considerReferenceType(None, refType, InitialScriptResolveAttempts)
@@ -561,14 +561,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       createEnabledStepOverRequest(ev.thread(), isAtDebuggerStatement = false)
     } else {
       log.debug(s"Considering step/method event at ${ev.location()} with byte code: 0x${ev.location().byteCode.toHexString}")
-      doResume = handleBreakpoint(ev, getOrCreatePausedData(ev))
+      doResume = handleBreakpoint(ev, prepareForPausing(ev))
       if (!doResume) infoAboutLastStep = Some(StepLocationInfo.from(ev))
     }
     doResume
-  }
-
-  private def getOrCreatePausedData(ev: LocatableEvent): PausedData = {
-    pausedData.getOrElse(prepareForPausing(ev))
   }
 
   // Creates the PausedData structure
@@ -668,13 +664,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
         try {
           // Invoke any event handler associated with the request for the event.
           val eventIsConsumed = Option(ev.request().getProperty(EventHandlerKey)).exists {
-            case h: EventHandler =>
-              val maybePausedData = ev match {
-                case lev: LocatableEvent => Some(getOrCreatePausedData(lev))
-                case _ => None
-              }
-
-              h(ev, maybePausedData)
+            case h: EventHandler => h(ev)
           }
 
           if (!eventIsConsumed) {
@@ -699,7 +689,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                     removeAnyStepRequest()
                     attemptToResolveSourceLessReferenceTypes(ev.thread())
 
-                    doResume = handleBreakpoint(ev, getOrCreatePausedData(ev))
+                    doResume = handleBreakpoint(ev, prepareForPausing(ev))
                 }
 
               case ev: ClassPrepareEvent =>
@@ -718,7 +708,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                 val exceptionTypeName = ev.exception().referenceType().name()
                 val isECMAException = exceptionTypeName == NIR_ECMAException
                 if (isECMAException) {
-                  val pd = getOrCreatePausedData(ev)
+                  val pd = prepareForPausing(ev)
                   maybeEmitErrorEvent(pd)
                   doResume = handleBreakpoint(ev, pd)
                 } else log.trace(s"Ignoring non-ECMA exception of type $exceptionTypeName")
