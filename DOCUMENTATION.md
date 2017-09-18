@@ -6,7 +6,9 @@
 
 ### Java 9
 
-I've tested running a _debug target_ with Java 9 (JDK build 9-ea+164) and NCDbg running with Java 8 could debug it just fine. I haven't tested building and running NCDbg on Java 9 simply because I couldn't get Gradle to work with Java 9.
+I've tested running a _debug target_ with Java 9 (JDK build 9-ea+164) and NCDbg running with Java 8 could debug it just fine.
+
+Building with Java 9 currently doesn't work. The tests fail, in part due to [JDK-8187143](http://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8187143).
 
 ## The debug target
 
@@ -108,7 +110,8 @@ Consider this code:
 You may not be able to set a breakpoint on the line inside the `seldomCalled`
 function. Functions are by default (__TODO__: figure out since which version) lazily 
 compiled by Nashorn, and if a function hasn't been called yet, its line locations
-don't exist.
+don't exist. NCDbg tries to compensate for this case, so if you encounter it, please
+open an issue!
 
 To turn off lazy compilation (not recommended), run the debug target with
 `-Dnashorn.args=--lazy-compilation=false`.
