@@ -561,10 +561,14 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       createEnabledStepOverRequest(ev.thread(), isAtDebuggerStatement = false)
     } else {
       log.debug(s"Considering step/method event at ${ev.location()} with byte code: 0x${ev.location().byteCode.toHexString}")
-      doResume = handleBreakpoint(ev, currentPausedData)
+      doResume = handleBreakpoint(ev, getOrCreatePausedData(ev))
       if (!doResume) infoAboutLastStep = Some(StepLocationInfo.from(ev))
     }
     doResume
+  }
+
+  private def getOrCreatePausedData(ev: LocatableEvent): PausedData = {
+    pausedData.getOrElse(prepareForPausing(ev))
   }
 
   // Creates the PausedData structure
@@ -584,8 +588,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     pausedData = Some(pd)
     pd
   }
-
-  private def currentPausedData = pausedData.getOrElse(throw new IllegalStateException("Not paused"))
 
   private def cleanupPausing(): Unit = {
 //    pausedData.foreach()
@@ -668,7 +670,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           val eventIsConsumed = Option(ev.request().getProperty(EventHandlerKey)).exists {
             case h: EventHandler =>
               val maybePausedData = ev match {
-                case lev: LocatableEvent => Some(prepareForPausing(lev))
+                case lev: LocatableEvent => Some(getOrCreatePausedData(lev))
                 case _ => None
               }
 
@@ -697,7 +699,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                     removeAnyStepRequest()
                     attemptToResolveSourceLessReferenceTypes(ev.thread())
 
-                    doResume = handleBreakpoint(ev, currentPausedData)
+                    doResume = handleBreakpoint(ev, getOrCreatePausedData(ev))
                 }
 
               case ev: ClassPrepareEvent =>
@@ -716,7 +718,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                 val exceptionTypeName = ev.exception().referenceType().name()
                 val isECMAException = exceptionTypeName == NIR_ECMAException
                 if (isECMAException) {
-                  val pd = currentPausedData
+                  val pd = getOrCreatePausedData(ev)
                   maybeEmitErrorEvent(pd)
                   doResume = handleBreakpoint(ev, pd)
                 } else log.trace(s"Ignoring non-ECMA exception of type $exceptionTypeName")
