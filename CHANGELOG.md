@@ -4,7 +4,7 @@
 
 * Lift requirement that a script path must be absolute - support relative paths as well
   (though relative source maps won't work).
-* Capture calls to Nashorn's `print` extension and send the printed message to DevTools
+* Intercept calls to Nashorn's `print` extension and send the printed message to DevTools
   as a console log message.
 
 ## 0.5.6 (2017-09-15)
