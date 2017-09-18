@@ -343,6 +343,40 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         }
       }
     }
+
+
+    "when ScriptHost emits PrintMessage" - {
+      def testIt(msg: String) = {
+        val runtime = newActorInstance[Runtime]
+        val req = Messages.Request("1", Domain.enable)
+        // First 2 are executionContextCreated and consoleAPICalled
+        receiveScriptEventTriggeredEvents(runtime, Seq(req), Seq(PrintMessage(msg)), 3).last
+      }
+      "should emit Runtime.consoleAPICalled event" in {
+        val event = testIt("hello")
+        event.method should be("Runtime.consoleAPICalled")
+      }
+
+      "should use log level in Runtime.consoleAPICalled" in {
+        withConsoleEventParams(testIt("world")) { p =>
+          p.`type` should be ("log")
+        }
+      }
+
+      "should pass the actual message in Runtime.consoleAPICalled" in {
+        withConsoleEventParams(testIt("world")) { p =>
+          p.args should be (Seq(RemoteObject.forString("world")))
+        }
+      }
+
+    }
+  }
+
+  private def withConsoleEventParams(event: Messages.Event)(f: ConsoleAPICalledEventParams => Unit): Unit = {
+    event.params match {
+      case p: Runtime.ConsoleAPICalledEventParams => f(p)
+      case other => fail("Unexpected: " + other)
+    }
   }
 
   override def createScriptHost(): ScriptHost = {

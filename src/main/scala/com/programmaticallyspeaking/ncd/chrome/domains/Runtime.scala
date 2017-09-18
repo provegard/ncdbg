@@ -169,8 +169,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       emitEvent("Runtime.executionContextCreated",
         ExecutionContextCreatedEventParams(ExecutionContextDescription(StaticExecutionContextId, "top", "top", null)))
 
-      emitEvent("Runtime.consoleAPICalled",
-        ConsoleAPICalledEventParams("log", Seq(RemoteObject.forString("Greetings from ncdbg!")), StaticExecutionContextId, Timestamp.now))
+      consoleLog("Greetings from ncdbg!")
 
     case Runtime.releaseObjectGroup(grp) =>
       log.debug(s"Request to release object group '$grp'")
@@ -229,5 +228,13 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
     case UncaughtError(ev) =>
       // TODO: What do use for exceptionId?
       emitEvent("Runtime.exceptionThrown", ExceptionThrownEventParams(Timestamp.now, ExceptionDetails.fromErrorValue(ev, 1)))
+
+    case PrintMessage(msg) =>
+      consoleLog(msg)
+  }
+
+  private def consoleLog(msg: String) = {
+    emitEvent("Runtime.consoleAPICalled",
+      ConsoleAPICalledEventParams("log", Seq(RemoteObject.forString(msg)), StaticExecutionContextId, Timestamp.now))
   }
 }
