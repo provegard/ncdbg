@@ -1,28 +1,35 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.nashorn.TypeConstants.ScriptRuntime_DEBUGGER
-import com.sun.jdi.ClassType
-import com.sun.jdi.request.EventRequest
+import com.sun.jdi.{ClassType, Location}
+import com.sun.jdi.request.{BreakpointRequest, EventRequest}
 import org.slf4s.Logging
 
 object Breakpoints extends Logging {
   import scala.collection.JavaConverters._
   import com.programmaticallyspeaking.ncd.infra.BetterOption._
+  import com.programmaticallyspeaking.ncd.nashorn.TypeConstants._
 
-  private def enableBreakingAt(theType: ClassType, methodName: String, statementName: String): Unit = {
+  private def breakLocation(theType: ClassType, methodName: String): Either[String, Location] = {
     val typeName = theType.name()
-    val methodLoc = for {
+    for {
       theMethod <- theType.methodsByName(methodName).asScala.headOption.toEither(s"$typeName.$methodName method not found")
       location <- theMethod.allLineLocations().asScala.headOption.toEither(s"no line location found in $typeName.$methodName")
     } yield location
+  }
 
-    methodLoc match {
+  // TODO: BreakableLocation also does this. Reuse code!
+  private def createBreakpointAt(location: Location) = {
+    val br = location.virtualMachine().eventRequestManager().createBreakpointRequest(location)
+    br.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
+    br.setEnabled(true)
+    br
+  }
+
+  private def enableBreakingAt(theType: ClassType, methodName: String, statementName: String): Unit = {
+    breakLocation(theType, methodName) match {
       case Right(location) =>
         log.info(s"Enabling automatic breaking at JavaScript '$statementName' statements")
-        // TODO: BreakableLocation also does this. Reuse code!
-        val br = theType.virtualMachine().eventRequestManager().createBreakpointRequest(location)
-        br.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
-        br.setEnabled(true)
+        createBreakpointAt(location)
       case Left(msg) =>
         log.warn(s"Won't be able to break at JavaScript '$statementName' statements because $msg")
     }
@@ -31,4 +38,17 @@ object Breakpoints extends Logging {
   def enableBreakingAtDebuggerStatement(ct: ClassType): Unit =
     enableBreakingAt(ct, ScriptRuntime_DEBUGGER, "debugger")
 
+  def enableBreakingAtGlobalPrint(ct: ClassType)(handler: Seq[BreakpointRequest] => Unit): Unit = {
+    // Global.println exists, but Nashorn doesn't expose the 'println' function to scripts. Why??
+    (for {
+      l1 <- breakLocation(ct, Global_print)
+//      l2 <- breakLocation(ct, Global_println)
+    } yield Seq(l1)) match {
+      case Right(locs) =>
+        handler(locs.map(createBreakpointAt))
+      case Left(reason) =>
+        log.warn(s"Won't be able to capture Nashorn print output because $reason")
+        handler(Seq.empty)
+    }
+  }
 }

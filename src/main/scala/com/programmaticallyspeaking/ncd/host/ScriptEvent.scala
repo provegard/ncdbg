@@ -35,3 +35,10 @@ case class UncaughtError(error: ErrorValue) extends ScriptEvent
   * identified.
   */
 object InitialInitializationComplete extends ScriptEvent
+
+/**
+  * Emitted when a `print` or `println` statement (Nashorn extension) are encountered in script code.
+  *
+  * @param message the message passed to the print function
+  */
+case class PrintMessage(message: String) extends ScriptEvent

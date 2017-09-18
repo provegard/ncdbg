@@ -130,7 +130,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
         val allRequests = breakpoints ++ Seq(methodEntryRequest, methodExitRequest)
 
         // When we observe an event for a request, clear all the requests (of both types).
-        def eventHandler(ev: Event) = {
+        def eventHandler(ev: Event, ignored: Option[PausedData]) = {
           val erm = virtualMachine.eventRequestManager()
           erm.deleteEventRequests(allRequests.asJava)
           false // don't consume the event
