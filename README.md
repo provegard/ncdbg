@@ -29,7 +29,7 @@ See *build.gradle* for details.
 
 ## Documentation
 
-The documentation is [here](DOCUMENTATION.md).
+Documentation can be found in the _docs_ folder.
 
 ## Contributing
 
