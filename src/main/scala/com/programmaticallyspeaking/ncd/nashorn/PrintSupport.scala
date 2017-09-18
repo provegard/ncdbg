@@ -51,7 +51,9 @@ trait PrintSupport { self: NashornDebuggerHost with Logging =>
           case _ => Seq.empty
         }
 
-        emitEvent(PrintMessage(argStrings.mkString(" ")))
+        val msg = argStrings.mkString(" ")
+        log.debug(s"Intercepted call to 'print' with message '$msg'")
+        emitEvent(PrintMessage(msg))
 
       case other =>
         log.warn("Unexpected event: " + other)

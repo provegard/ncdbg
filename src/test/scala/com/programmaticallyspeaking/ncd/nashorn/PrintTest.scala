@@ -48,6 +48,11 @@ class PrintTest extends UnitTest with PrintTestFixture {
     "handles null" in {
       expectMessage("print(null, 'foo');", "null foo")
     }
+
+    "emits a PrintMessage even if the no-newline version is used" in {
+      useNashornArguments(Seq("print-no-newline"))
+      expectMessage("print('hello world');", "hello world")
+    }
   }
 
   private def expectMessage(script: String, message: String): Unit = {
