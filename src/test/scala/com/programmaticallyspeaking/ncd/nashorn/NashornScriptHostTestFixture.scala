@@ -5,6 +5,7 @@ import com.programmaticallyspeaking.ncd.host.{ExceptionPauseType, ScriptEvent}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
 import com.programmaticallyspeaking.ncd.testing.{SharedInstanceActorTesting, UnitTest}
 import org.scalatest.concurrent.{AbstractPatienceConfiguration, PatienceConfiguration}
+import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.{Millis, Seconds, Span}
 import org.slf4s.Logging
 
@@ -130,6 +131,8 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
         handlerResult match {
           case Success(r) => r
           case Failure(_: TimeoutException) =>
+            throw new TimeoutException("Timed out waiting for result. Progress:\n" + summarizeProgress())
+          case Failure(_: TestFailedDueToTimeoutException) =>
             throw new TimeoutException("Timed out waiting for result. Progress:\n" + summarizeProgress())
           case Failure(t) => throw t
         }
