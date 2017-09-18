@@ -428,8 +428,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     } else None
   }
 
-  private def looksAbsolute(path: String) = path.startsWith("/") || path.contains(':')
-
   private def watchAddedClasses(): Unit = {
     val request = virtualMachine.eventRequestManager().createClassPrepareRequest()
     request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
