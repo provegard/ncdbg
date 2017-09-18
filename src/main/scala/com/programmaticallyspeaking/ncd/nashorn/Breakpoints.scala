@@ -39,11 +39,11 @@ object Breakpoints extends Logging {
     enableBreakingAt(ct, ScriptRuntime_DEBUGGER, "debugger")
 
   def enableBreakingAtGlobalPrint(ct: ClassType)(handler: Seq[BreakpointRequest] => Unit): Unit = {
-    // Global.println exists, but Nashorn doesn't expose the 'println' function to scripts. Why??
+    // Global.print exists, but what is it used for??
     (for {
-      l1 <- breakLocation(ct, Global_print)
-//      l2 <- breakLocation(ct, Global_println)
-    } yield Seq(l1)) match {
+//      l1 <- breakLocation(ct, Global_print)
+      l2 <- breakLocation(ct, Global_println)
+    } yield Seq(l2)) match {
       case Right(locs) =>
         handler(locs.map(createBreakpointAt))
       case Left(reason) =>
