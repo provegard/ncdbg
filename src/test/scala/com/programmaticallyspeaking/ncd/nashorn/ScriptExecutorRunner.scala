@@ -24,7 +24,7 @@ import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 object ScriptExecutorRunner {
-  case class Start(javaHome: Option[String], timeout: FiniteDuration)
+  case class Start(javaHome: Option[String], extraArgs: Seq[String], timeout: FiniteDuration)
   case class Started(host: NashornScriptHost)
   case class StartError(progress: String, error: Option[Throwable])
 
@@ -121,8 +121,8 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
   }
 
   override def receive: Receive = common orElse {
-    case Start(javaHome, timeout) =>
-      Try(launchVm(javaHome)) match {
+    case Start(javaHome, extraArgs, timeout) =>
+      Try(launchVm(javaHome, extraArgs)) match {
         case Success(vm) =>
           virtualMachine = vm
           // Save for later use
@@ -229,7 +229,7 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
     vmStdinWriter.println(dataToSend)
   }
 
-  private def launchVm(javaHome: Option[String]): VirtualMachine = {
+  private def launchVm(javaHome: Option[String], extraNashornArgs: Seq[String]): VirtualMachine = {
     val conn = findLaunchingConnector()
     val args = conn.defaultArguments()
     val homeArg = args.get("home")
@@ -249,7 +249,8 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
 
     val className = scriptExecutor.getClass.getName.replaceAll("\\$$", "")
     val mainArg = args.get("main")
-    mainArg.setValue(s"""-Dnashorn.args=--language=es6 -cp "$cp" $className""")
+    val nashornArgs = (Seq("language=es6") ++ extraNashornArgs).map(prefixAsArg).mkString(" ")
+    mainArg.setValue(s""""-Dnashorn.args=$nashornArgs" -cp "$cp" $className""")
 
     val vm = conn.launch(args)
 
@@ -262,6 +263,8 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
     waitUntilStarted(vm)
     vm
   }
+
+  private def prefixAsArg(x: String) = if (x.startsWith("--")) x else "--" + x
 
   private def waitUntilStarted(vm: VirtualMachine): Unit = {
     var attempts = 5

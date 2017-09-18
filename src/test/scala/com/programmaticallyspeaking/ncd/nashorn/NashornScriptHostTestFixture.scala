@@ -54,21 +54,32 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
 
   protected def javaHome: Option[String] = None
 
+  private var extraArgs: Seq[String] = Seq.empty
+  private var runningExtraArgs: Seq[String] = Seq.empty
+
+  protected def useNashornArguments(args: Seq[String]) = {
+    extraArgs = args
+  }
+
   protected def stopRunner(): Unit = {
     Option(runner).foreach { r =>
       r ! ScriptExecutorRunner.Stop
     }
     runner = null
     host = null
+    runningExtraArgs = Seq.empty
   }
 
   protected def startRunnerIfNecessary() = {
     if (runner == null) {
       runner = system.actorOf(Props(new ScriptExecutorRunner(scriptExecutor)))
       val inbox = Inbox.create(system)
-      inbox.send(runner, ScriptExecutorRunner.Start(javaHome, runVMTimeout))
+      inbox.send(runner, ScriptExecutorRunner.Start(javaHome, extraArgs, runVMTimeout))
       inbox.receive(runnerTimeout) match {
-        case ScriptExecutorRunner.Started(theHost) => host = theHost
+        case ScriptExecutorRunner.Started(theHost) =>
+          host = theHost
+          // Save the extraArgs that are running now
+          runningExtraArgs = extraArgs
         case ScriptExecutorRunner.StartError(progress, err) =>
           // The runner should stop itself - clear our ref so that we'll re-create it next time
           runner = null
@@ -87,6 +98,12 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
 
   protected def executeScript[R](script: String, observer: Observer[ScriptEvent], handler: (NashornScriptHost) => Future[R]): R = {
     assert(runner != null, "Runner is unset")
+
+    if (extraArgs != runningExtraArgs) {
+      log.info(s"Restarting VM before test since args ($extraArgs) differs from current ones ($runningExtraArgs).")
+      stopRunner()
+      startRunnerIfNecessary()
+    }
 
     // If the handle throws, we won't even send the script. The handler returns a Future, and it ought to be safe to
     // invoke it before we pass the script, because it cannot rely on the exact order of things so it must react to
