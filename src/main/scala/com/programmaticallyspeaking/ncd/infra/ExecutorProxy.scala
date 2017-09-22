@@ -64,7 +64,7 @@ class ExecutorProxy(executor: Executor) {
             val sb = new StringBuilder(s"Timed out waiting for '$desc' to complete. Calls at entry: ${other.mkString("'", "', '", "'")}. Stack:\n")
             appendStackTraces(sb)
             log.debug(sb.toString())
-            throw new TimeoutException("Timed out waiting for '$desc' to complete.")
+            throw new TimeoutException(s"Timed out waiting for '$desc' to complete.")
         } finally {
           // Done with this call
           awaitingCalls -= id
