@@ -88,7 +88,9 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
       unsubscribeAll()
       Option(logSubscription).foreach(_.unsubscribe())
       Option(vmStdinWriter).foreach(_.close())
-      Option(host).foreach(_.virtualMachine.process().destroy())
+      try Option(host).foreach(_.virtualMachine.process().destroy()) catch {
+        case NonFatal(t) => log.error("Failed to destroy process", t)
+      }
       context.stop(self)
 
     case GetProgress =>
