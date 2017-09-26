@@ -340,20 +340,21 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       log.debug(s"Ignoring script because it contains evaluated code")
       None
     case Success(Left(NoScriptReason.NoSource)) if attemptsLeft > 1 => // hm, was previously 2. Why??
-      val contextCodeInstallerType =
-        maybeThread.flatMap(t => t.frames.asScala.view.map(f => f.location().method().declaringType()).find(_.name().contains("Context$ContextCodeInstaller")))
-      contextCodeInstallerType match {
+      val installPhaseType =
+        maybeThread.flatMap(t => t.frames.asScala.view.map(f => f.location().method().declaringType()).find(_.name().endsWith("$InstallPhase")))
+      installPhaseType match {
         case Some(ciType) =>
-          log.debug(s"Will get source from ${refType.name()} via ContextCodeInstaller")
-          // Let the current method exit in order to hold of the source. This logic is based on the observation that
-          // we see the ClassPrepareEvent event inside Context$ContextCodeInstaller, on this line:
-          //     Field sourceField = clazz.getDeclaredField(CompilerConstants.SOURCE.symbolName());
-          // The actual setting of the source happens a few steps later.
+          log.debug(s"Will get source from ${refType.name()} when InstallPhase is complete")
+          // Let the stack unwind a bit in order to get hold of the source. This logic is based on the observation that
+          // we see the ClassPrepareEvent event inside Context$ContextCodeInstaller (in Java 9, one of its subclasses).
+          // In Java 8, it's the initialize method, in Java 9 it's the install method. The source isn't set until in
+          // the initialize method, so the safest approach is to wait until the entire install phase (InstallPhase type)
+          // is complete.
           val req = virtualMachine.eventRequestManager().createMethodExitRequest()
           req.addClassFilter(ciType)
           req.setEnabled(true)
           beforeEventIsHandled(req) { _ =>
-            log.debug(s"Getting source from ${refType.name()} at method exit from ContextCodeInstaller")
+            log.debug(s"Getting source from ${refType.name()} at method exit from InstallPhase")
             virtualMachine.eventRequestManager().deleteEventRequest(req)
             considerReferenceType(None, refType, InitialScriptResolveAttempts)
             true // consume the event
