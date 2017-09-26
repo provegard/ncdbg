@@ -10,11 +10,7 @@ version gitVersion()
 apply plugin: 'scala'
 apply plugin: 'application'
 
-def jdkHome = System.getenv("JAVA_HOME")
-
-if (jdkHome == null || "".equals(jdkHome)) {
-    throw new RuntimeException("JAVA_HOME is not set")
-}
+def toolsJar = org.gradle.internal.jvm.Jvm.current().toolsJar
 
 sourceCompatibility = 1.8
 
@@ -62,7 +58,9 @@ dependencies {
     testCompile group: 'org.mockito', name: 'mockito-core', version: '2.2.27'
     testCompile group: 'org.java-websocket', name: 'Java-WebSocket', version: '1.3.0'
 
-    compile files("$jdkHome/lib/tools.jar")
+    if (toolsJar != null) {
+        compile files(toolsJar)
+    }
 
     compile group: 'ch.qos.logback', name: 'logback-classic', version: logbackVersion
 
@@ -90,10 +88,12 @@ startScripts {
     doLast {
         def windowsScriptFile = file getWindowsScript()
         def unixScriptFile    = file getUnixScript()
-        windowsScriptFile.text = windowsScriptFile.text.replace('%APP_HOME%\\lib\\tools.jar', '%JAVA_HOME%\\lib\\tools.jar')
-        // If JAVA_HOME is a Windows path (e.g. under MinGW), we need to remove the colon (since that's the class path
-        // separator) and prefix with a slash to make Java understand that it's a path. This has been tested in
-        // Windows with Git Bash (MINGW64) and in Linux.
-        unixScriptFile.text  = unixScriptFile.text.replace('$APP_HOME/lib/tools.jar', '/${JAVA_HOME/:/}/lib/tools.jar')
+        if (toolsJar != null) {
+            windowsScriptFile.text = windowsScriptFile.text.replace('%APP_HOME%\\lib\\tools.jar', '%JAVA_HOME%\\lib\\tools.jar')
+            // If JAVA_HOME is a Windows path (e.g. under MinGW), we need to remove the colon (since that's the class path
+            // separator) and prefix with a slash to make Java understand that it's a path. This has been tested in
+            // Windows with Git Bash (MINGW64) and in Linux.
+            unixScriptFile.text  = unixScriptFile.text.replace('$APP_HOME/lib/tools.jar', '/${JAVA_HOME/:/}/lib/tools.jar')
+        }
     }
 }
