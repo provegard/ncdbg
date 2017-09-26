@@ -7,6 +7,7 @@
 * Intercept calls to Nashorn's `print` extension and send the printed message to DevTools
   as a console log message.
 * Handle GC better during code evaluation (issue #62)
+* Initial support for building with Java 9 (issue #67)
 
 ## 0.5.6 (2017-09-15)
 
