@@ -139,8 +139,9 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
           // if changed in stack frame 2/3: 010 = 2
           // if changed in stack frame 3/3: 001 = 1
           sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "result", None, None, None)) match {
-            case EvaluateOnCallFrameResult(ro, _) =>
-              ro should be (RemoteObject.forNumber(1.0))
+            case EvaluateOnCallFrameResult(RemoteObject("number", _, _, _, Some(numValue), _, _, _), _) =>
+              // Java 9 returns an int, Java 9 a double
+              numValue.toString.toDouble should be (1.0d)
             case other => fail("Unexpected result: " + other)
           }
         }
