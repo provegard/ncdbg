@@ -12,12 +12,12 @@ class CodeEval(typeLookup: TypeLookup, preventGC: (Value, Lifecycle.EnumVal) => 
   }
 
   private def eval(thisObject: Value, scopeObject: Value, code: String, lifecycle: Lifecycle.EnumVal, attemptsLeft: Int)(implicit thread: ThreadReference): Value = {
-    val v = DebuggerSupport_eval_custom(thisObject, scopeObject, code)
     try {
+      val v = DebuggerSupport_eval_custom(thisObject, scopeObject, code)
       preventGC(v, lifecycle)
       v
     } catch {
-      case e: ObjectCollectedException if attemptsLeft > 0 =>
+      case _: ObjectCollectedException if attemptsLeft > 0 =>
         eval(thisObject, scopeObject, code, lifecycle, attemptsLeft - 1)
     }
   }

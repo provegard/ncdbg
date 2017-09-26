@@ -6,6 +6,7 @@
   (though relative source maps won't work).
 * Intercept calls to Nashorn's `print` extension and send the printed message to DevTools
   as a console log message.
+* Handle GC better during code evaluation (issue #62)
 
 ## 0.5.6 (2017-09-15)
 
