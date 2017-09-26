@@ -23,7 +23,6 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
     ("concatenated string via argument", "(function (arg) { return 'hello ' + arg;  }).call(null, 'world')", SimpleValue("hello world")),
     ("integer value", "42", SimpleValue(42)),
     ("floating-point value", "42.5", SimpleValue(42.5d)),
-    ("actual Java float", "java.lang.Float.valueOf(42.5)", SimpleValue(42.5f)),
     ("actual Java char", "java.lang.Character.valueOf('f')", SimpleValue('f')),
     ("actual Java short", "java.lang.Short.valueOf(42)", SimpleValue(42.asInstanceOf[Short])),
     ("actual Java byte", "java.lang.Byte.valueOf(42)", SimpleValue(42.asInstanceOf[Byte])),
@@ -63,6 +62,16 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
         inside(actual) {
           case DateNode(str, _) =>
             str should fullyMatch regex "Sat Jan 21 2017 00:00:00 [A-Z]{3}[0-9+]{5} (.*)"
+        }
+      }
+    }
+
+    "actual Java float" in {
+      evaluateExpression("java.lang.Float.valueOf(42.5)") { (_, actual) =>
+        // Java 8 and Java 9 behave differently.
+        inside(actual) {
+          case SimpleValue(f: Float) => f should be (42.5f)
+          case SimpleValue(d: Double) => d should be (42.5d)
         }
       }
     }
