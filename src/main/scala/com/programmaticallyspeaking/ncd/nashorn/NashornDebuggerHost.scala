@@ -281,7 +281,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     def shouldEnable(bl: BreakableLocation) = lineNumbersOfEnabled.contains(bl.scriptLocation.lineNumber1Based)
 
     breakableLocations.filter(shouldEnable).foreach { bl =>
-      log.debug(s"Auto-enabling breakable location $bl since it's on the same line as a currently enabled one.")
+      val loc = bl.location.map(" (" + _ + ")").getOrElse("")
+      log.debug(s"Auto-enabling breakable location $bl$loc since it's on the same line as a currently enabled one.")
       bl.enable()
     }
 
