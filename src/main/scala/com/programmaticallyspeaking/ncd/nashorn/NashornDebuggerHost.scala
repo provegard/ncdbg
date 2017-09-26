@@ -354,6 +354,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           val req = virtualMachine.eventRequestManager().createMethodExitRequest()
           req.addClassFilter(ciType)
           req.setEnabled(true)
+          req.addThreadFilter(maybeThread.get) // .get is safe here, since installPhaseType is defined
           beforeEventIsHandled(req) { _ =>
             log.debug(s"Getting source from ${refType.name()} at method exit from InstallPhase")
             virtualMachine.eventRequestManager().deleteEventRequest(req)
