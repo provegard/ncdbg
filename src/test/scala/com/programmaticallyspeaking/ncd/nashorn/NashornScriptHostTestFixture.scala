@@ -174,6 +174,7 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
 
   protected def getHost = Option(host).getOrElse {
     startRunnerIfNecessary()
+    if (host == null) throw new RuntimeException("Failed to start runner & get host instance")
     host
   }
 }
