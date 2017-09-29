@@ -203,8 +203,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     */
   private var classesToScan = List.empty[ReferenceType]
 
-  private val scriptTypesToBreakRetryCycleFor = ListBuffer[ReferenceType]()
-
   // Data that are defined when the VM has paused on a breakpoint or encountered a step event
   protected var pausedData: Option[PausedData] = None
 
