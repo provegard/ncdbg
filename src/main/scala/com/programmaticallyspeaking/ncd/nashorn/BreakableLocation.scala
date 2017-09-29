@@ -38,6 +38,8 @@ class BreakableLocation private(val script: Script, eventRequestManager: EventRe
   private var _isEnabled = false
   def isEnabled = _isEnabled
 
+  def isPlaceholder = location.isEmpty
+
   /**
     * Instructs the VM to break at this location. Won't actually set a breakpoint if the location is unknown
     * (i.e. if this BreakableLocation is a placehoilder), though [[isEnabled]] will return true.
@@ -63,7 +65,7 @@ class BreakableLocation private(val script: Script, eventRequestManager: EventRe
 //  def toBreakpoint(id: String) = Breakpoint(id, script.id, Some(script.url), scriptLocation)
 
   override def toString: String = {
-    val candidateStr = location.map(_ => "").getOrElse(" (placeholder)")
+    val candidateStr = location.map(l => s" ($l)").getOrElse(" (placeholder)")
     script.id + "/" + scriptLocation.toString + candidateStr
   }
 }
