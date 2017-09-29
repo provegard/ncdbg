@@ -304,25 +304,25 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     breakableLocations ++ lineNumbers.map(line => new BreakableLocation(script, erm, line))
   }
 
-  private def registerScript(script: Script, scriptPath: String, locations: Seq[Location]): Unit = {
+  private def registerScript(script: Script, locations: Seq[Location]): Unit = {
     val isKnownScript = breakableLocationsByScriptUrl.contains(script.url.toString)
 
     addBreakableLocations(script, gatherBreakableLocations(script, locations))
 
     if (isKnownScript) {
-      log.debug(s"Reusing script with URI '${script.url}' for script path '$scriptPath'")
+      log.debug(s"Script with URI '${script.url}' is already known")
     } else {
       // Reason for logging double at different levels: info typically goes to the console, debug to the log file.
-      log.debug(s"Adding script at path '$scriptPath' with ID '${script.id}', URI '${script.url}' and hash '${script.contentsHash()}'")
+      log.debug(s"Adding script with ID '${script.id}', URI '${script.url}' and hash '${script.contentsHash()}'")
       log.info(s"Adding script with URI '${script.url}'")
       emitEvent(ScriptAdded(script))
     }
   }
 
   private def handleScriptResult(maybeThread: Option[ThreadReference], result: Try[Either[NoScriptReason.EnumVal, Script]],
-                                 refType: ReferenceType, scriptPath: String, locations: Seq[Location]): Option[Script] = result match {
+                                 refType: ReferenceType, locations: Seq[Location]): Option[Script] = result match {
     case Success(Right(script)) =>
-      registerScript(script, scriptPath, locations)
+      registerScript(script, locations)
       Some(script)
     case Success(Left(NoScriptReason.EvaluatedCode)) =>
       log.debug(s"Ignoring script because it contains evaluated code")
@@ -355,7 +355,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           None
       }
     case Failure(t) =>
-      log.error(s"Ignoring script at path '$scriptPath'", t)
+      log.error(s"Ignoring script type $refType", t)
       None
   }
 
@@ -394,7 +394,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               // source instead of the real source.
               val scriptPath = scriptPathFromLocation(firstLocation)
               val triedScript = Try(scriptFromEval(refType, scriptPath))
-              handleScriptResult(thread, triedScript, refType, scriptPath, locations)
+              handleScriptResult(thread, triedScript, refType, locations)
 
             case None =>
               log.debug(s"Ignoring script type '${refType.name} because it has no line locations.")
