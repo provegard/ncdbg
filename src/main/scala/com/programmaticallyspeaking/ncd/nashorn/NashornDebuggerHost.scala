@@ -354,9 +354,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           log.warn(s"Cannot get source from ${refType.name()}.")
           None
       }
-    case Success(Left(NoScriptReason.NoSource)) =>
-      log.warn(s"Giving up on getting source from ${refType.name()}.")
-      None
     case Failure(t) =>
       log.error(s"Ignoring script at path '$scriptPath'", t)
       None
