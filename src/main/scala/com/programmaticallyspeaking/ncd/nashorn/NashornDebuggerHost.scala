@@ -923,13 +923,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       // different from the one stored in a BreakableLocation.
       val id = ScriptIdentity.fromURL(script.url)
       findBreakableLocationsAtLine(id, location.lineNumber()).flatMap { bls =>
-        bls.find(_.location.contains(location)).orElse(bls.find(bl => sameMethodAndLine(bl.location, location)))
+        bls.find(_.location.contains(location)).orElse(bls.find(bl => location.sameMethodAndLineAs(bl.location)))
       }
     }
-  }
-
-  private def sameMethodAndLine(l1: Option[Location], l2: Location): Boolean = {
-    l1.exists(l => l.method() == l2.method() && l.lineNumber() == l2.lineNumber())
   }
 
   protected def findActiveBreakpoint(location: Location): Option[ActiveBreakpoint] = {
