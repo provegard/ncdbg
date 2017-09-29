@@ -1,6 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.ScopeType
+import com.programmaticallyspeaking.ncd.infra.ScriptURL
 import com.sun.jdi._
 
 import scala.language.implicitConversions
@@ -33,6 +34,28 @@ object JDIExtensions {
 
     def sameMethodAndLineAs(other: Option[Location]): Boolean =
       other.exists(l => l.method() == location.method() && l.lineNumber() == location.lineNumber())
+
+    def scriptURL: ScriptURL = ScriptURL.create(scriptPath)
+    private lazy val scriptPath: String = {
+      // It appears *name* is a path on the form 'file:/c:/...', whereas path has a namespace prefix
+      // (jdk\nashorn\internal\scripts\). This seems to be consistent with the documentation (although it's a bit
+      // surprising), where it is stated that the Java stratum doesn't use source paths and a path therefore is a
+      // package-qualified file name in path form, whereas name is the unqualified file name (e.g.:
+      // java\lang\Thread.java vs Thread.java).
+      val path = location.sourceName()
+      if (path == "<eval>") {
+        // For evaluated scripts, convert the type name into something that resembles a file URI.
+        val typeName = location.declaringType().name()
+        "eval:/" + typeName
+          .replace("jdk.nashorn.internal.scripts.", "")
+          .replace('.', '/')
+          .replace('\\', '/')
+          .replaceAll("[$^_]", "")
+          .replaceFirst("/eval/?$", "")
+      } else {
+        path // keep it simple
+      }
+    }
 
   }
 

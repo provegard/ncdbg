@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.Undefined
-import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator, PathUtils}
+import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator, PathUtils, ScriptURL}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
@@ -168,7 +168,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   import ExecutionContext.Implicits._
   import scala.collection.JavaConverters._
 
-  private val scriptByPath = mutable.Map[String, Script]()
+  private val scriptByURL = mutable.Map[ScriptURL, Script]()
 
   protected val breakableLocationsByScriptUrl = mutable.Map[String, Seq[BreakableLocation]]()
 
@@ -277,10 +277,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     breakableLocationsByScriptUrl(script.url.toString) = newList
   }
 
-  private def scriptFromEval(refType: ReferenceType, scriptPath: String): Either[NoScriptReason.EnumVal, Script] = {
+  private def scriptFromEval(refType: ReferenceType, scriptURL: ScriptURL): Either[NoScriptReason.EnumVal, Script] = {
     refType.shamelesslyExtractEvalSourceFromPrivatePlaces().map { src =>
       if (src.contains(EvaluatedCodeMarker)) Left(NoScriptReason.EvaluatedCode)
-      else Right(getOrAddEvalScript(scriptPath, src))
+      else Right(getOrAddEvalScript(scriptURL, src))
     }.getOrElse(Left(NoScriptReason.NoSource))
   }
 
@@ -392,8 +392,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               // Note that we no longer try to use the script path for reading the source. If the script contains a
               // sourceURL annotation, Nashorn will use that at script path, so we might end up reading CoffeeScript
               // source instead of the real source.
-              val scriptPath = scriptPathFromLocation(firstLocation)
-              val triedScript = Try(scriptFromEval(refType, scriptPath))
+              val scriptURL = firstLocation.scriptURL
+              val triedScript = Try(scriptFromEval(refType, scriptURL))
               handleScriptResult(thread, triedScript, refType, locations)
 
             case None =>
@@ -804,61 +804,42 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def scriptPathFromLocation(location: Location): String = {
-    // It appears *name* is a path on the form 'file:/c:/...', whereas path has a namespace prefix
-    // (jdk\nashorn\internal\scripts\). This seems to be consistent with the documentation (although it's a bit
-    // surprising), where it is stated that the Java stratum doesn't use source paths and a path therefore is a
-    // package-qualified file name in path form, whereas name is the unqualified file name (e.g.:
-    // java\lang\Thread.java vs Thread.java).
-    val path = location.sourceName()
-    if (path == "<eval>") {
-      // For evaluated scripts, convert the type name into something that resembles a file URI.
-      val typeName = location.declaringType().name()
-      "eval:/" + typeName
-        .replace("jdk.nashorn.internal.scripts.", "")
-        .replace('.', '/')
-        .replace('\\', '/')
-        .replaceAll("[$^_]", "")
-        .replaceFirst("/eval/?$", "")
-    } else {
-      path // keep it simple
-    }
-  }
-
-  private def getOrAddEvalScript(artificialPath: String, source: String): Script = {
-    val newScript = ScriptImpl.fromSource(artificialPath, source, scriptIdGenerator.next)
+  private def getOrAddEvalScript(scriptURL: ScriptURL, source: String): Script = {
+    val newScript = ScriptImpl.fromSource(scriptURL, source, scriptIdGenerator.next)
 
     // For a recompilation, we will (most likely) already have the original script that was recompiled (recompilation
     // happens for example when a function inside the eval script is called with known types). We find the original
     // script by comparing contents hashes. If we find the original script, we just discard the new one and use the
     // original.
-    scriptByPath.values.find(_.contentsHash() == newScript.contentsHash()) match {
+    scriptByURL.values.find(_.contentsHash() == newScript.contentsHash()) match {
       case Some(scriptWithSameSource) =>
-        // Note that we add a map entry for the original script with the new path as key. This way we'll find our
-        // reused script using all its "alias paths".
+        // Note that we add a map entry for the original script with the new URL as key. This way we'll find our
+        // reused script using all its "alias URLs".
         // Note 2: I worry that comparing contents hashes isn't enough - that we need to verify no overlapping
         // line locations also. But we don't have locations here, and I don't want to do too much defensive coding.
-        scriptByPath += (artificialPath -> scriptWithSameSource)
+        scriptByURL += (scriptURL -> scriptWithSameSource)
         scriptWithSameSource
       case None =>
-        scriptByPath.get(artificialPath) match {
+        scriptByURL.get(scriptURL) match {
           case Some(_) =>
-            // This is a new script with new contents but with the same path as an old one - it is likely a script
+            // This is a new script with new contents but with the same URL as an old one - it is likely a script
             // that has been reloaded via Nashorn's 'load' function.
             // The choice of using the ID as suffix is pretty arbitrary - it could also be a sequence number.
             val newId = scriptIdGenerator.next
-            val newPath = PathUtils.insertNameSuffix(artificialPath, "_" + newId)
+            //TODO: Don't use PathUtils here, it's URL now
+            val newURLString = PathUtils.insertNameSuffix(scriptURL.toString, "_" + newId)
+            val newURL = ScriptURL.create(newURLString)
 
-            val replacement = ScriptImpl.fromSource(newPath, source, newId)
-            scriptByPath.getOrElseUpdate(newPath, replacement)
+            val replacement = ScriptImpl.fromSource(newURL, source, newId)
+            scriptByURL.getOrElseUpdate(newURL, replacement)
 
           case None =>
-            scriptByPath.getOrElseUpdate(artificialPath, newScript)
+            scriptByURL.getOrElseUpdate(scriptURL, newScript)
         }
     }
   }
 
-  override def scripts: Seq[Script] = scriptByPath.values.toSeq
+  override def scripts: Seq[Script] = scriptByURL.values.toSeq
 
   override def findScript(id: ScriptIdentity): Option[Script] = {
     val predicate = id match {
@@ -880,7 +861,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   }
 
   protected def findBreakableLocation(location: Location): Option[BreakableLocation] = {
-    scriptByPath.get(scriptPathFromLocation(location)).flatMap { script =>
+    scriptByURL.get(location.scriptURL).flatMap { script =>
       // There may be multiple breakable locations for the same line (even in the same method - e.g. for a 'while'
       // statement that is last in a method). Try to find an exact match first, then fall back to finding a location
       // on the correct line. The fallback is necessary since the passed-in Location may have a code index that is
