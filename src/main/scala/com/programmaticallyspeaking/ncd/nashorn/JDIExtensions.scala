@@ -30,6 +30,10 @@ object JDIExtensions {
 
     private lazy val lineOfLastLocation = location.method().allLineLocations().asScala.last.lineNumber()
     def isLastLineInFunction: Boolean = location.lineNumber() == lineOfLastLocation
+
+    def sameMethodAndLineAs(other: Option[Location]): Boolean =
+      other.exists(l => l.method() == location.method() && l.lineNumber() == location.lineNumber())
+
   }
 
   class ExtValue(v: Value) {
