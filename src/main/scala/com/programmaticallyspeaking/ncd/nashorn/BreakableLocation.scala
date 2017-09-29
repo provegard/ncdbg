@@ -25,7 +25,8 @@ object BreakableLocation {
   * @param eventRequestManager [[EventRequestManager]] instance for creating/removing a breakpoint
   * @param location the location
   */
-class BreakableLocation private(val script: Script, eventRequestManager: EventRequestManager, val scriptLocation: ScriptLocation, val location: Option[Location]) {
+class BreakableLocation private(val script: Script, eventRequestManager: EventRequestManager, val scriptLocation: ScriptLocation, location: Option[Location]) {
+  import JDIExtensions._
 
   def this(script: Script, eventRequestManager: EventRequestManager, location: Location) =
     this(script, eventRequestManager, BreakableLocation.scriptLocationFromScriptAndLocation(script, location), Some(location))
@@ -39,6 +40,9 @@ class BreakableLocation private(val script: Script, eventRequestManager: EventRe
   def isEnabled = _isEnabled
 
   def isPlaceholder = location.isEmpty
+
+  def hasLocation(l: Location): Boolean = location.contains(l)
+  def sameMethodAndLineAs(l: Location): Boolean = l.sameMethodAndLineAs(location)
 
   /**
     * Instructs the VM to break at this location. Won't actually set a breakpoint if the location is unknown

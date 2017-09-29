@@ -114,7 +114,6 @@ object NashornDebuggerHost {
     val scriptId = breakableLocation.script.id
     val scriptURL = breakableLocation.script.url
     val location = breakableLocation.scriptLocation
-    val nativeLocation = breakableLocation.location
   }
 
   object ExceptionType {
@@ -891,7 +890,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       // different from the one stored in a BreakableLocation.
       val id = ScriptIdentity.fromURL(script.url)
       findBreakableLocationsAtLine(id, location.lineNumber()).flatMap { bls =>
-        bls.find(_.location.contains(location)).orElse(bls.find(bl => location.sameMethodAndLineAs(bl.location)))
+        bls.find(_.hasLocation(location)).orElse(bls.find(_.sameMethodAndLineAs(location)))
       }
     }
   }
@@ -1098,11 +1097,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
         // Get the Location of the stack frame to pop
         pd.stackFrames.find(_.id == stackFrameId) match {
           case Some(sf: StackFrameImpl) =>
-            val location = sf.nativeLocation
-
             // Now get the current stack frame list and identify the correct target. This is needed since the old
             // stack frame list isn't valid anymore (due to thread resume due to marshalling).
-            pd.thread.frames().asScala.find(f => location.contains(f.location())) match {
+            pd.thread.frames().asScala.find(f => sf.breakableLocation.hasLocation(f.location())) match {
               case Some(jdiStackFrame) =>
                 log.debug(s"Popping stack frame at location ${jdiStackFrame.location()}")
 
@@ -1117,7 +1114,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                 pd.stackFrames.span(_ ne sf)._2.tail
 
               case None =>
-                throw new IllegalArgumentException("Unknown stack frame location: " + location)
+                throw new IllegalArgumentException("Unknown stack frame location: " + sf.breakableLocation)
             }
           case _ =>
             val availableIdsAsString = pd.stackFrames.map(_.id).mkString(", ")
