@@ -603,7 +603,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
 class DebuggerObjectTest extends UnitTest {
 
-  def originalScript(source: String, path: String, id: String) = ScriptImpl.fromSource(path, source, id)
+  def originalScript(source: String, path: String, id: String) = ScriptImpl.fromSource(ScriptURL.create(path), source, id)
 
   def fakeFileReader(contents: Map[File, String]) = new FileReader {
     override def read(file: File, charset: Charset): Try[String] = {

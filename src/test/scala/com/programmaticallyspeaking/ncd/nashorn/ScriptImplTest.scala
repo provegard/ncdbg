@@ -5,10 +5,13 @@ import com.programmaticallyspeaking.ncd.testing.UnitTest
 
 class ScriptImplTest extends UnitTest {
 
+  def fromSource(path: String, source: String, id: String) =
+    ScriptImpl.fromSource(ScriptURL.create(path), source, id)
+
   "ScriptImpl" - {
     "fromSource" - {
       "should do URL conversion" in {
-        val script = ScriptImpl.fromSource("/some/script.js", "return null;", "a1")
+        val script = fromSource("/some/script.js", "return null;", "a1")
         script.url.toString should be ("file:///some/script.js")
       }
     }
@@ -21,7 +24,7 @@ class ScriptImplTest extends UnitTest {
             |var x = 5;
             |//# sourceURL=/path/to/script.coffee
           """.stripMargin
-        val script = ScriptImpl.fromSource("/some/script.js", source, "a1")
+        val script = fromSource("/some/script.js", source, "a1")
         script.sourceUrl() should be (Some(ScriptURL.create("/path/to/script.coffee")))
       }
 
@@ -31,7 +34,7 @@ class ScriptImplTest extends UnitTest {
             |var x = 5;
             |//# sourceURL=script.coffee
           """.stripMargin
-        val script = ScriptImpl.fromSource("/some/script.js", source, "a1")
+        val script = fromSource("/some/script.js", source, "a1")
         script.sourceUrl() should be (Some(ScriptURL.create("/some/script.coffee")))
       }
     }
@@ -44,7 +47,7 @@ class ScriptImplTest extends UnitTest {
             |var x = 5;
             |//# sourceMappingURL=/path/to/script.js.map
           """.stripMargin
-        val script = ScriptImpl.fromSource("/some/script.js", source, "a1")
+        val script = fromSource("/some/script.js", source, "a1")
         script.sourceMapUrl() should be (Some(ScriptURL.create("/path/to/script.js.map")))
       }
 
@@ -54,7 +57,7 @@ class ScriptImplTest extends UnitTest {
             |var x = 5;
             |//# sourceMappingURL=script.js.map
           """.stripMargin
-        val script = ScriptImpl.fromSource("/some/script.js", source, "a1")
+        val script = fromSource("/some/script.js", source, "a1")
         script.sourceMapUrl() should be (Some(ScriptURL.create("/some/script.js.map")))
       }
     }
@@ -63,12 +66,12 @@ class ScriptImplTest extends UnitTest {
       val source = "var x = 5;"
 
       "returns an existing line" in {
-        val script = ScriptImpl.fromSource("/some/script.js", source, "a1")
+        val script = fromSource("/some/script.js", source, "a1")
         script.sourceLine(1) should be (Some("var x = 5;"))
       }
 
       "returns None for a non-existent line" in {
-        val script = ScriptImpl.fromSource("/some/script.js", source, "a1")
+        val script = fromSource("/some/script.js", source, "a1")
         script.sourceLine(2) should be ('empty)
       }
     }
