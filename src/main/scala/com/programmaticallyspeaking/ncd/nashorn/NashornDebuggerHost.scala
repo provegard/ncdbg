@@ -260,7 +260,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
     // TODO: Identify BLs no longer relevant due to recompilation. Perhaps by function node ID? If such a BL
     // TODO: is enabled, it needs to be disabled.
-    def isObsolete(bl: BreakableLocation) = bl.location.isEmpty && lineNumbersOfNewOnes.contains(bl.scriptLocation.lineNumber1Based)
+    def isObsolete(bl: BreakableLocation) = bl.isPlaceholder && lineNumbersOfNewOnes.contains(bl.scriptLocation.lineNumber1Based)
 
     val lineNumbersOfEnabled = existing.filter(_.isEnabled).map(_.scriptLocation.lineNumber1Based).toSet
 
@@ -270,8 +270,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     def shouldEnable(bl: BreakableLocation) = lineNumbersOfEnabled.contains(bl.scriptLocation.lineNumber1Based)
 
     breakableLocations.filter(shouldEnable).foreach { bl =>
-      val loc = bl.location.map(" (" + _ + ")").getOrElse("")
-      log.debug(s"Auto-enabling breakable location $bl$loc since it's on the same line as a currently enabled one.")
+      log.debug(s"Auto-enabling breakable location $bl since it's on the same line as a currently enabled one.")
       bl.enable()
     }
 
