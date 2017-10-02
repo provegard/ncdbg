@@ -52,7 +52,7 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
   }
 
   override def getBreakpointLocations(id: ScriptIdentity, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation] = {
-    findScript(id).flatMap(script => breakableLocationsByScriptUrl.get(script.url.toString)) match {
+    _breakableLocations.byScriptIdentity(id) match {
       case Some(locations) =>
         // Get hold of all script locations we know of, but since Nashorn/Java doesn't report column number, we
         // a) ignore the column number

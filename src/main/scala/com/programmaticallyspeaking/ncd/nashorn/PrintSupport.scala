@@ -19,12 +19,13 @@ trait PrintSupport { self: NashornDebuggerHost with Logging =>
   import PrintSupport._
   import TypeConstants._
   import com.programmaticallyspeaking.ncd.nashorn.mirrors.Mirrors._
+  import JDIExtensions._
 
   import scala.collection.JavaConverters._
 
   def enablePrintCapture(global: ClassType): Unit = {
     Breakpoints.enableBreakingAtGlobalPrint(global) { breakpointRequests =>
-      breakpointRequests.foreach(beforeEventIsHandled(_)(eventHandler))
+      breakpointRequests.foreach(_.onEventDo(eventHandler))
     }
   }
 
