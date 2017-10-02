@@ -36,7 +36,7 @@ trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with FairAmoun
     })
 
     val p = Promise[Seq[Script]]()
-    observeAndRunScriptSync(scriptContents, observer) { host =>
+    observeAndRunScriptAsync(scriptContents, observer) { host =>
       DelayedFuture(waitTime)(p.success(scripts))
     }
     p.future
