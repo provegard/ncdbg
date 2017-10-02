@@ -168,13 +168,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   import ExecutionContext.Implicits._
   import scala.collection.JavaConverters._
 
-  private val scriptByURL = mutable.Map[ScriptURL, Script]()
-
-  protected val breakableLocationsByScriptUrl = mutable.Map[String, Seq[BreakableLocation]]()
-
   protected val enabledBreakpoints = mutable.Map[String, ActiveBreakpoint]()
 
-  private val scriptIdGenerator = new IdGenerator("nds")
   protected val breakpointIdGenerator = new IdGenerator("ndb")
   protected val stackframeIdGenerator = new IdGenerator("ndsf")
 
@@ -205,6 +200,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   // Data that are defined when the VM has paused on a breakpoint or encountered a step event
   protected var pausedData: Option[PausedData] = None
+
+  private val _scripts = new Scripts
+  protected val _breakableLocations = new BreakableLocations(virtualMachine, _scripts)
+  private val _scriptFactory = new ScriptFactory(virtualMachine)
 
   /**
     * Configure what we do when we encounter one of the wanted types.
@@ -238,126 +237,24 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   private val stackBuilder = new StackBuilder(stackframeIdGenerator, typeLookup, mappingRegistry, codeEval, boxer,
     (location: Location) => findBreakableLocation(location))
 
-  /**
-    * Associate a handler to be executed when an event for the request is observed.
-    */
-  protected def beforeEventIsHandled(r: EventRequest)(h: EventHandler): Unit = {
-    Option(r.getProperty(EventHandlerKey)).foreach(_ => throw new IllegalMonitorStateException("Event handler already associated."))
-    r.putProperty(EventHandlerKey, h)
-  }
-
-  private def addBreakableLocations(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
-    val existing = breakableLocationsByScriptUrl.getOrElse(script.url.toString, Seq.empty)
-
-    // Remove existing ones where Location is unset and the line number exists among the new ones. These are placeholders
-    // added so that it's possible to set a breakpoint in a function before it has been executed, but now we have real
-    // locations for that function (supposedly).
-    // TODO: This may be broken if multiple one-liner functions are defined on the same line...
-    val lineNumbersOfNewOnes = breakableLocations.map(_.scriptLocation.lineNumber1Based).toSet
-
-    // TODO: Identify BLs no longer relevant due to recompilation. Perhaps by function node ID? If such a BL
-    // TODO: is enabled, it needs to be disabled.
-    def isObsolete(bl: BreakableLocation) = bl.isPlaceholder && lineNumbersOfNewOnes.contains(bl.scriptLocation.lineNumber1Based)
-
-    val lineNumbersOfEnabled = existing.filter(_.isEnabled).map(_.scriptLocation.lineNumber1Based).toSet
-
-    // Auto-enable a BL if we have an existing one that is enabled for the same line number - regardless of whether
-    // it's a placeholder or not. This is untested for non-placeholders, since we probably need a big test script
-    // to trigger this case.
-    def shouldEnable(bl: BreakableLocation) = lineNumbersOfEnabled.contains(bl.scriptLocation.lineNumber1Based)
-
-    breakableLocations.filter(shouldEnable).foreach { bl =>
-      log.debug(s"Auto-enabling breakable location $bl since it's on the same line as a currently enabled one.")
-      bl.enable()
-    }
-
-    val newList = existing.filterNot(isObsolete) ++ breakableLocations
-    breakableLocationsByScriptUrl(script.url.toString) = newList
-  }
-
-  private def scriptFromEval(refType: ReferenceType, scriptURL: ScriptURL): Either[NoScriptReason.EnumVal, Script] = {
-    refType.shamelesslyExtractEvalSourceFromPrivatePlaces().map { src =>
-      if (src.contains(EvaluatedCodeMarker)) Left(NoScriptReason.EvaluatedCode)
-      else Right(getOrAddEvalScript(scriptURL, src))
-    }.getOrElse(Left(NoScriptReason.NoSource))
-  }
-
-  private def potentiallyBreakableLines(script: Script): Seq[Int] = {
-    def hasRelevantContent(line: String) = {
-      val trimmed = line.trim()
-      trimmed != "" && trimmed != "{" && trimmed != "}"
-    }
-    def looksBreakable(line: Int) = script.sourceLine(line).exists(hasRelevantContent)
-    (1 to script.lineCount).filter(looksBreakable)
-  }
-
-  private def gatherBreakableLocations(script: Script, locations: Seq[Location]): Seq[BreakableLocation] = {
-    val erm = virtualMachine.eventRequestManager()
-    // Find all potentially breakable lines. Create breakable locations from actual locations. Then create
-    // candidates for the potentially breakable lines that weren't covered. Such a line may for example belong to
-    // a function that hasn't been executed yet.
-    var lineNumbers = potentiallyBreakableLines(script).toSet
-    val breakableLocations = locations.map(l => new BreakableLocation(script, erm, l))
-    breakableLocations.foreach(bl => lineNumbers -= bl.scriptLocation.lineNumber1Based)
-    breakableLocations ++ lineNumbers.map(line => new BreakableLocation(script, erm, line))
-  }
-
-  private def registerScript(script: Script, locations: Seq[Location]): Unit = {
-    val isKnownScript = breakableLocationsByScriptUrl.contains(script.url.toString)
-
-    addBreakableLocations(script, gatherBreakableLocations(script, locations))
+  private var _publishedScriptUrls = Set[ScriptURL]()
+  private def publishScript(script: Script): Unit = {
+    // Try to ensure that only the first thread observes "isKnownScript" to be true for a particular URL
+    val old = _publishedScriptUrls
+    _publishedScriptUrls += script.url
+    val isKnownScript = old.contains(script.url)
 
     if (isKnownScript) {
       log.debug(s"Script with URI '${script.url}' is already known")
     } else {
-      // Reason for logging double at different levels: info typically goes to the console, debug to the log file.
+        // Reason for logging double at different levels: info typically goes to the console, debug to the log file.
       log.debug(s"Adding script with ID '${script.id}', URI '${script.url}' and hash '${script.contentsHash()}'")
       log.info(s"Adding script with URI '${script.url}'")
       emitEvent(ScriptAdded(script))
     }
   }
 
-  private def handleScriptResult(maybeThread: Option[ThreadReference], result: Try[Either[NoScriptReason.EnumVal, Script]],
-                                 refType: ReferenceType, locations: Seq[Location]): Option[Script] = result match {
-    case Success(Right(script)) =>
-      registerScript(script, locations)
-      Some(script)
-    case Success(Left(NoScriptReason.EvaluatedCode)) =>
-      log.debug(s"Ignoring script because it contains evaluated code")
-      None
-    case Success(Left(NoScriptReason.NoSource)) =>
-      val installPhaseType =
-        maybeThread.flatMap(t => t.frames.asScala.view.map(f => f.location().method().declaringType()).find(_.name().endsWith("$InstallPhase")))
-      installPhaseType match {
-        case Some(ciType) =>
-          log.debug(s"Will get source from ${refType.name()} when InstallPhase is complete")
-          // Let the stack unwind a bit in order to get hold of the source. This logic is based on the observation that
-          // we see the ClassPrepareEvent event inside Context$ContextCodeInstaller (in Java 9, one of its subclasses).
-          // In Java 8, it's the initialize method, in Java 9 it's the install method. The source isn't set until in
-          // the initialize method, so the safest approach is to wait until the entire install phase (InstallPhase type)
-          // is complete.
-          val req = virtualMachine.eventRequestManager().createMethodExitRequest()
-          req.addClassFilter(ciType)
-          req.addThreadFilter(maybeThread.get) // .get is safe here, since installPhaseType is defined
-          req.setEnabled(true)
-          beforeEventIsHandled(req) { _ =>
-            log.debug(s"Getting source from ${refType.name()} at method exit from InstallPhase")
-            virtualMachine.eventRequestManager().deleteEventRequest(req)
-            considerReferenceType(None, refType)
-            true // consume the event
-          }
-
-          None
-        case None =>
-          log.warn(s"Cannot get source from ${refType.name()}.")
-          None
-      }
-    case Failure(t) =>
-      log.error(s"Ignoring script type $refType", t)
-      None
-  }
-
-  private def considerReferenceType(thread: Option[ThreadReference], refType: ReferenceType): Option[Script] = {
+  private def considerReferenceType(thread: Option[ThreadReference], refType: ReferenceType): Unit = {
     val className = refType.name()
 
     if (wantedTypes.contains(className)) {
@@ -378,35 +275,23 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
         case other =>
           log.warn(s"Found the $className type but it's a ${other.getClass.getName} rather than a ClassType")
       }
-      None
-    } else if (className.startsWith(ScriptClassNamePrefix)) {
-      // This is a compiled Nashorn script class.
-      log.debug(s"Found a script reference type: ${refType.name}")
-
-      Try(refType.allLineLocations().asScala) match {
-        case Success(locations) =>
-          locations.headOption match {
-            case Some(firstLocation) =>
-              // Note that we no longer try to use the script path for reading the source. If the script contains a
-              // sourceURL annotation, Nashorn will use that at script path, so we might end up reading CoffeeScript
-              // source instead of the real source.
-              val scriptURL = firstLocation.scriptURL
-              val triedScript = Try(scriptFromEval(refType, scriptURL))
-              handleScriptResult(thread, triedScript, refType, locations)
-
-            case None =>
-              log.debug(s"Ignoring script type '${refType.name} because it has no line locations.")
-              None
+    } else {
+      _scriptFactory.considerReferenceType(thread, refType).onComplete {
+        case Success(Some(identifiedScript)) =>
+          try {
+            val script = _scripts.suggest(identifiedScript.script)
+            _breakableLocations.add(script, refType.allLineLocations().asScala)
+            publishScript(script)
+          } catch {
+            case NonFatal(t) =>
+              log.error("Script publish failure", t)
           }
-        case Failure(t: AbsentInformationException) =>
-          // Don't log the exception in this case, it's not useful.
-          log.warn(s"Failed to get line locations for ${refType.name}")
-          None
+
+        case Success(None) => // noop, assume logged elsewhere
         case Failure(t) =>
-          log.warn(s"Failed to get line locations for ${refType.name}", t)
-          None
+          log.error("Script reference type error", t)
       }
-    } else None
+    }
   }
 
   private def watchAddedClasses(): Unit = {
@@ -624,9 +509,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       eventSet.asScala.foreach { ev =>
         try {
           // Invoke any event handler associated with the request for the event.
-          val eventIsConsumed = Option(ev.request().getProperty(EventHandlerKey)).exists {
-            case h: EventHandler => h(ev)
-          }
+          val eventIsConsumed = ev.handle().contains(true)
 
           if (!eventIsConsumed) {
             // Note: Beyond this point, currentPausedData should work since we prepared for pausing in the
@@ -831,54 +714,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  private def getOrAddEvalScript(scriptURL: ScriptURL, source: String): Script = {
-    val newScript = ScriptImpl.fromSource(scriptURL, source, scriptIdGenerator.next)
+  override def scripts: Seq[Script] = _scripts.scripts
 
-    // For a recompilation, we will (most likely) already have the original script that was recompiled (recompilation
-    // happens for example when a function inside the eval script is called with known types). We find the original
-    // script by comparing contents hashes. If we find the original script, we just discard the new one and use the
-    // original.
-    scriptByURL.values.find(_.contentsHash() == newScript.contentsHash()) match {
-      case Some(scriptWithSameSource) =>
-        // Note that we add a map entry for the original script with the new URL as key. This way we'll find our
-        // reused script using all its "alias URLs".
-        // Note 2: I worry that comparing contents hashes isn't enough - that we need to verify no overlapping
-        // line locations also. But we don't have locations here, and I don't want to do too much defensive coding.
-        scriptByURL += (scriptURL -> scriptWithSameSource)
-        scriptWithSameSource
-      case None =>
-        scriptByURL.get(scriptURL) match {
-          case Some(_) =>
-            // This is a new script with new contents but with the same URL as an old one - it is likely a script
-            // that has been reloaded via Nashorn's 'load' function.
-            // The choice of using the ID as suffix is pretty arbitrary - it could also be a sequence number.
-            val newId = scriptIdGenerator.next
-            //TODO: Don't use PathUtils here, it's URL now
-            val newURLString = PathUtils.insertNameSuffix(scriptURL.toString, "_" + newId)
-            val newURL = ScriptURL.create(newURLString)
-
-            val replacement = ScriptImpl.fromSource(newURL, source, newId)
-            scriptByURL.getOrElseUpdate(newURL, replacement)
-
-          case None =>
-            scriptByURL.getOrElseUpdate(scriptURL, newScript)
-        }
-    }
-  }
-
-  override def scripts: Seq[Script] = scriptByURL.values.toSeq
-
-  override def findScript(id: ScriptIdentity): Option[Script] = {
-    val predicate = id match {
-      case IdBasedScriptIdentity(x) => (s: Script) => s.id == x
-      case URLBasedScriptIdentity(url) => (s: Script) => s.url.toString == url
-      case URLRegexBasedScriptIdentity(urlRegex) =>
-        val compiled = urlRegex.r
-        (s: Script) => compiled.pattern.matcher(s.url.toString).matches()
-    }
-    scripts.find(predicate) //TODO: make more efficient
-  }
-
+  override def findScript(id: ScriptIdentity): Option[Script] = _scripts.byId(id)
 
   override def events: Observable[ScriptEvent] = new Observable[ScriptEvent] {
     override def subscribe(observer: Observer[ScriptEvent]): Subscription = {
@@ -890,18 +728,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     }
   }
 
-  protected def findBreakableLocation(location: Location): Option[BreakableLocation] = {
-    scriptByURL.get(location.scriptURL).flatMap { script =>
-      // There may be multiple breakable locations for the same line (even in the same method - e.g. for a 'while'
-      // statement that is last in a method). Try to find an exact match first, then fall back to finding a location
-      // on the correct line. The fallback is necessary since the passed-in Location may have a code index that is
-      // different from the one stored in a BreakableLocation.
-      val id = ScriptIdentity.fromURL(script.url)
-      findBreakableLocationsAtLine(id, location.lineNumber()).flatMap { bls =>
-        bls.find(_.hasLocation(location)).orElse(bls.find(_.sameMethodAndLineAs(location)))
-      }
-    }
-  }
+  protected def findBreakableLocation(location: Location): Option[BreakableLocation] =
+    _breakableLocations.byLocation(location)
 
   protected def findActiveBreakpoint(location: Location): Option[ActiveBreakpoint] = {
     findBreakableLocation(location).flatMap(getActiveBreakpoint)
@@ -911,21 +739,8 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     enabledBreakpoints.values.find(_.contains(bl))
   }
 
-  protected def findBreakableLocationsAtLine(id: ScriptIdentity, lineNumber: Int): Option[Seq[BreakableLocation]] = {
-    id match {
-      case URLBasedScriptIdentity(scriptUrl) =>
-        breakableLocationsByScriptUrl.get(scriptUrl).map { breakableLocations =>
-          breakableLocations.filter(_.scriptLocation.lineNumber1Based == lineNumber)
-        }
-      case _ =>
-        findScript(id) match {
-          case Some(script) =>
-            findBreakableLocationsAtLine(ScriptIdentity.fromURL(script.url), lineNumber)
-          case None => throw new IllegalArgumentException("Unknown script: " + id)
-        }
-    }
-
-  }
+  protected def findBreakableLocationsAtLine(id: ScriptIdentity, lineNumber: Int): Option[Seq[BreakableLocation]] =
+    _breakableLocations.atLine(id, lineNumber)
 
   protected def resumeWhenPaused(): Unit = pausedData match {
     case Some(data) =>

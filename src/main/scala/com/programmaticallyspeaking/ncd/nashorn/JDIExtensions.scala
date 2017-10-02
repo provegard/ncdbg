@@ -2,7 +2,10 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.ScopeType
 import com.programmaticallyspeaking.ncd.infra.ScriptURL
+import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{EventHandler, EventHandlerKey}
 import com.sun.jdi._
+import com.sun.jdi.event.Event
+import com.sun.jdi.request.EventRequest
 
 import scala.language.implicitConversions
 
@@ -13,6 +16,23 @@ object JDIExtensions {
   implicit def location2ExtLocation(l: Location): ExtLocation = new ExtLocation(l)
   implicit def value2ExtValue(v: Value): ExtValue = new ExtValue(v)
   implicit def refType2ExtRefType(refType: ReferenceType): ExtReferenceType = new ExtReferenceType(refType)
+  implicit def eventRequest2ExtRequest(eventRequest: EventRequest): ExtRequest = new ExtRequest(eventRequest)
+  implicit def event2ExtEvent(event: Event): ExtEvent = new ExtEvent(event)
+
+  class ExtEvent(event: Event) {
+    def handle(): Option[Boolean] = {
+      Option(event.request().getProperty(EventHandlerKey)).collect {
+        case h: EventHandler => h(event)
+      }
+    }
+  }
+
+  class ExtRequest(eventRequest: EventRequest) {
+    def onEventDo(h: EventHandler): Unit = {
+      Option(eventRequest.getProperty(EventHandlerKey)).foreach(_ => throw new IllegalStateException("Event handler already associated."))
+      eventRequest.putProperty(EventHandlerKey, h)
+    }
+  }
 
   class ExtLocation(location: Location) {
 

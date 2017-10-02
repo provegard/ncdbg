@@ -18,6 +18,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
   import NashornDebuggerHost._
   import scala.collection.JavaConverters._
   import PauseSupport._
+  import JDIExtensions._
 
   protected def enableExceptionPausing(ct: ClassType): Unit = {
     log.info(s"Enabling breaking on exceptions in script classes.")
@@ -137,7 +138,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
         }
 
         // Associate the handler with each request
-        allRequests.foreach(beforeEventIsHandled(_)(eventHandler))
+        allRequests.foreach(_.onEventDo(eventHandler))
       } finally virtualMachine.resume()
   }
 
