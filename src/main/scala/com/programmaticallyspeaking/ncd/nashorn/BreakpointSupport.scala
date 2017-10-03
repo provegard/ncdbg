@@ -18,9 +18,7 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
           case None => bls
         }
         if (candidates.nonEmpty) {
-          val newId = breakpointIdGenerator.next
           val conditionDescription = condition.map(c => s" with condition ($c)").getOrElse("")
-          log.info(s"Setting a breakpoint with ID $newId for location(s) ${candidates.mkString(", ")} in $id$conditionDescription")
 
           // Force boolean and handle that the condition contains a trailing comment
           val wrapper = condition.map(c =>
@@ -29,9 +27,8 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
                |})()
            """.stripMargin)
 
-          val activeBp = ActiveBreakpoint(newId, candidates, wrapper)
-          activeBp.enable()
-          enabledBreakpoints += (activeBp.id -> activeBp)
+          val activeBp = _breakpoints.create(candidates, wrapper)
+          log.info(s"Setting a breakpoint with ID ${activeBp.id} for location(s) ${candidates.mkString(", ")} in $id$conditionDescription")
           Some(activeBp.toBreakpoint)
         } else None
 

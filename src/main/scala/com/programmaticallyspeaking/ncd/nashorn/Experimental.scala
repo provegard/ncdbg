@@ -254,3 +254,35 @@ class ScriptFactory(virtualMachine: VirtualMachine) extends Logging {
   private def newScript(url: ScriptURL, source: String) =
     ScriptImpl.fromSource(url, source, scriptIdGenerator.next)
 }
+
+class ActiveBreakpoints extends Logging {
+  private val breakpointIdGenerator = new IdGenerator("ndb")
+  private var enabledBreakpoints = Map[String, ActiveBreakpoint]()
+
+  def activeFor(bl: BreakableLocation): Option[ActiveBreakpoint] = {
+    enabledBreakpoints.values.find(_.contains(bl))
+  }
+
+  def disableAll(): Unit = {
+    enabledBreakpoints.foreach(e => e._2.disable())
+    enabledBreakpoints = Map.empty
+  }
+
+  def disableById(id: String): Unit = {
+    enabledBreakpoints.get(id) match {
+      case Some(activeBp) =>
+        log.info(s"Removing breakpoint with id $id")
+        activeBp.disable()
+        enabledBreakpoints -= activeBp.id
+      case None =>
+        log.warn(s"Got request to remove an unknown breakpoint with id $id")
+    }
+  }
+
+  def create(locations: Seq[BreakableLocation], condition: Option[String]): ActiveBreakpoint = {
+    val activeBp = ActiveBreakpoint(breakpointIdGenerator.next, locations, condition)
+    activeBp.enable()
+    enabledBreakpoints += (activeBp.id -> activeBp)
+    activeBp
+  }
+}

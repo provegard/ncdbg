@@ -168,9 +168,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   import ExecutionContext.Implicits._
   import scala.collection.JavaConverters._
 
-  protected val enabledBreakpoints = mutable.Map[String, ActiveBreakpoint]()
-
-  protected val breakpointIdGenerator = new IdGenerator("ndb")
   protected val stackframeIdGenerator = new IdGenerator("ndsf")
 
   private val eventSubject = Subject.serialized[ScriptEvent]
@@ -204,6 +201,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   private val _scripts = new Scripts
   protected val _breakableLocations = new BreakableLocations(virtualMachine, _scripts)
   private val _scriptFactory = new ScriptFactory(virtualMachine)
+  protected val _breakpoints = new ActiveBreakpoints
 
   /**
     * Configure what we do when we encounter one of the wanted types.
@@ -671,7 +669,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     stackFrames.headOption.collect { case sf: StackFrameImpl => sf } match {
       case Some(topStackFrame) =>
         val scriptId = topStackFrame.scriptId
-        getActiveBreakpoint(topStackFrame.breakableLocation) match {
+        _breakpoints.activeFor(topStackFrame.breakableLocation) match {
           case Some(activeBreakpoint) if reason == BreakpointReason.Breakpoint =>
             val breakpointId = activeBreakpoint.id
 
@@ -731,14 +729,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   protected def findBreakableLocation(location: Location): Option[BreakableLocation] =
     _breakableLocations.byLocation(location)
 
-  protected def findActiveBreakpoint(location: Location): Option[ActiveBreakpoint] = {
-    findBreakableLocation(location).flatMap(getActiveBreakpoint)
-  }
-
-  private def getActiveBreakpoint(bl: BreakableLocation): Option[ActiveBreakpoint] = {
-    enabledBreakpoints.values.find(_.contains(bl))
-  }
-
   protected def findBreakableLocationsAtLine(id: ScriptIdentity, lineNumber: Int): Option[Seq[BreakableLocation]] =
     _breakableLocations.atLine(id, lineNumber)
 
@@ -753,10 +743,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       log.debug("Ignoring resume request when not paused (no pause data).")
   }
 
-  private def removeAllBreakpoints(): Unit = {
-    enabledBreakpoints.foreach(e => e._2.disable())
-    enabledBreakpoints.clear()
-  }
+  private def removeAllBreakpoints(): Unit = _breakpoints.disableAll()
 
   override def reset(): Unit = {
     log.info("Resetting VM...")
@@ -765,16 +752,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     resume()
   }
 
-  override def removeBreakpointById(id: String): Unit = {
-    enabledBreakpoints.get(id) match {
-      case Some(activeBp) =>
-        log.info(s"Removing breakpoint with id $id")
-        activeBp.disable()
-        enabledBreakpoints -= activeBp.id
-      case None =>
-        log.warn(s"Got request to remove an unknown breakpoint with id $id")
-    }
-  }
+  override def removeBreakpointById(id: String): Unit = _breakpoints.disableById(id)
 
   private def evaluateOnStackFrame(pd: PausedData, stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): ValueNode = {
     findStackFrame(pd, stackFrameId) match {
