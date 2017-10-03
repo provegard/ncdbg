@@ -6,13 +6,14 @@ import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{EvaluatedCo
 import com.sun.jdi._
 import org.slf4s.Logging
 
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.{Future, Promise}
 import scala.util.{Failure, Success, Try}
 
 class Scripts {
   private val scriptIdGenerator = new IdGenerator("ndx") // special prefix for replacement scripts
 
-  private var _scripts = Map[ScriptURL, Script]()
+  private val _scripts = TrieMap[ScriptURL, Script]()
 
   def scripts: Seq[Script] = _scripts.values.groupBy(_.id).flatMap(_._2.headOption).toSeq
 
@@ -69,8 +70,7 @@ class BreakableLocations(virtualMachine: VirtualMachine, scripts: Scripts) exten
 
   import JDIExtensions._
 
-  private var breakableLocationsByScriptUrl = Map[String, Seq[BreakableLocation]]()
-//  private var scriptUrlById = Map[String, String]()
+  private val breakableLocationsByScriptUrl = TrieMap[String, Seq[BreakableLocation]]()
 
   def add(script: Script, locations: Seq[Location]): Unit = {
     add0(script, gatherBreakableLocations(script, locations))
@@ -257,15 +257,16 @@ class ScriptFactory(virtualMachine: VirtualMachine) extends Logging {
 
 class ActiveBreakpoints extends Logging {
   private val breakpointIdGenerator = new IdGenerator("ndb")
-  private var enabledBreakpoints = Map[String, ActiveBreakpoint]()
+  private val enabledBreakpoints = TrieMap[String, ActiveBreakpoint]()
 
   def activeFor(bl: BreakableLocation): Option[ActiveBreakpoint] = {
     enabledBreakpoints.values.find(_.contains(bl))
   }
 
   def disableAll(): Unit = {
+    //TODO: Not very atomic, this
     enabledBreakpoints.foreach(e => e._2.disable())
-    enabledBreakpoints = Map.empty
+    enabledBreakpoints.clear()
   }
 
   def disableById(id: String): Unit = {
