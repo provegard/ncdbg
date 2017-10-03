@@ -14,8 +14,7 @@ class Scripts {
 
   private var _scripts = Map[ScriptURL, Script]()
 
-  // TODO: unique by ID!
-  def scripts: Seq[Script] = _scripts.values.toSeq
+  def scripts: Seq[Script] = _scripts.values.groupBy(_.id).flatMap(_._2.headOption).toSeq
 
   def suggest(script: Script): Script = {
     require(byId(ScriptIdentity.fromId(script.id)).isEmpty, s"Script with ID ${script.id} has already been added")

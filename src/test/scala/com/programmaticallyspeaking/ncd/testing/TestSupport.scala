@@ -12,6 +12,7 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 trait UnitTest extends FreeSpec with Matchers
+trait IsolatedUnitTest extends path.FreeSpec with Matchers
 
 object SelectiveActorLogging {
   def config = {
