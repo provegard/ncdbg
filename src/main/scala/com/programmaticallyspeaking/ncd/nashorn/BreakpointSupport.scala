@@ -40,12 +40,12 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
 
   override def pauseOnBreakpoints(): Unit = {
     log.info("Will pause on breakpoints")
-    willPauseOnBreakpoints = true
+    _pauser.pauseOnBreakpoints(true)
   }
 
   override def ignoreBreakpoints(): Unit = {
     log.info("Will ignore breakpoints")
-    willPauseOnBreakpoints = false
+    _pauser.pauseOnBreakpoints(false)
   }
 
   override def getBreakpointLocations(id: ScriptIdentity, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation] = {

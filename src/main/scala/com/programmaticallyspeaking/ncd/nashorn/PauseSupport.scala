@@ -35,9 +35,8 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
   }
 
   override def pauseOnExceptions(pauseType: ExceptionPauseType): Unit = {
-    if (pauseType != currentExceptionPauseType) {
-      currentExceptionPauseType = pauseType
-
+    val changed = _pauser.pauseOnExceptions(pauseType)
+    if (changed) {
       val pauseOnCaught = pauseType == ExceptionPauseType.Caught || pauseType == ExceptionPauseType.All
       val pauseOnUncaught = pauseType == ExceptionPauseType.Uncaught || pauseType == ExceptionPauseType.All
 
@@ -144,7 +143,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
 
   override def setSkipAllPauses(skip: Boolean): Unit = {
     log.info(if (skip) "Skipping all pauses" else "Not skipping all pauses")
-    disablePausingAltogether = skip
+    _pauser.disablePausing(skip)
   }
 
 }
