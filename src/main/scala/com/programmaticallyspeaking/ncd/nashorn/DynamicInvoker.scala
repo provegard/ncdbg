@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{ComplexNode, ErrorValue, ValueNode}
+import com.programmaticallyspeaking.ncd.host.{ComplexNode, ErrorValue, ObjectId, ValueNode}
 import com.sun.jdi._
 
 import scala.collection.mutable
@@ -127,6 +127,10 @@ abstract class Invoker(referenceTypeData: ReferenceTypeData) {
         }
       case _ => // noop
     }
+
+    override def clear(): Unit = {}
+
+    override def byId(id: ObjectId): Option[NashornDebuggerHost.ObjectDescriptor] = None
   }
 }
 

@@ -3,11 +3,13 @@ package com.programmaticallyspeaking.ncd.nashorn
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, Undefined}
 import com.programmaticallyspeaking.ncd.infra.IdGenerator
+import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.ObjectDescriptor
 import com.programmaticallyspeaking.ncd.nashorn.mirrors._
 import com.sun.jdi._
 import jdk.nashorn.api.scripting.NashornException
 import jdk.nashorn.internal.runtime.PrototypeObject
 
+import scala.collection.concurrent.TrieMap
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import scala.language.implicitConversions
@@ -35,11 +37,31 @@ object MappingRegistry {
     */
   val noop = new MappingRegistry {
     override def register(value: Value, valueNode: ComplexNode, extraProperties: Map[String, ValueNode]): Unit = {}
+
+    override def clear(): Unit = {}
+
+    override def byId(id: ObjectId) = None
   }
 }
 
 trait MappingRegistry {
   def register(value: Value, valueNode: ComplexNode, extraProperties: Map[String, ValueNode]): Unit
+
+  def clear(): Unit
+
+  def byId(id: ObjectId): Option[ObjectDescriptor]
+}
+
+class MappingRegistryImpl extends MappingRegistry {
+  private val reg = TrieMap[ObjectId, ObjectDescriptor]()
+
+  override def register(value: Value, valueNode: ComplexNode, extraProperties: Map[String, ValueNode]): Unit = {
+    reg += valueNode.objectId -> ObjectDescriptor(Option(value), valueNode, extraProperties)
+  }
+
+  override def clear(): Unit = reg.clear()
+
+  override def byId(id: ObjectId): Option[ObjectDescriptor] = reg.get(id)
 }
 
 object MarshallerCache {
