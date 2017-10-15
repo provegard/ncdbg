@@ -36,7 +36,7 @@ trait PrintSupport { self: NashornDebuggerHost with Logging =>
         implicit val marshaller: Marshaller = new Marshaller(MappingRegistry.noop)
 
         // Try to use JSType.toString()
-        val jsType = foundWantedTypes.get(NIR_JSType)
+        val jsType = typeLookup(NIR_JSType)
         val jsTypeInvoker = jsType.map(Invokers.shared.getStatic)
         def valueToString(v: Value): String = {
           //TODO: What's a good fallback here?

@@ -1,22 +1,16 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.host.types.Undefined
-import com.programmaticallyspeaking.ncd.infra.{DelayedFuture, IdGenerator, ScriptURL}
+import com.programmaticallyspeaking.ncd.infra.IdGenerator
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.StackFrameHolder
-import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.event._
-import com.sun.jdi.request.EventRequest
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
-import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 import scala.util.control.NonFatal
-import scala.util.{Failure, Success, Try}
 
 
 object NashornDebuggerHost {
@@ -46,7 +40,7 @@ object NashornDebuggerHost {
 
   type CodeEvaluator = (String, Map[String, AnyRef]) => ValueNode
 
-  case object PostponeInitialize extends NashornScriptOperation
+//  case object PostponeInitialize extends NashornScriptOperation
 
   private[nashorn] case class ObjectPropertiesKey(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean)
 
@@ -74,17 +68,6 @@ object NashornDebuggerHost {
   def isRunningThread(t: ThreadReference) = t.status() == ThreadReference.THREAD_STATUS_RUNNING
 
   val IL_POP = 0x57     // pop result after function return
-
-  /**
-    * Scanning all classes in one go can be problematic since it may take a long time, thereby blocking host
-    * operations. This constant defines the time we spend scanning classes before we yield to other operations.
-    */
-  val SCAN_CLASSES_BATCH_LEN = 2.seconds
-
-  /**
-    * Operation queued when the scan-class batch length has been exceeded.
-    */
-  case object ContinueClassScan extends NashornScriptOperation
 
   /**
     * Information used to determine if a breakpoint request event is in the exact same location as the previous step
@@ -155,13 +138,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   protected val mappingRegistry: MappingRegistry = new MappingRegistryImpl
 
-  protected val foundWantedTypes = mutable.Map[String, ClassType]()
-
-  /**
-    * Populated/updated during a class scan to track the classes left to scan.
-    */
-  private var classesToScan = List.empty[ReferenceType]
-
   // Data that are defined when the VM has paused on a breakpoint or encountered a step event
   protected var pausedData: Option[PausedData] = None
 
@@ -181,13 +157,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     NIO_Global -> enablePrintCapture _
   )
 
-  private var seenClassPrepareRequests = 0
-  private var lastSeenClassPrepareRequests = -1L
-  private var hasInitiatedClassScanning = false
+  private val _scriptPublisher = new ScriptPublisher(emitEvent)
+  private val _scanner = new ClassScanner(virtualMachine, _scripts, _scriptFactory, _scriptPublisher, _breakableLocations, actionPerWantedType)
 
-  private val typeLookup = new TypeLookup {
-    def apply(name: String): Option[ClassType] = foundWantedTypes.get(name)
+  protected val typeLookup = new TypeLookup {
+    override def apply(name: String): Option[ClassType] = _scanner.typeByName(name)
   }
+
   private val boxer = new Boxer(typeLookup)
   protected val codeEval = new CodeEval(typeLookup, preventGC)
   private val stackBuilder = new StackBuilder(stackframeIdGenerator, typeLookup, mappingRegistry, codeEval, boxer,
@@ -195,79 +171,18 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   private val _stackFramEval = new StackFrameEvaluator(mappingRegistry, boxer)
 
-  private var _publishedScriptUrls = Set[ScriptURL]()
-  private def publishScript(script: Script): Unit = {
-    // Try to ensure that only the first thread observes "isKnownScript" to be true for a particular URL
-    val old = _publishedScriptUrls
-    _publishedScriptUrls += script.url
-    val isKnownScript = old.contains(script.url)
-
-    if (isKnownScript) {
-      log.debug(s"Script with URI '${script.url}' is already known")
-    } else {
-        // Reason for logging double at different levels: info typically goes to the console, debug to the log file.
-      log.debug(s"Adding script with ID '${script.id}', URI '${script.url}' and hash '${script.contentsHash()}'")
-      log.info(s"Adding script with URI '${script.url}'")
-      emitEvent(ScriptAdded(script))
-    }
-  }
-
-  private def considerReferenceType(thread: Option[ThreadReference], refType: ReferenceType): Unit = {
-    val className = refType.name()
-
-    if (wantedTypes.contains(className)) {
-      refType match {
-        case ct: ClassType =>
-          log.debug(s"Found the $className type")
-          foundWantedTypes += className -> ct
-
-          // Execute any function associated with the type
-          actionPerWantedType.get(className).foreach(_.apply(ct))
-
-          // If we have all mandatory types, we're done
-          val mandatoryTypes = wantedTypes.filter(_._2).keys
-          if (mandatoryTypes.forall(foundWantedTypes.contains)) {
-            considerInitializationToBeComplete()
-          }
-
-        case other =>
-          log.warn(s"Found the $className type but it's a ${other.getClass.getName} rather than a ClassType")
-      }
-    } else {
-      _scriptFactory.considerReferenceType(thread, refType).onComplete {
-        case Success(Some(identifiedScript)) =>
-          try {
-            val script = _scripts.suggest(identifiedScript.script)
-            _breakableLocations.add(script, refType.allLineLocations().asScala)
-            publishScript(script)
-          } catch {
-            case NonFatal(t) =>
-              log.error("Script publish failure", t)
-          }
-
-        case Success(None) => // noop, assume logged elsewhere
-        case Failure(t) =>
-          log.error("Script reference type error", t)
-      }
-    }
-  }
-
-  private def watchAddedClasses(): Unit = {
-    val request = virtualMachine.eventRequestManager().createClassPrepareRequest()
-    request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
-    request.setEnabled(true)
-  }
-
-  private def retryInitLater(): Unit = {
-    log.debug("Postponing initialization until classes have stabilized")
-    DelayedFuture(200.milliseconds) {
-      asyncInvokeOnThis(_.handleOperation(PostponeInitialize))
-    }
-  }
-
   def initialize(): Unit = {
-    watchAddedClasses()
-    retryInitLater()
+    _scanner.setup(new Observer[ScanAction] {
+      // Not used...
+      override def onError(error: Throwable): Unit = {}
+
+      override def onComplete(): Unit = considerInitializationToBeComplete()
+
+      override def onNext(item: ScanAction): Unit = item match {
+        case ScanMoreLater(action) => asyncInvokeOnThis(_ => action())
+        case _ =>
+      }
+    })
   }
 
   //TODO: This method is never called, because there's no graceful way to stop NCDbg ATM.
@@ -277,43 +192,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     } catch {
       case NonFatal(t) =>
         log.error("Failed to enable collection for one or more object references.", t)
-    }
-  }
-
-  private def scanClasses(): Unit = {
-    val referenceTypes = virtualMachine.allClasses()
-
-    hasInitiatedClassScanning = true
-
-    classesToScan = referenceTypes.asScala.toList
-
-    scanOutstandingClasses()
-  }
-
-  private def scanOutstandingClasses(): Unit = {
-    log.debug(s"Scanning ${classesToScan.size} currently known classes...")
-
-    val nanosBefore = System.nanoTime()
-    var done = false
-    var count = 0
-    while (!done && classesToScan.nonEmpty) {
-      val refType = classesToScan.head
-      classesToScan = classesToScan.tail
-      count += 1
-
-      considerReferenceType(None, refType)
-
-      val elapsed = (System.nanoTime() - nanosBefore).nanos
-      if (elapsed >= SCAN_CLASSES_BATCH_LEN) {
-        // Yield to other operations, to prevent blocking so long that a timeout occurs in ExecutorProxy.
-        log.debug(s"Scanned $count classes in ${elapsed.toMillis} ms, temporarily yielding to other operations.")
-        asyncInvokeOnThis(_.handleOperation(ContinueClassScan))
-        done = true
-      }
-    }
-
-    if (classesToScan.isEmpty) {
-      log.info("Class scanning complete!")
     }
   }
 
@@ -409,11 +287,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     case None =>
   }
 
-  private def relevantForPostponingClassScan(referenceType: ReferenceType) = {
-    val name = referenceType.name()
-    wantedTypes.contains(name) || name.startsWith(ScriptClassNamePrefix)
-  }
-
   def handleOperation(eventQueueItem: NashornScriptOperation): Unit = eventQueueItem match {
     case NashornEventSet(es) if hasDeathOrDisconnectEvent(es) =>
       signalComplete()
@@ -450,15 +323,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                 }
 
               case ev: ClassPrepareEvent =>
-                if (hasInitiatedClassScanning) {
-                  // A new class, added after we have initiated scanning
-                  considerReferenceType(Some(ev.thread()), ev.referenceType())
-                } else if (relevantForPostponingClassScan(ev.referenceType())) {
-                  // Bump the class counter - when we handle PostponeInitialize, if the class cound has stabilized,
-                  // we do a full scan.
-                  log.trace(s"New class (${ev.referenceType().name()}), counting it to await full scan when class count has stabilized.")
-                  seenClassPrepareRequests += 1
-                }
+                _scanner.handleEvent(ev)
               case ev: ExceptionEvent if pausedData.isEmpty =>
                 val exceptionTypeName = ev.exception().referenceType().name()
                 val isECMAException = exceptionTypeName == NIR_ECMAException
@@ -494,14 +359,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
         if (!wasPausedAtEntry) cleanupPausing()
         resume(eventSet)
       }
-    case PostponeInitialize =>
-      if (lastSeenClassPrepareRequests == seenClassPrepareRequests) scanClasses()
-      else {
-        lastSeenClassPrepareRequests = seenClassPrepareRequests
-        retryInitLater()
-      }
-    case ContinueClassScan =>
-      scanOutstandingClasses()
     case operation =>
       throw new IllegalArgumentException("Unknown operation: " + operation)
   }
