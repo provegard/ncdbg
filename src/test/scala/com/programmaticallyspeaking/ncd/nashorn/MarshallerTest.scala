@@ -22,7 +22,12 @@ class MarshallerTest extends UnitTest with MockitoSugar {
     override def register(value: Value, valueNode: ComplexNode, extra: Map[String, ValueNode]): Unit = {
       registered += valueNode.objectId -> (value, valueNode)
     }
+
+    override def clear(): Unit = registered.clear()
+
+    override def byId(id: ObjectId): Option[NashornDebuggerHost.ObjectDescriptor] = None
   }
+
   def fakeThread = {
     val erm = mock[EventRequestManager]
     val vm = mock[VirtualMachine]

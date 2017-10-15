@@ -32,7 +32,7 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
       // We're not interested in the __proto__ property for scope objects.
       val includeProto = !isScopeObject
 
-      objectDescriptorById.get(objectId) match {
+      mappingRegistry.byId(objectId) match {
         case Some(desc: ObjectDescriptor) =>
           // Get object properties, via a cache.
           val cacheKey = ObjectPropertiesKey(objectId, actualOnlyOwn, onlyAccessors)
