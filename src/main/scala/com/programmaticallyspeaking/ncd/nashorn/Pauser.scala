@@ -1,7 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{ExceptionType, StackFrameImpl}
+import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.StackFrameImpl
 import com.sun.jdi.event._
 import org.slf4s.Logging
 
