@@ -142,14 +142,20 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
     "setBreakpointByUrl" - {
 
-      def setBreakpointByUrl(lineNumber: Int, scriptUri: String, condition: Option[String] = None): Debugger.SetBreakpointByUrlResult = {
+      def setBreakpoint(lineNumber: Int, msg: AnyRef): Debugger.SetBreakpointByUrlResult = {
         addScript(script("a")) //TODO: specify line number range here to make the test clearer
         val debugger = newActorInstance[Debugger]
 
         debugger ! Messages.Request("1", Domain.enable)
-        inside(requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(lineNumber, scriptUri, None, condition))) {
+        inside(requestAndReceiveResponse(debugger, "2", msg)) {
           case result: Debugger.SetBreakpointByUrlResult => result
         }
+      }
+      def setBreakpointByUrl(lineNumber: Int, scriptUri: String, condition: Option[String] = None): Debugger.SetBreakpointByUrlResult = {
+        setBreakpoint(lineNumber, Debugger.setBreakpointByUrl(lineNumber, Some(scriptUri), None, None, condition))
+      }
+      def setBreakpointByUrlRegex(lineNumber: Int, urlRegex: String, condition: Option[String] = None): Debugger.SetBreakpointByUrlResult = {
+        setBreakpoint(lineNumber, Debugger.setBreakpointByUrl(lineNumber, None, Some(urlRegex), None, condition))
       }
 
       "should invoke ScriptHost with line number translation from 0-based to 1-based" in {
@@ -177,7 +183,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         result.breakpointId should be (null)
       }
 
-      "should return no locatoins if the breakpoint location is unknown" in {
+      "should return no locations if the breakpoint location is unknown" in {
         val result = setBreakpointByUrl(101, "a")
         result.locations should be ('empty)
       }
@@ -185,6 +191,11 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       "should translate empty condition to no condition" in {
         setBreakpointByUrl(3, "a", Some(""))
         verify(currentScriptHost).setBreakpoint(any[ScriptIdentity], any[ScriptLocation], meq(None))
+      }
+
+      "should support the 'urlRegex' parameter" in {
+        val result = setBreakpointByUrlRegex(3, "[aA]")
+        result.locations.headOption.map(_.scriptId) should be (Some("re_[aA]_id"))
       }
     }
 
@@ -194,7 +205,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val debugger = newActorInstance[Debugger]
         debugger ! Messages.Request("1", Domain.enable)
 
-        val result = requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(5, "a", None, None)) match {
+        val result = requestAndReceiveResponse(debugger, "2", Debugger.setBreakpointByUrl(5, Some("a"), None, None, None)) match {
           case result: Debugger.SetBreakpointByUrlResult => result
           case other => fail("Unexpected: " + other)
         }
@@ -523,7 +534,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
           val sid = scriptId match {
             case IdBasedScriptIdentity(x) => x
             case URLBasedScriptIdentity(url) => url
-            case URLRegexBasedScriptIdentity(_) => ???
+            case URLRegexBasedScriptIdentity(re) => "re_" + re
           }
           Some(Breakpoint(bpId, sid + "_id", None, Seq(location)))
         }

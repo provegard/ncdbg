@@ -86,7 +86,7 @@ object Debugger extends Logging {
 
   case class GetPossibleBreakpointsResult(locations: Seq[BreakLocation])
 
-  case class setBreakpointByUrl(lineNumber: Int, url: String, columnNumber: Option[Int], condition: Option[String])
+  case class setBreakpointByUrl(lineNumber: Int, url: Option[String], urlRegex: Option[String], columnNumber: Option[Int], condition: Option[String])
 
   case class removeBreakpoint(breakpointId: String)
 
@@ -208,11 +208,13 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
           throw new IllegalArgumentException("Unknown script ID: " + scriptId)
       }
 
-    case Debugger.setBreakpointByUrl(lineNumberBase0, url, maybeColumnNumberBase0, condition) =>
+    case Debugger.setBreakpointByUrl(lineNumberBase0, url, urlRegex, maybeColumnNumberBase0, condition) =>
+      val identity = url.map(ScriptIdentity.fromURL).orElse(urlRegex.map(ScriptIdentity.fromURLRegex)).getOrElse(throw new IllegalArgumentException("Either url or urlRegex must be defined"))
+
       // DevTools passes "" when the breakpoint isn't conditional
       val actualCondition = condition.filter(_ != "")
       val location = ScriptLocation(lineNumberBase0 + 1, maybeColumnNumberBase0.map(_ + 1))
-      scriptHost.setBreakpoint(ScriptIdentity.fromURL(url), location, actualCondition) match {
+      scriptHost.setBreakpoint(identity, location, actualCondition) match {
         case Some(bp) =>
           SetBreakpointByUrlResult(bp.breakpointId, bp.locations.map(l => Location(bp.scriptId, l.lineNumber1Based - 1, l.columnNumber1Based.map(_ - 1))))
         case None =>

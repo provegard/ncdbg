@@ -198,7 +198,7 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
 
       runScript(script)(callFrames => {
         withScript(callFrames) { s =>
-          sendRequest(Debugger.setBreakpointByUrl(3, s.url.toString, Some(2), Some("i>0")))
+          sendRequest(Debugger.setBreakpointByUrl(3, Some(s.url.toString), None, Some(2), Some("i>0")))
         }
       }, callFrames => {
         withHead(callFrames) { cf =>
@@ -251,7 +251,7 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
 
       runScript(script)(callFrames => {
         withScript(callFrames) { s =>
-          sendRequest(Debugger.setBreakpointByUrl(1, s.url.toString, None, None))
+          sendRequest(Debugger.setBreakpointByUrl(1, Some(s.url.toString), None, None, None))
         }
       }, callFrames => {
         withHead(callFrames) { cf =>
