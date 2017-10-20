@@ -116,7 +116,7 @@ object Debugger extends Logging {
     */
   case class Scope(`type`: String, `object`: RemoteObject)
 
-  case class PausedEventParams(callFrames: Seq[CallFrame], reason: String, hitBreakpoints: Seq[String])
+  case class PausedEventParams(callFrames: Seq[CallFrame], reason: String, hitBreakpoints: Seq[String], data: Option[AnyRef])
 
   private[Debugger] case class EmitScriptParsed(script: Script)
 
@@ -369,13 +369,20 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
   private def pauseBasedOnBreakpoint(hitBreakpoint: HitBreakpoint): Option[String] = {
     hitBreakpoint.stackFrames.headOption match {
       case Some(_) =>
+        val converter = RemoteObjectConverter.byReference
+
         // Call frames are saved to be used with setVariableValue.
         val callFrames = stackFramesToCallFrames(hitBreakpoint.stackFrames)
         lastCallFrameList = Some(callFrames)
-        
-        val params = PausedEventParams(callFrames, "other", Seq(hitBreakpoint.breakpointId))
+
+        val reason = hitBreakpoint.reason match {
+          case BreakpointReason.Exception(_) => "exception"
+          case _ => "other"
+        }
+        val data = hitBreakpoint.data.map(d => converter.toRemoteObject(d))
+        val params = PausedEventParams(callFrames, reason, hitBreakpoint.breakpointId.toSeq, data)
         emitEvent("Debugger.paused", params)
-        Some(hitBreakpoint.breakpointId)
+        hitBreakpoint.breakpointId
 
       case None =>
         log.warn("Unexpected! Got a HitBreakpoint without stack frames!")

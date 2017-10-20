@@ -50,7 +50,7 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
 
     var callFrameIdLists = Seq[Seq[String]]()
     val eventSubscription = domainEventSubject.subscribe(Observer.from[Messages.DomainMessage] {
-      case Messages.Event(_, PausedEventParams(callFrames, _, _)) =>
+      case Messages.Event(_, PausedEventParams(callFrames, _, _, _)) =>
         callFrameIdLists :+= callFrames.map(_.callFrameId)
 
         val tester = testerQueue.dequeue()

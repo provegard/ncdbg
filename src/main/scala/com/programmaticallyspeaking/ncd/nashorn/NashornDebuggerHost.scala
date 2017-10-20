@@ -803,7 +803,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
       log.debug(s"Ignoring breakpoint at ${ev.location()} because $reason.")
       true
     case Right(_) =>
-      // Log at debug level because we get noise due to exception requests.
       val details = ev match {
         case ex: ExceptionEvent =>
           s" (due to exception ${ex.exception().referenceType().name()})"
@@ -811,48 +810,81 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
           s" (at a JavaScript 'debugger' statement)"
         case _ => ""
       }
+      // Log at debug level because we get noise due to exception requests.
       log.debug(s"Pausing at location ${ev.location()} in thread ${ev.thread().name()}$details")
+
+      val reason: BreakpointReason = pausedData.exceptionEventInfo match {
+        case Some(info) =>
+          info.marshalledException match {
+            case Right(e) => BreakpointReason.Exception(Some(e))
+            case Left(str) =>
+              log.debug("No exception data: " + str)
+              BreakpointReason.Exception(None)
+          }
+        case None =>
+          ev match {
+            case _ if pausedData.isAtDebuggerStatement =>
+              BreakpointReason.Debugger
+            case _: BreakpointEvent =>
+              BreakpointReason.Breakpoint
+            case _ =>
+              BreakpointReason.Step
+          }
+      }
 
       // Resume will be controlled externally
       implicit val marshaller = pausedData.marshaller
-      !doPause(pausedData.stackFrames)
+      !doPause(pausedData.stackFrames, reason)
   }
 
-  private def doPause(stackFrames: Seq[StackFrame])(implicit marshaller: Marshaller): Boolean = {
+  private def doPause(stackFrames: Seq[StackFrame], reason: BreakpointReason)(implicit marshaller: Marshaller): Boolean = {
     stackFrames.headOption.collect { case sf: StackFrameImpl => sf } match {
       case Some(topStackFrame) =>
         val scriptId = topStackFrame.scriptId
-        val activeBreakpoint = getActiveBreakpoint(topStackFrame.breakableLocation)
-        val breakpointId = activeBreakpoint.id
+        getActiveBreakpoint(topStackFrame.breakableLocation) match {
+          case Some(activeBreakpoint) if reason == BreakpointReason.Breakpoint =>
+            val breakpointId = activeBreakpoint.id
 
-        // Check condition if we have one. We cannot do this until now (which means that a conditional breakpoint
-        // will be slow) because we need stack frames and locals to be setup for code evaluation.
-        val conditionIsTrue = activeBreakpoint.condition match {
-          case Some(c) =>
-            topStackFrame.eval(c, Map.empty) match {
-              case SimpleValue(true) => true
-              case SimpleValue(false) =>
-                log.trace(s"Not pausing on breakpoint $breakpointId in script $scriptId since the condition ($c) evaluated to false.")
-                false
-              case other =>
-                log.warn(s"Condition $c resulted in unexpected value $other, will pause.")
-                // It's best to pause since we don't know what happened, I think.
-                true
+            // Check condition if we have one. We cannot do this until now (which means that a conditional breakpoint
+            // will be slow) because we need stack frames and locals to be setup for code evaluation.
+            val conditionIsTrue = activeBreakpoint.condition match {
+              case Some(c) =>
+                topStackFrame.eval(c, Map.empty) match {
+                  case SimpleValue(true) => true
+                  case SimpleValue(false) =>
+                    log.trace(s"Not pausing on breakpoint $breakpointId in script $scriptId since the condition ($c) evaluated to false.")
+                    false
+                  case other =>
+                    log.warn(s"Condition $c resulted in unexpected value $other, will pause.")
+                    // It's best to pause since we don't know what happened, I think.
+                    true
+                }
+              case None => true // no condition, always stop
             }
-          case None => true // no condition, always stop
-        }
 
-        if (conditionIsTrue) {
-          findScript(ScriptIdentity.fromId(scriptId)).foreach { s =>
-            val location = topStackFrame.location
-            val line = s.sourceLine(location.lineNumber1Based).getOrElse("<unknown line>")
-            log.info(s"Pausing at ${s.url}:${location.lineNumber1Based}: $line")
-          }
+            if (conditionIsTrue) {
+              findScript(ScriptIdentity.fromId(scriptId)).foreach { s =>
+                val location = topStackFrame.location
+                val line = s.sourceLine(location.lineNumber1Based).getOrElse("<unknown line>")
+                log.info(s"Pausing at ${s.url}:${location.lineNumber1Based}: $line")
+              }
 
-          val hitBreakpoint = HitBreakpoint(stackFrames, breakpointId)
-          emitEvent(hitBreakpoint)
+              val hitBreakpoint = HitBreakpoint(stackFrames, Some(breakpointId), BreakpointReason.Breakpoint, None)
+              emitEvent(hitBreakpoint)
+            }
+            conditionIsTrue
+          case _ =>
+            // debugger statement, or exception
+            val hitBreakpoint = reason match {
+              case BreakpointReason.Exception(e) =>
+                HitBreakpoint(stackFrames, None, reason, e)
+              case _ =>
+                HitBreakpoint(stackFrames, None, reason, None)
+            }
+
+            emitEvent(hitBreakpoint)
+            true
         }
-        conditionIsTrue
       case None =>
         log.debug("Not pausing because there are no stack frames")
         false
@@ -955,14 +987,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   }
 
   protected def findActiveBreakpoint(location: Location): Option[ActiveBreakpoint] = {
-    findBreakableLocation(location).map(getActiveBreakpoint)
+    findBreakableLocation(location).flatMap(getActiveBreakpoint)
   }
 
-  private def getActiveBreakpoint(bl: BreakableLocation): ActiveBreakpoint = {
-    enabledBreakpoints.values.find(_.contains(bl)) match {
-      case Some(ab) => ab // existing active breakpoint
-      case None => ActiveBreakpoint(breakpointIdGenerator.next, Seq(bl), None) // temporary breakpoint (e.g. debugger statement)
-    }
+  private def getActiveBreakpoint(bl: BreakableLocation): Option[ActiveBreakpoint] = {
+    enabledBreakpoints.values.find(_.contains(bl))
   }
 
   protected def findBreakableLocationsAtLine(id: ScriptIdentity, lineNumber: Int): Option[Seq[BreakableLocation]] = {

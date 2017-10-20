@@ -303,7 +303,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
               case Some(bps) => breakpointIds += bps.breakpointId
               case None => donePromise.failure(new Exception("No script or breakpoint"))
             }
-          } else breakpointIds += breakpointId
+          } else breakpointIds ++= breakpointId
 
           if (data.hitsSoFar == 3) {
             // should be done!

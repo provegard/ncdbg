@@ -2,14 +2,25 @@ package com.programmaticallyspeaking.ncd.host
 
 trait ScriptEvent
 
+sealed trait BreakpointReason
+object BreakpointReason {
+  case object Breakpoint extends BreakpointReason
+  case class Exception(data: Option[ErrorValue]) extends BreakpointReason
+  case object Debugger extends BreakpointReason
+  case object Step extends BreakpointReason
+}
+
 /**
   * Emitted when the remote VM has paused, typically on a breakpoint. The breakpoint can be set by the user, be a
   * 'debugger' statement, or be the result of a thrown exception when exception pausing is enabled.
   *
   * @param stackFrames the current script stack frames
-  * @param breakpointId the ID of the breakpoint; for a 'debugger' statement or exception, the ID is not stable
+  * @param breakpointId the ID of the breakpoint if an actual breakpoint was hit
+  * @param reason reason for the breakpoint
+  * @param data data associated with the breakpoint
   */
-case class HitBreakpoint(stackFrames: Seq[StackFrame], breakpointId: String) extends ScriptEvent
+//TODO: A better name is needed, since it's not necessarily a breakpoint
+case class HitBreakpoint(stackFrames: Seq[StackFrame], breakpointId: Option[String], reason: BreakpointReason, data: Option[ValueNode]) extends ScriptEvent
 
 /**
   * Emitted when the remote VM resumes execution.

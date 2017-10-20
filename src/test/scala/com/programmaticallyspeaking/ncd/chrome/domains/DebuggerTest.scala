@@ -294,7 +294,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val debugger = newActorInstance[Debugger]
 
         receiveScriptEventTriggeredEvent(debugger, Seq(Messages.Request("1", Domain.enable)),
-          Seq(HitBreakpoint(stackFrames, "dummy"))
+          Seq(HitBreakpoint(stackFrames, Some("dummy"), BreakpointReason.Breakpoint, None))
         )
       }
       def getEventParams(ev: Messages.Event): PausedEventParams = ev.params match {
