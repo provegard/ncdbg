@@ -427,6 +427,10 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
               log.debug(s"Ignoring script type '${refType.name} because it has no line locations.")
               None
           }
+        case Failure(t: AbsentInformationException) =>
+          // Don't log the exception in this case, it's not useful.
+          log.warn(s"Failed to get line locations for ${refType.name}")
+          None
         case Failure(t) =>
           log.warn(s"Failed to get line locations for ${refType.name}", t)
           None
