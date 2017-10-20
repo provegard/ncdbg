@@ -40,7 +40,7 @@ object Boot extends App with Logging {
         case _: ConnectException =>
           log.error("Failed to connect to the debug target.")
           log.error("Please make sure that the debug target is started with debug VM arguments, for example:")
-          log.error("  -Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=7777")
+          log.error(s"  -Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=${connectAddr.host}:${connectAddr.port}")
         case _ =>
           log.error("Failed to start the debugger", t)
       }
