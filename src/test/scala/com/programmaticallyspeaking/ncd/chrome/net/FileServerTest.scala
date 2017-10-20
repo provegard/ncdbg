@@ -8,10 +8,11 @@ import java.util.Scanner
 
 import akka.actor.{ActorRef, ActorSystem}
 import com.programmaticallyspeaking.ncd.chrome.domains.DomainFactory
+import com.programmaticallyspeaking.ncd.infra.ObjectMapping
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 
 class FileServerTest extends UnitTest {
 
@@ -39,6 +40,7 @@ class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with B
   implicit val system = ActorSystem(getClass.getSimpleName)
   var server: FileServer = _
   var wrapperServer: WebSocketServer = _
+  var currentPort: Int = 0
 
   def requireContentType(file: File, ct: String) = {
     val url = server.publisher.publish(file)
@@ -65,6 +67,25 @@ class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with B
 
       "uses the appropriate content type" in {
         requireContentType(file, "text/plain")
+      }
+
+      "serves JSON at /json to tell VS Code et al. what to connect to" in {
+        fetchData(s"http://localhost:$currentPort/json") match {
+          case Success(data) =>
+            val items = ObjectMapping.fromJson[Seq[Any]](data)
+            items should be (Seq(
+              Map(
+                "description" -> "",
+                "url" -> "/",
+                "webSocketDebuggerUrl" -> s"ws://localhost:$currentPort/dbg",
+                "devtoolsFrontendUrl" -> s"/devtools/inspector.html?ws=localhost:$currentPort/dbg",
+                "title" -> "NCDbg",
+                "type" -> "page"
+              )
+            ))
+
+          case Failure(t) => fail(t)
+        }
       }
     }
 
@@ -144,6 +165,7 @@ class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with B
     // Ugh, this is ugly!!
     wrapperServer = new WebSocketServer(new FakeDomainFactory, Some(server))
     wrapperServer.start("localhost", port)
+    currentPort = port
     server
   }
 

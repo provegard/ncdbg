@@ -3,6 +3,7 @@ package com.programmaticallyspeaking.ncd.chrome.net
 import java.io._
 import java.net.{URI, URL}
 import java.nio.channels.Channels
+import java.nio.charset.{Charset, StandardCharsets}
 import java.util.concurrent.ConcurrentHashMap
 
 import com.programmaticallyspeaking.tinyws.Server
@@ -65,7 +66,8 @@ class FileServer(host: String, port: Int) extends Logging with Server.FallbackHa
 
   private def serveFile(connection: Server.Connection): Unit = {
     // The requested path must start with our base path (+ a slash)
-    if (connection.uri().getPath.startsWith(baseURI.getPath + "/")) {
+    val path = connection.uri().getPath
+    if (path.startsWith(baseURI.getPath + "/")) {
       val path = baseURI.relativize(connection.uri()).getPath
       val method = connection.method()
       if (method == "GET" || method == "HEAD") {
@@ -82,8 +84,34 @@ class FileServer(host: String, port: Int) extends Logging with Server.FallbackHa
         throw new UnsupportedOperationException("GET,HEAD")
       }
     } else {
-      log.warn(s"File request outside base URL ($baseURL): ${connection.uri()}")
-      throw new FileNotFoundException()
+      if (path == "/json") {
+        log.debug("Serving WebSocket connection list (/json endpoint)")
+        serveWebSocketConnectionList(connection)
+      } else {
+        log.warn(s"File request outside base URL ($baseURL): ${connection.uri()}")
+        throw new FileNotFoundException()
+      }
+    }
+  }
+
+  private def serveWebSocketConnectionList(connection: Server.Connection): Unit = {
+    val json =
+      s"""[{
+        |  "description": "",
+        |  "devtoolsFrontendUrl": "/devtools/inspector.html?ws=$host:$port/dbg",
+        |  "webSocketDebuggerUrl": "ws://$host:$port/dbg",
+        |  "title": "NCDbg",
+        |  "type": "page",
+        |  "url": "/"
+        |}]
+      """.stripMargin
+    val bytes = json.getBytes(StandardCharsets.UTF_8)
+    val headers = Map("Content-Length" -> bytes.length.toString, "Content-Type" -> "application/json; charset=UTF-8")
+    connection.sendResponse(200, "OK", headers.asJava)
+    if (connection.method() == "GET") {
+      val os = connection.outputStream()
+      os.write(bytes)
+      os.flush()
     }
   }
 
