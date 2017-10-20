@@ -56,6 +56,15 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
     }
   }
 
+  "A script should be identifiable with a regexp-based identity" in {
+    testAddScript(scriptWith("return 9 + 9;")) { scripts =>
+      val script = scripts.head
+      val regexped = script.url.toString.replace("eval:", ".*:")
+      val id = ScriptIdentity.fromURLRegex(regexped)
+      getHost.findScript(id).map(_.id) should be (Some(script.id))
+    }
+  }
+
   "An evaluated script should not have an URL that ends with a single underscore" in {
     val script = scriptWith("return 6 + 6;")
     whenReady(testAddScriptWithWait(script, 500.millis)) { scripts =>

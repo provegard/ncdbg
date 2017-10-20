@@ -919,6 +919,9 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
     val predicate = id match {
       case IdBasedScriptIdentity(x) => (s: Script) => s.id == x
       case URLBasedScriptIdentity(url) => (s: Script) => s.url.toString == url
+      case URLRegexBasedScriptIdentity(urlRegex) =>
+        val compiled = urlRegex.r
+        (s: Script) => compiled.pattern.matcher(s.url.toString).matches()
     }
     scripts.find(predicate) //TODO: make more efficient
   }
@@ -964,15 +967,15 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
 
   protected def findBreakableLocationsAtLine(id: ScriptIdentity, lineNumber: Int): Option[Seq[BreakableLocation]] = {
     id match {
-      case _: IdBasedScriptIdentity =>
+      case URLBasedScriptIdentity(scriptUrl) =>
+        breakableLocationsByScriptUrl.get(scriptUrl).map { breakableLocations =>
+          breakableLocations.filter(_.scriptLocation.lineNumber1Based == lineNumber)
+        }
+      case _ =>
         findScript(id) match {
           case Some(script) =>
             findBreakableLocationsAtLine(ScriptIdentity.fromURL(script.url), lineNumber)
           case None => throw new IllegalArgumentException("Unknown script: " + id)
-        }
-      case URLBasedScriptIdentity(scriptUrl) =>
-        breakableLocationsByScriptUrl.get(scriptUrl).map { breakableLocations =>
-          breakableLocations.filter(_.scriptLocation.lineNumber1Based == lineNumber)
         }
     }
 

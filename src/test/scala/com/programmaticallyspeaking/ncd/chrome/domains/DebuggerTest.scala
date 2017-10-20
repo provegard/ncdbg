@@ -523,6 +523,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
           val sid = scriptId match {
             case IdBasedScriptIdentity(x) => x
             case URLBasedScriptIdentity(url) => url
+            case URLRegexBasedScriptIdentity(_) => ???
           }
           Some(Breakpoint(bpId, sid + "_id", None, Seq(location)))
         }
