@@ -25,8 +25,10 @@ object DomainMethodArgumentFactory {
     val maybeClasses = lookupClasses(className)
     val caseObjectClass = maybeClasses.caseObject.getOrElse(throw rejection(domain, method, "the domain and/or method are unknown"))
 
+    val hasParams = params != null
     val mapParams = Option(params).getOrElse(Map.empty)
-    if (mapParams.nonEmpty) {
+
+    if (hasParams) {
       // Create a case class instance
       maybeClasses.caseClass match {
         case Some(caseClass) =>
@@ -38,7 +40,7 @@ object DomainMethodArgumentFactory {
     } else {
       // Return the case object instance.
       maybeClasses.caseClass match {
-        case Some(caseClass) =>
+        case Some(_) =>
           // However, there is a case class, so this domain method expects arguments!
           throw rejection(domain, method, "arguments are missing")
         case None =>

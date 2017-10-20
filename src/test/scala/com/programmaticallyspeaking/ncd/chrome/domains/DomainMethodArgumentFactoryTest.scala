@@ -42,11 +42,18 @@ class DomainMethodArgumentFactoryTest extends UnitTest {
 
     "with a message with empty parameters" - {
 
-      "should create a case object" in {
+      "should not create a case object" in {
         val msg = Protocol.IncomingMessage(1, "FooTestDomain.bar", Map.empty)
-        val result = factory.create(msg)
-        result shouldBe theSameInstanceAs (FooTestDomain.bar)
+        val ex = intercept[IllegalArgumentException](factory.create(msg))
+        ex.getMessage should include ("there are arguments")
       }
+
+      "should create a case class" in {
+        val msg = Protocol.IncomingMessage(1, "FooTestDomain.barcase", Map.empty)
+        val result = factory.create(msg)
+        result should be (FooTestDomain.barcase(None))
+      }
+
     }
 
     "with a message with parameters" - {

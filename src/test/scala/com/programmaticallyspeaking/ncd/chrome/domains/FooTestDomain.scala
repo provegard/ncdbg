@@ -7,6 +7,8 @@ object FooTestDomain {
 
   case class baz(a: String, b: Int)
 
+  case class barcase(s: Option[String])
+
   case class echo(msg: String)
 
   case object unhandled // Don't handle this in the test actor
