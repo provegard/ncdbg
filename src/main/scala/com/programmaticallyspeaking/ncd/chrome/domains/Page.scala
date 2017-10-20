@@ -9,6 +9,13 @@ object Page {
 
   case class getResourceContent(frameId: String, url: String)
 
+  /**
+    * Don't know where this message is documented. Visual Studio Code sends it, e.g. when paused.
+    *
+    * @param message the message to show
+    */
+  case class configureOverlay(message: Option[String])
+
   case class GetResourceTreeResult(frameTree: FrameResourceTree)
 
   case class FrameResourceTree(frame: Frame, childFrames: Seq[FrameResourceTree], resources: Seq[FrameResource])
@@ -42,7 +49,11 @@ class Page(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
       else
         throw new IllegalArgumentException("Unknown content URL: " + url)
 
-    case Page.setOverlayMessage(msg) =>
-      log.info("Chrome Developer Tools says: " + msg)
+    case Page.setOverlayMessage(msg) => printOverlayMessage(msg)
+
+    case Page.configureOverlay(msg) =>
+      msg.foreach(printOverlayMessage)
   }
+
+  private def printOverlayMessage(msg: String): Unit = log.info("OVERLAY: " + msg)
 }
