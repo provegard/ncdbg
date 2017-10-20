@@ -54,7 +54,7 @@ class ChromeServerTest extends UnitTest with DomainActorTesting with Inside {
   def enableDomain(pub: TestPublisher.Probe[String], sub: TestSubscriber.Probe[Any]): Unit = {
     sub.request(1)
     pub.sendNext("""{"id":"1","method":"FooTestDomain.enable"}""")
-    sub.expectNext(EmptyResponse("1"))
+    sub.expectNext(EmptyResponse(1))
   }
 
   "ChromeServer" - {
@@ -63,7 +63,7 @@ class ChromeServerTest extends UnitTest with DomainActorTesting with Inside {
 
       sub.request(1)
       pub.sendNext("""{"id":"1","method":"FooTestDomain.enable"}""")
-      sub.expectNext(EmptyResponse("1"))
+      sub.expectNext(EmptyResponse(1))
     }
 
     "should stop domain actors if a second DevTools client connects" in {

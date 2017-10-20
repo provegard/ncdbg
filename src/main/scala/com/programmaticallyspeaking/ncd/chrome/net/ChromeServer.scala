@@ -66,7 +66,7 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
 
       context.watch(domainActor)
 
-      domainActor ! Messages.Request(msg.id, domainMessageArg)
+      domainActor ! Messages.Request(msg.id.toString, domainMessageArg)
     } catch {
       case ex: IllegalArgumentException =>
         invalidMethods += msg.method
@@ -135,15 +135,15 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
 
     case response: Messages.Accepted =>
       log.trace("Got accepted-response (no response data) from domain: " + response)
-      sendToDevTools(Protocol.EmptyResponse(response.id))
+      sendToDevTools(Protocol.EmptyResponse(response.id.toLong))
 
     case response: Messages.Response =>
       log.trace("Got response from domain: " + response)
-      sendToDevTools(Protocol.Response(response.id, response.msg))
+      sendToDevTools(Protocol.Response(response.id.toLong, response.msg))
 
     case response: Messages.ErrorResponse =>
       log.warn("Got error response from domain: " + response)
-      sendToDevTools(Protocol.ErrorResponse(response.id, response.error))
+      sendToDevTools(Protocol.ErrorResponse(response.id.toLong, response.error))
 
     case event: Messages.Event =>
       log.debug("Got event from domain: " + event)

@@ -53,42 +53,42 @@ class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSu
 
 
   private def enable(): Unit = {
-    wsClient.sendMessage(toJson(Map("id" -> "1", "method" -> "FooTestDomain.enable", "params" -> null)))
-    wsClient.expectMessage(toJson(Map("id" -> "1")))
+    wsClient.sendMessage(toJson(Map("id" -> 1, "method" -> "FooTestDomain.enable", "params" -> null)))
+    wsClient.expectMessage(toJson(Map("id" -> 1)))
   }
 
   "the Chrome websocket service" - {
     "should respond to a message" in {
       enable()
 
-      wsClient.sendMessage(toJson(Map("id" -> "2", "method" -> "FooTestDomain.bar", "params" -> null)))
-      wsClient.expectMessage(toJson(Map("id" -> "2")))
+      wsClient.sendMessage(toJson(Map("id" -> 2, "method" -> "FooTestDomain.bar", "params" -> null)))
+      wsClient.expectMessage(toJson(Map("id" -> 2)))
     }
 
     "should respond with data to a message" in {
       enable()
 
-      wsClient.sendMessage(toJson(Map("id" -> "2", "method" -> "FooTestDomain.echo", "params" -> Map("msg" -> "hello"))))
-      wsClient.expectMessage(toJson(Map("id" -> "2", "result" -> "hello")))
+      wsClient.sendMessage(toJson(Map("id" -> 2, "method" -> "FooTestDomain.echo", "params" -> Map("msg" -> "hello"))))
+      wsClient.expectMessage(toJson(Map("id" -> 2, "result" -> "hello")))
     }
 
     "should respond with an error for an _unhandled_ domain method" in {
       enable()
 
-      wsClient.sendMessage(toJson(Map("id" -> "2", "method" -> "FooTestDomain.unhandled", "params" -> null)))
-      wsClient.expectMessage(toJson(Map("id" -> "2", "error" -> "Method not supported")))
+      wsClient.sendMessage(toJson(Map("id" -> 2, "method" -> "FooTestDomain.unhandled", "params" -> null)))
+      wsClient.expectMessage(toJson(Map("id" -> 2, "error" -> "Method not supported")))
     }
 
     "should respond with an error for an unknown _domain_" in {
-      wsClient.sendMessage(toJson(Map("id" -> "1", "method" -> "UnknownDomain.xyz", "params" -> null)))
-      wsClient.expectMessage(toJson(Map("id" -> "1", "error" -> "Unknown domain or method: UnknownDomain.xyz")))
+      wsClient.sendMessage(toJson(Map("id" -> 1, "method" -> "UnknownDomain.xyz", "params" -> null)))
+      wsClient.expectMessage(toJson(Map("id" -> 1, "error" -> "Unknown domain or method: UnknownDomain.xyz")))
     }
 
     "should respond with an error for an unknown domain _method_" in {
       enable()
 
-      wsClient.sendMessage(toJson(Map("id" -> "2", "method" -> "FooTestDomain.unknown", "params" -> null)))
-      wsClient.expectMessage(toJson(Map("id" -> "2", "error" -> "Unknown domain or method: FooTestDomain.unknown")))
+      wsClient.sendMessage(toJson(Map("id" -> 2, "method" -> "FooTestDomain.unknown", "params" -> null)))
+      wsClient.expectMessage(toJson(Map("id" -> 2, "error" -> "Unknown domain or method: FooTestDomain.unknown")))
     }
   }
 
