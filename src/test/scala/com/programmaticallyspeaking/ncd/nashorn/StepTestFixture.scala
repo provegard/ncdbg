@@ -12,27 +12,24 @@ class StepTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
-  protected def stepInScript(script: String, stepTypes: Seq[StepType])(tester: (ScriptLocation) => Unit): Unit = {
+  protected def stepInScriptBP(script: String, stepTypes: Seq[StepType])(tester: (HitBreakpoint) => Unit): Unit = {
     assert(script.contains("debugger;"), "Script must contain a 'debugger' statement")
-    val locationPromise = Promise[ScriptLocation]()
+    val breakpointPromise = Promise[HitBreakpoint]()
     val stepQueue = mutable.Queue(stepTypes: _*)
     val observer = new Observer[ScriptEvent] {
       override def onNext(item: ScriptEvent): Unit = item match {
-        case bp: HitBreakpoint if stepQueue.nonEmpty =>
+        case _: HitBreakpoint if stepQueue.nonEmpty =>
           val stepType = stepQueue.dequeue()
           log.debug(s"Instructing host to step with type $stepType")
           getHost.step(stepType)
 
         case bp: HitBreakpoint =>
-          bp.stackFrames.headOption match {
-            case Some(sf) => locationPromise.trySuccess(sf.location)
-            case None => locationPromise.tryFailure(new Exception("No stack frame"))
-          }
+          breakpointPromise.trySuccess(bp)
 
         case _ => // ignore
       }
 
-      override def onError(error: Throwable): Unit = locationPromise.tryFailure(error)
+      override def onError(error: Throwable): Unit = breakpointPromise.tryFailure(error)
 
       override def onComplete(): Unit = {}
     }
@@ -42,9 +39,16 @@ class StepTestFixture extends UnitTest with NashornScriptHostTestFixture {
          |'dummy';
        """.stripMargin
     observeAndRunScriptAsync(wrapper, observer) { host =>
-      locationPromise.future.map(breakpoint => {
+      breakpointPromise.future.map(breakpoint => {
         tester(breakpoint)
       })
+    }
+  }
+
+  protected def stepInScript(script: String, stepTypes: Seq[StepType])(tester: (ScriptLocation) => Unit): Unit = {
+    stepInScriptBP(script, stepTypes) { bp =>
+      val location = bp.stackFrames.headOption.map(_.location).getOrElse(throw new IllegalStateException("No stack frame"))
+      tester(location)
     }
   }
 

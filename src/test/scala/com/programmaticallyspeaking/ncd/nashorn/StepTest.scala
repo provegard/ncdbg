@@ -1,11 +1,33 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{StepInto, StepOut, StepOver}
+import com.programmaticallyspeaking.ncd.host._
 
 class StepTest extends StepTestFixture {
 
   "Stepping" - {
     "over" - {
+      "hits a breakpoint" - {
+        lazy val breakpoint = {
+          var theBp: HitBreakpoint = null
+          val script =
+            """debugger;
+              |while (false) {}
+            """.stripMargin
+          stepInScriptBP(script, Seq(StepOver)) { bp =>
+            theBp = bp
+          }
+          theBp
+        }
+
+        "with Step reason" in {
+          breakpoint.reason should be (BreakpointReason.Step)
+        }
+
+        "with no breakpoint ID" in {
+          breakpoint.breakpointId should be ('empty)
+        }
+      }
+
       "passes a debugger statement" in {
         val script =
           """var x = 5;

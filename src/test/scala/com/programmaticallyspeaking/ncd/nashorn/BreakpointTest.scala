@@ -115,6 +115,42 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
       }
     }
 
+    "for a debugger statement" - {
+      lazy val breakpoint = {
+        val script = "debugger;"
+        var theBp: HitBreakpoint = null
+        waitForBreakpoint(script) { (_, bp) =>
+          theBp = bp
+        }
+        theBp
+      }
+
+      "the reason is Debugger" in {
+        breakpoint.reason should be (BreakpointReason.Debugger)
+      }
+
+      "there is no breakpoint ID" in {
+        breakpoint.breakpointId should be ('empty)
+      }
+    }
+
+    "for a regular breakpoint" - {
+      lazy val breakpoint = {
+        val script = "while (false) {}"
+        var theBp: HitBreakpoint = null
+        breakAtLine(script, 1) { (_, bp) => theBp = bp }
+        theBp
+      }
+
+      "the reason is Breakpoint" in {
+        breakpoint.reason should be (BreakpointReason.Breakpoint)
+      }
+
+      "there is a breakpoint ID" in {
+        breakpoint.breakpointId should be ('defined)
+      }
+    }
+
     "a local scope" - {
       def evaluateLocalScopeObject(script: String)(handler: (ScriptHost, ComplexNode) => Unit): Unit = {
         waitForBreakpoint(script) { (host, breakpoint) =>
@@ -214,14 +250,6 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         case _ => // ignore
       }
       observer
-    }
-
-    def setBreakpoint(bp: HitBreakpoint, line: Int, col: Option[Int]): Option[Breakpoint] = {
-      val scriptId = bp.stackFrames.head.scriptId
-      for {
-        s <- getHost.findScript(ScriptIdentity.fromId(scriptId))
-        bp <- getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(line, col), None)
-      } yield bp
     }
 
     def testSetBreakpoint(script: String, line: Int, col: Option[Int])(handler: (Option[Breakpoint]) => Unit): Unit = {
@@ -355,6 +383,37 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         }
       }
     }
+  }
+
+  private def breakAtLine(script: String, lineBase1: Int)(handler: (NashornScriptHost, HitBreakpoint) => Unit): Unit = {
+    assert(!script.contains("debugger"), "No debugger statement in the script, please.")
+    val realScript =
+      s"""debugger;
+         |$script
+       """.stripMargin
+    val breakpointLine = lineBase1 + 1 // +1 due to the debugger statement
+    val donePromise = Promise[Unit]()
+    val observer = Observer.from[ScriptEvent] {
+      case bp: HitBreakpoint if bp.reason == BreakpointReason.Debugger =>
+        setBreakpoint(bp, breakpointLine, None) match {
+          case Some(_) => getHost.resume()
+          case None => donePromise.failure(new Exception(s"Failed to set breakpoint at line $lineBase1"))
+        }
+      case bp: HitBreakpoint =>
+        donePromise.complete(Try(handler(getHost, bp)))
+      case _ => // ignore
+    }
+    observeAndRunScriptAsync(realScript, observer) { _ =>
+      donePromise.future
+    }
+  }
+
+  def setBreakpoint(bp: HitBreakpoint, line: Int, col: Option[Int]): Option[Breakpoint] = {
+    val scriptId = bp.stackFrames.head.scriptId
+    for {
+      s <- getHost.findScript(ScriptIdentity.fromId(scriptId))
+      bp <- getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(line, col), None)
+    } yield bp
   }
 
   private def describeScope(host: ScriptHost, scope: Scope) = {

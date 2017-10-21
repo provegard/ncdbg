@@ -28,6 +28,40 @@ class ExceptionTest extends BreakpointTestFixture with TableDrivenPropertyChecks
       }
     }
 
+    "the emitted breakpoint" - {
+      lazy val breakpoint = {
+        var theBp: HitBreakpoint = null
+        val script =
+          """try {
+            |  throw "test";
+            |} catch (e) {
+            |  if (false) debugger; // waitForBreakpoint requires it
+            |}
+          """.stripMargin
+        waitForBreakpoint(script, _.pauseOnExceptions(ExceptionPauseType.Caught)) { (_, breakpoint) =>
+          theBp = breakpoint
+        }
+        theBp
+      }
+
+      "with Exception reason" in {
+        breakpoint.reason.getClass should be (classOf[BreakpointReason.Exception])
+      }
+
+      "with no breakpoint ID" in {
+        breakpoint.breakpointId should be ('empty)
+      }
+
+      "with Exception data" in {
+        breakpoint.reason match {
+          case BreakpointReason.Exception(data) =>
+            data.map(_.getClass) should be (Some(classOf[ErrorValue]))
+
+          case other => fail("Unexpected reason: " + other)
+        }
+      }
+    }
+
     "an event is emitted for an uncaught error even if pausing is turned off" in {
       val script =
         """var runf = function() {
