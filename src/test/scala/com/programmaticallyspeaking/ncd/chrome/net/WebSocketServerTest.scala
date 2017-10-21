@@ -54,7 +54,7 @@ class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSu
 
   private def enable(): Unit = {
     wsClient.sendMessage(toJson(Map("id" -> 1, "method" -> "FooTestDomain.enable", "params" -> null)))
-    wsClient.expectMessage(toJson(Map("id" -> 1)))
+    wsClient.expectMessage(toJson(Map("id" -> 1, "result" -> Map.empty)))
   }
 
   "the Chrome websocket service" - {
@@ -62,7 +62,7 @@ class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSu
       enable()
 
       wsClient.sendMessage(toJson(Map("id" -> 2, "method" -> "FooTestDomain.bar", "params" -> null)))
-      wsClient.expectMessage(toJson(Map("id" -> 2)))
+      wsClient.expectMessage(toJson(Map("id" -> 2, "result" -> Map.empty)))
     }
 
     "should respond with data to a message" in {
