@@ -338,6 +338,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
 
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
     case hb: HitBreakpoint =>
+      log.debug("Handling breakpoint event: " + hb)
       pauseBasedOnBreakpoint(hb).foreach(breakpointId => {
         if (temporaryBreakpointIds.contains(breakpointId)) {
           // This was a temporary breakpoint, so remove it
