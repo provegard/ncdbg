@@ -17,10 +17,9 @@ object BreakpointReason {
   * @param stackFrames the current script stack frames
   * @param breakpointId the ID of the breakpoint if an actual breakpoint was hit
   * @param reason reason for the breakpoint
-  * @param data data associated with the breakpoint
   */
 //TODO: A better name is needed, since it's not necessarily a breakpoint
-case class HitBreakpoint(stackFrames: Seq[StackFrame], breakpointId: Option[String], reason: BreakpointReason, data: Option[ValueNode]) extends ScriptEvent
+case class HitBreakpoint(stackFrames: Seq[StackFrame], breakpointId: Option[String], reason: BreakpointReason) extends ScriptEvent
 
 /**
   * Emitted when the remote VM resumes execution.

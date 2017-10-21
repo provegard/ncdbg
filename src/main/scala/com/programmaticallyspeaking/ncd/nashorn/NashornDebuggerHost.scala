@@ -873,20 +873,13 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
                 log.info(s"Pausing at ${s.url}:${location.lineNumber1Based}: $line")
               }
 
-              val hitBreakpoint = HitBreakpoint(stackFrames, Some(breakpointId), BreakpointReason.Breakpoint, None)
+              val hitBreakpoint = HitBreakpoint(stackFrames, Some(breakpointId), BreakpointReason.Breakpoint)
               emitEvent(hitBreakpoint)
             }
             conditionIsTrue
           case _ =>
             // debugger statement, or exception
-            val hitBreakpoint = reason match {
-              case BreakpointReason.Exception(e) =>
-                HitBreakpoint(stackFrames, None, reason, e)
-              case _ =>
-                HitBreakpoint(stackFrames, None, reason, None)
-            }
-
-            emitEvent(hitBreakpoint)
+            emitEvent(HitBreakpoint(stackFrames, None, reason))
             true
         }
       case None =>

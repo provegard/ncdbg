@@ -290,11 +290,11 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     "HitBreakpoint handling" - {
       val aScriptURL = ScriptURL.create("http://programmaticallyspeaking.com/test.js")
 
-      def simulateHitBreakpoint(stackFrames: Seq[StackFrame]): Messages.Event = {
+      def simulateHitBreakpoint(stackFrames: Seq[StackFrame], reason: BreakpointReason = BreakpointReason.Breakpoint): Messages.Event = {
         val debugger = newActorInstance[Debugger]
 
         receiveScriptEventTriggeredEvent(debugger, Seq(Messages.Request("1", Domain.enable)),
-          Seq(HitBreakpoint(stackFrames, Some("dummy"), BreakpointReason.Breakpoint, None))
+          Seq(HitBreakpoint(stackFrames, Some("dummy"), reason))
         )
       }
       def getEventParams(ev: Messages.Event): PausedEventParams = ev.params match {
@@ -325,6 +325,38 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
             case None => fail("Didn't find the scope")
           }
 
+        }
+      }
+
+      "translates" - {
+        val thisObj = objectWithId("$$this")
+        val stackFrame = createStackFrame("sf1", thisObj, None, "a", aScriptURL, location(10), "fun")
+
+        "Exception reason" in {
+          val ev = simulateHitBreakpoint(Seq(stackFrame), BreakpointReason.Exception(None))
+          val params = getEventParams(ev)
+          params.reason should be ("exception")
+        }
+
+        "Breakpoint reason" in {
+          val ev = simulateHitBreakpoint(Seq(stackFrame))
+          val params = getEventParams(ev)
+          params.reason should be ("other")
+        }
+
+        "reason without data into no event params data" in {
+          val ev = simulateHitBreakpoint(Seq(stackFrame))
+          val params = getEventParams(ev)
+          params.data should be ('empty)
+        }
+
+        "reason with data into reference data" in {
+          val objId = ObjectId("err-id")
+          val errValue = ErrorValue(ExceptionData("Error", "err", 1, 0, "", None), true, objId)
+          val reason = BreakpointReason.Exception(Some(errValue))
+          val ev = simulateHitBreakpoint(Seq(stackFrame), reason)
+          val params = getEventParams(ev)
+          params.data should be (Some(RemoteObject.forError("Error", "err", None, objId.toString)))
         }
       }
 

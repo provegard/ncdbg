@@ -380,7 +380,10 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
           case BreakpointReason.Exception(_) => "exception"
           case _ => "other"
         }
-        val data = hitBreakpoint.data.map(d => converter.toRemoteObject(d))
+        val data = hitBreakpoint.reason match {
+          case BreakpointReason.Exception(Some(ev)) => Some(converter.toRemoteObject(ev))
+          case _ => None
+        }
         val params = PausedEventParams(callFrames, reason, hitBreakpoint.breakpointId.toSeq, data)
         emitEvent("Debugger.paused", params)
         hitBreakpoint.breakpointId
