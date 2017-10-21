@@ -14,7 +14,9 @@ object Protocol {
     }
   }
   case class ErrorResponse(id: Long, error: String) extends IdentifiableMessage
-  case class EmptyResponse(id: Long) extends IdentifiableMessage
+  case class EmptyResponse(id: Long) extends IdentifiableMessage {
+    val result: Any = Map.empty
+  }
   case class Response(id: Long, result: Any) extends IdentifiableMessage
 
   case class Event(method: String, params: Any) extends Message
