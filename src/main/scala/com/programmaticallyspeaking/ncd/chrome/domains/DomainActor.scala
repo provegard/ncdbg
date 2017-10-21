@@ -88,9 +88,9 @@ abstract class DomainActor(scriptHost: ScriptHost) extends Actor with Logging {
       processRequest(req)
 
     case scriptEvent: ScriptEvent =>
-      log.debug(s"Got script event $scriptEvent")
+      log.trace(s"Got script event $scriptEvent")
       handleScriptEvent.applyOrElse(scriptEvent, { se: ScriptEvent =>
-        log.debug(s"Dropping unhandled script event $scriptEvent")
+        log.trace(s"Dropping unhandled script event $scriptEvent")
       })
 
     case ProcessingResult(req, result) =>
