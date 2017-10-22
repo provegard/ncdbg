@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2017-10-22)
 
 * Lift requirement that a script path must be absolute - support relative paths as well
   (though relative source maps won't work).
@@ -8,6 +8,7 @@
   as a console log message.
 * Handle GC better during code evaluation (issue #62)
 * Initial support for building with Java 9 (issue #67)
+* Support debugging in Visual Studio Code.
 
 ## 0.5.6 (2017-09-15)
 

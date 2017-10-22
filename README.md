@@ -3,10 +3,15 @@
 [![Build Status](https://travis-ci.org/provegard/ncdbg.svg?branch=master)](https://travis-ci.org/provegard/ncdbg)
 
 NCDbg is a debugger for Nashorn (the JavaScript engine in Java 8 and onward) that
-uses Google Chrome DevTools as frontend.
+uses Google Chrome DevTools or [Visual Studio Code](https://code.visualstudio.com/) (VSCode) as frontend.
 
 NCDbg is an abbreviation of Nashorn Chrome Debugger. I chose that name because of
-my profound lack of imagination when it comes to naming things.
+my profound lack of imagination when it comes to naming things. Since VSCode can act as a 
+debugger frontend as well (since 0.6.0), there is a great need for a better name. Suggestions
+are welcome!
+
+Both Java 8 and Java 9 are supported. Please see [the documentation](docs/README.md) for information
+about Java 9.
 
 ## Building & running tests
 
@@ -31,12 +36,20 @@ See *build.gradle* for details.
 
 Documentation can be found in the _docs_ folder.
 
+### Visual Studio Code
+
+VSCode has a [separate documentation](docs/VSCode.md).
+
 ## Contributing
 
 Pull requests are welcome! However, before creating a pull request, please open an issue to describe
 the missing/limited/faulty behavior that you intend to fix, along with a solution proposal.
 
 In the absence of a proper style guide, please follow the style of existing code.
+
+## Changelog
+
+Please see CHANGELOG.md.
 
 ## License
 

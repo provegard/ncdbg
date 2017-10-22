@@ -57,6 +57,10 @@ take a look at the scripts, set breakpoints etc.!
 
 Note that the Developer Tools console can only be used when the debugger is paused in a breakpoint.
 
+### Visual Studio Code
+
+VSCode has a [separate documentation](VSCode.md).
+
 ## Configuring Options
 
 Running with `--help` shows all available options.
