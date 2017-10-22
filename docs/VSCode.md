@@ -26,14 +26,14 @@ an entry in _launch.json_.
 Open _launch.json_ and add the following configuration entry (in the `configurations` array):
 
 
-  {
-    "type": "chrome",
-    "request": "attach",
-    "name": "Attach to NCDbg",
-    "address": "localhost",
-    "port": 7778,
-    "webRoot": "${workspaceRoot}"
-  }
+    {
+      "type": "chrome",
+      "request": "attach",
+      "name": "Attach to NCDbg",
+      "address": "localhost",
+      "port": 7778,
+      "webRoot": "${workspaceRoot}"
+    }
 
 Adjust the host name and port accordingly. For VSCode to be able to map a script with a relative
 path to a workspace script, the `webRoot` property should be set to the "base location" of
