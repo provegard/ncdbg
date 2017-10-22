@@ -7,7 +7,7 @@ import akka.stream.testkit.scaladsl.{TestSink, TestSource}
 import akka.stream.testkit.{TestPublisher, TestSubscriber}
 import akka.testkit.TestProbe
 import com.programmaticallyspeaking.ncd.chrome.domains.DomainActorTesting
-import com.programmaticallyspeaking.ncd.chrome.net.Protocol.{EmptyResponse, Message}
+import com.programmaticallyspeaking.ncd.chrome.net.Protocol.{EmptyResponse, ErrorResponse, Message}
 import com.programmaticallyspeaking.ncd.infra.ObjectMapping.fromJson
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer}
 import com.programmaticallyspeaking.ncd.testing.UnitTest
@@ -119,5 +119,27 @@ class ChromeServerTest extends UnitTest with DomainActorTesting with Inside {
       server.disconnect()
       sub.expectComplete()
     }
+
+    "responds with error for an unknown domain/method" in {
+      val (pub, sub) = setup(chromeServerFactory.create())
+
+      sub.request(1)
+      pub.sendNext("""{"id":"1","method":"UnknownDomain.enable"}""")
+      sub.expectNext(ErrorResponse(1, unknownMethod("UnknownDomain.enable")))
+    }
+
+    "responds with error for an unknown domain/method also the second time" in {
+      val (pub, sub) = setup(chromeServerFactory.create())
+
+      sub.request(1)
+      pub.sendNext("""{"id":"1","method":"UnknownDomain.enable"}""")
+      sub.expectNext(ErrorResponse(1, unknownMethod("UnknownDomain.enable")))
+
+      sub.request(1)
+      pub.sendNext("""{"id":"2","method":"UnknownDomain.enable"}""")
+      sub.expectNext(ErrorResponse(2, unknownMethod("UnknownDomain.enable")))
+    }
   }
+
+  private def unknownMethod(method: String) = s"Unknown domain or method: $method"
 }

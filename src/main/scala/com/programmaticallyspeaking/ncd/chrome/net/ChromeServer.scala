@@ -53,7 +53,11 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
     }
   }
 
-  private def handleIncomingMessage(msg: Protocol.IncomingMessage) = {
+  private def handleIncomingMessage(msg: Protocol.IncomingMessage): Unit = {
+    if (invalidMethods.contains(msg.method)) {
+      sendToDevTools(Protocol.ErrorResponse(msg.id, "Unknown domain or method: " + msg.method))
+      return
+    }
     try {
       val domain = msg.domain()
       // TODO: Test getOrElseUpdate!!
@@ -125,10 +129,7 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
 
     case FromDevTools(msg) if currentDevToolsRef.contains(sender()) =>
       log.debug(s"Incoming message from Developer Tools: $msg")
-
-      if (!invalidMethods.contains(msg.method)) {
-        handleIncomingMessage(msg)
-      }
+      handleIncomingMessage(msg)
 
     case FromDevTools(msg) =>
       log.debug(s"Ignoring message ($msg) from unknown dev tools sender")
