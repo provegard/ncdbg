@@ -224,7 +224,6 @@ class ChromeServerFactory(domainFactory: DomainFactory)(implicit system: ActorSy
     override def disconnect() = {
       if (isConnected.compareAndSet(true, false)) {
         handler.tell(DevToolsDisconnected, innerActor)
-        innerActor ! PoisonPill
         subject.onComplete()
       }
     }
