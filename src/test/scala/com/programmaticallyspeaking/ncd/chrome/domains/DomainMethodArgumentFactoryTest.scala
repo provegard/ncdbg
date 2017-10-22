@@ -17,6 +17,12 @@ class DomainMethodArgumentFactoryTest extends UnitTest {
       }
     }
 
+    "with a message that targets a custom 'enable' method that takes parameters" in {
+      val msg = Protocol.IncomingMessage(1, "Network.enable", Map.empty)
+      val result = factory.create(msg)
+      result should be (Network.enable())
+    }
+
     "with a message without parameters" - {
 
       "should create a domain-generic 'enable' case object" in {

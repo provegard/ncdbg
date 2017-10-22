@@ -63,10 +63,18 @@ abstract class DomainActor(scriptHost: ScriptHost) extends Actor with Logging {
   /** Override in a base actor to receive custom messages (e.g. those sent to itself). */
   protected def customReceive: Receive = PartialFunction.empty
 
+  /**
+    * A partial function that is defined for a request message that is the enabling message for the domain.
+    * The PF will only be tested using `isDefinedAt` - to handle the enable method, add a case for it in [[handle]].
+    */
+  protected def isEnable: PartialFunction[AnyRef, Unit] = {
+    case Domain.enable =>
+  }
+
   override def receive: Receive = {
     case _: ScriptEvent => // Ignore events when disabled
 
-    case req@Messages.Request(_, Domain.enable) =>
+    case req@Messages.Request(_, msg) if isEnable.isDefinedAt(msg) =>
       log.info(s"Enabling domain $name")
       context.become(receiveEnabled)
       processRequest(req)
@@ -80,7 +88,7 @@ abstract class DomainActor(scriptHost: ScriptHost) extends Actor with Logging {
   }
 
   def receiveEnabled: Receive = {
-    case Messages.Request(id, Domain.enable) =>
+    case Messages.Request(id, msg) if isEnable.isDefinedAt(msg) =>
       val err = Messages.ErrorResponse(id, s"Domain $name is already enabled")
       sender() ! err
 
@@ -141,7 +149,9 @@ abstract class DomainActor(scriptHost: ScriptHost) extends Actor with Logging {
   }
 
   private def unhandledBySubclass(req: Messages.Request, x: AnyRef): Messages.DomainMessage = req.msg match {
-    case Domain.enable|Domain.disable =>
+    case r if isEnable.isDefinedAt(r) =>
+      Messages.Accepted(req.id)
+    case Domain.disable =>
       Messages.Accepted(req.id)
     case _ =>
       Messages.ErrorResponse(req.id, "Method not supported")

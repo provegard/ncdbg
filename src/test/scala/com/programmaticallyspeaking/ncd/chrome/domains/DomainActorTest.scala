@@ -11,6 +11,8 @@ object TestDomainActor {
   case object fail
   case class echo(msg: String)
   case class echoLater(msg: String)
+
+  case class customEnable()
 }
 
 class TestDomainActor(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
@@ -29,6 +31,12 @@ class TestDomainActor(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
     case AScriptEvent(msg) =>
       emitEvent("TestDomainActor.gotEvent", msg)
+  }
+}
+
+class TestDomainActorCustomEnable(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
+  override protected def isEnable = {
+    case TestDomainActor.customEnable() =>
   }
 }
 
@@ -63,6 +71,15 @@ class DomainActorTest extends UnitTest with DomainActorTesting {
       enableActor(actor)
       val ex = intercept[ResponseException] {
         requestAndReceiveResponse(actor, "2", Domain.enable)
+      }
+      ex.getMessage should include ("already enabled")
+    }
+
+    "cannot be enabled twice with a custom enable method" in {
+      val actor = newActorInstance[TestDomainActorCustomEnable]
+      requestAndReceiveResponse(actor, "1", TestDomainActor.customEnable())
+      val ex = intercept[ResponseException] {
+        requestAndReceiveResponse(actor, "2", TestDomainActor.customEnable())
       }
       ex.getMessage should include ("already enabled")
     }

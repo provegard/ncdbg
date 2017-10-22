@@ -16,17 +16,18 @@ object DomainMethodArgumentFactory {
     }
   }
 
+  private def isEnableOrDisable(method: String) = method == "enable" || method == "disable"
+
   private def privCreate(aDomain: String, method: String, params: Map[String, Any]): AnyRef = {
     var domain = aDomain
-    // Special method handling - enable and disable are generic
-    if (method == "enable" || method == "disable") domain = "Domain"
+    val hasParams = params != null
+
+    // Special method handling - enable and disable are generic (unless there are parameters)
+    if (isEnableOrDisable(method) && !hasParams) domain = "Domain"
 
     val className = DomainMethodArgumentFactory.getClass.getPackage.getName + "." + domain + "$" + method
     val maybeClasses = lookupClasses(className)
     val caseObjectClass = maybeClasses.caseObject.getOrElse(throw rejection(domain, method, "the domain and/or method are unknown"))
-
-    val hasParams = params != null
-    val mapParams = Option(params).getOrElse(Map.empty)
 
     if (hasParams) {
       // Create a case class instance
