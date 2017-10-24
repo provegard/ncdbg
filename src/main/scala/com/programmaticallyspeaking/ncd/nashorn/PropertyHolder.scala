@@ -215,8 +215,8 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |          result.push("wo"); // writable (correct?) + own
       |          result.push(target[k]);
       |          result.push(null);
-        |        result.push(null);
-        |        result.push(null); // symbol
+      |          result.push(null);
+      |          result.push(null); // symbol
       |        }
       |      }
       |    }
