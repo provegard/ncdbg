@@ -60,7 +60,7 @@ class MultiThreadingTest extends MultiThreadingTestFixture {
 
 object MultiThreadedScriptExecutor extends App with ScriptExecutorBase {
   println("MultiThreadedScriptExecutor starting. Java version: " + System.getProperty("java.version"))
-  val scriptEngine = new NashornScriptEngineFactory().getScriptEngine
+  val scriptEngine = new NashornScriptEngineFactory().getScriptEngine("--no-syntax-extensions")
   val reader = new BufferedReader(new InputStreamReader(System.in))
   println(Signals.ready)
   waitForSignal(Signals.go)

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+* Don't rely on Nashorn syntax extensions in the property extractor code, since the target may
+  have disabled them (issue #68)
+
 ## 0.6.0 (2017-10-22)
 
 * Lift requirement that a script path must be absolute - support relative paths as well

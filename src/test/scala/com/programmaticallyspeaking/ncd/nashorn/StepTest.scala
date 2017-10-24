@@ -224,11 +224,11 @@ class StepTest extends StepTestFixture {
 
       "enters a function that overrides a Java class method" in {
         val script =
-          """var myList = new (Java.extend(java.util.ArrayList)) {
+          """var myList = new (Java.extend(java.util.ArrayList, {
             |  size: function() {
             |    return Java.super(myList).size();
             |  }
-            |};
+            |}));
             |myList.add("hello");
             |debugger;
             |myList.size();

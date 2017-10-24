@@ -150,7 +150,7 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |    var result = [], proto, i, j;
       |    if (isNative) {
       |      var blacklistRegExp = strPropertyBlacklistRegExp ? new RegExp(strPropertyBlacklistRegExp) : null;
-      |      var includeProp = function (prop) blacklistRegExp ? !prop.match(blacklistRegExp) : true
+      |      var includeProp = function (prop) { return (blacklistRegExp ? !prop.match(blacklistRegExp) : true) };
       |      var current = target, own = true;
       |      while (current) {
       |        var names = Object.getOwnPropertyNames(current);

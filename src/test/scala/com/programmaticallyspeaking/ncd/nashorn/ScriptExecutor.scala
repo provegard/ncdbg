@@ -9,7 +9,7 @@ import scala.util.control.NonFatal
 
 object ScriptExecutor extends App with ScriptExecutorBase {
   println("ScriptExecutor starting. Java version: " + System.getProperty("java.version"))
-  val scriptEngine = new NashornScriptEngineFactory().getScriptEngine
+  val scriptEngine = new NashornScriptEngineFactory().getScriptEngine("--no-syntax-extensions")
   val reader = new BufferedReader(new InputStreamReader(System.in))
   println(Signals.ready)
   waitForSignal(Signals.go)

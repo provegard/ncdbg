@@ -26,7 +26,7 @@ class ScriptIdentificationInRunningAppTest extends ScriptAddedTestFixture {
 
 object RunningApp extends App with ScriptExecutorBase {
   println("RunningApp starting. Java version: " + System.getProperty("java.version"))
-  val scriptEngine = new NashornScriptEngineFactory().getScriptEngine
+  val scriptEngine = new NashornScriptEngineFactory().getScriptEngine("--no-syntax-extensions")
   val reader = new BufferedReader(new InputStreamReader(System.in))
 
   val script1 =
