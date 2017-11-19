@@ -114,7 +114,7 @@ object NashornDebuggerHost {
   }
 }
 
-class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
+class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
     extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport with BreakpointSupport with PauseSupport with PrintSupport {
   import Breakpoints._
   import JDIExtensions._
@@ -129,10 +129,6 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   private val eventSubject = Subject.serialized[ScriptEvent]
 
   private var hostInitializationComplete = false
-
-  private val objectReferencesWithDisabledGC = ListBuffer[ObjectReference]()
-
-  private val objectReferencesWithDisabledGCForTheEntireSession = ListBuffer[ObjectReference]()
 
   private var infoAboutLastStep: Option[StepLocationInfo] = None
 
@@ -188,7 +184,7 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   //TODO: This method is never called, because there's no graceful way to stop NCDbg ATM.
   def prepareForExit(): Unit = {
     try {
-      objectReferencesWithDisabledGCForTheEntireSession.foreach(_.enableCollection())
+      virtualMachine.enableGarbageCollectionForAllReferences()
     } catch {
       case NonFatal(t) =>
         log.error("Failed to enable collection for one or more object references.", t)
@@ -373,17 +369,11 @@ class NashornDebuggerHost(val virtualMachine: VirtualMachine, protected val asyn
   }
 
   private def enableGarbageCollectionWhereDisabled(): Unit = {
-    objectReferencesWithDisabledGC.foreach(_.enableCollection())
-    objectReferencesWithDisabledGC.clear()
+    virtualMachine.enableGarbageCollectionWhereDisabled()
   }
 
-  protected def disableGarbageCollectionFor(value: Value, entireSession: Boolean = false): Unit = value match {
-    case objRef: ObjectReference =>
-      // Disable and track the reference so we can enable when we resume
-      objRef.disableCollection()
-      val targetList = if (entireSession) objectReferencesWithDisabledGCForTheEntireSession else objectReferencesWithDisabledGC
-      targetList += objRef
-    case _ =>
+  protected def disableGarbageCollectionFor(value: Value, entireSession: Boolean = false): Unit = {
+    virtualMachine.disableGarbageCollectionFor(value, entireSession)
   }
 
   private def preventGC(value: Value, lifecycle: Lifecycle.EnumVal): Unit = {

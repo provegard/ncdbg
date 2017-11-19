@@ -21,7 +21,7 @@ trait NashornScriptHost extends ScriptHost {
 
   def prepareForExit(): Unit
 
-  val virtualMachine: VirtualMachine
+  val virtualMachine: XVirtualMachine
 
   // For testing
   def disableObjectPropertiesCache(): Unit

@@ -50,7 +50,7 @@ class NashornDebugger(implicit executionContext: ExecutionContext) extends Loggi
       Future(invoker(singleThreadedScriptHost))
     }
 
-    val theHost = new NashornDebuggerHost(virtualMachine, asyncInvokeOnHost)
+    val theHost = new NashornDebuggerHost(new XVirtualMachine(virtualMachine), asyncInvokeOnHost)
 
     // Create a host proxy that ensures that all NashornScriptHost access happens on a single thread
     singleThreadedScriptHost = new ExecutorProxy(hostExecutor).createFor[NashornScriptHost](theHost)

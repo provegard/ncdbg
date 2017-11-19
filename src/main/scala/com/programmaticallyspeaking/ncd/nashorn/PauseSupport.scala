@@ -110,7 +110,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
         // We do both of these to ensure that the script is paused.
 
         // We're interested in all non-infrastructure threads.
-        val relevantThreads = virtualMachine.allThreads().asScala.filterNot(isInfrastructureThread)
+        val relevantThreads = virtualMachine.allThreads().filterNot(isInfrastructureThread)
 
         // Get possible locations to break on. For each thread, find the first stack frame with non-empty locations
         // and get them (the locations).

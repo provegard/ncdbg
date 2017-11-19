@@ -6,7 +6,7 @@ import org.slf4s.Logging
 
 import scala.collection.concurrent.TrieMap
 
-class BreakableLocations(virtualMachine: VirtualMachine, scripts: Scripts) extends Logging {
+class BreakableLocations(virtualMachine: XVirtualMachine, scripts: Scripts) extends Logging {
 
   import JDIExtensions._
 

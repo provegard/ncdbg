@@ -60,7 +60,7 @@ trait ProfilingSupport extends ScriptHost { self: NashornDebuggerHost with Loggi
       val now = System.nanoTime()
       virtualMachine.suspend()
       try {
-        val relevantThreads = virtualMachine.allThreads().asScala.filterNot(isInfrastructureThread).filter(isRunningThread)
+        val relevantThreads = virtualMachine.allThreads().filterNot(isInfrastructureThread).filter(isRunningThread)
 
         val stackFrameListPerThread = relevantThreads.map { thread =>
           val locations = thread.frames().asScala.map(_.location())

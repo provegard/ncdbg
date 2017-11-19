@@ -25,7 +25,7 @@ object ClassScanner {
   val SCAN_CLASSES_BATCH_LEN = 2.seconds
 }
 
-class ClassScanner(virtualMachine: VirtualMachine, scripts: Scripts, scriptFactory: ScriptFactory,
+class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFactory: ScriptFactory,
                    scriptPublisher: ScriptPublisher, breakableLocations: BreakableLocations,
                    actionPerWantedType: Map[String, (ClassType) => Unit])(implicit executionContext: ExecutionContext) extends Logging {
   import ClassScanner._
@@ -114,7 +114,7 @@ class ClassScanner(virtualMachine: VirtualMachine, scripts: Scripts, scriptFacto
 
     hasInitiatedClassScanning = true
 
-    classesToScan = referenceTypes.asScala.toList
+    classesToScan = referenceTypes.toList
 
     scanOutstandingClasses()
   }

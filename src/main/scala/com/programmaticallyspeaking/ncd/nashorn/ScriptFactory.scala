@@ -11,7 +11,7 @@ import scala.util.{Failure, Success, Try}
 
 case class IdentifiedScript(script: Script)
 
-class ScriptFactory(virtualMachine: VirtualMachine) extends Logging {
+class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
   import JDIExtensions._
 
   import scala.collection.JavaConverters._
