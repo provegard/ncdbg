@@ -1,11 +1,11 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{PrintMessage, ScriptEvent}
+import com.programmaticallyspeaking.ncd.host.{HitBreakpoint, PrintMessage, ScriptEvent, StackFrame}
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.scalatest.concurrent.Eventually
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Promise}
 
 trait PrintTestFixture extends NashornScriptHostTestFixture with Eventually with FairAmountOfPatience {
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
@@ -17,16 +17,35 @@ trait PrintTestFixture extends NashornScriptHostTestFixture with Eventually with
       case _ =>
     }
 
-    observeAndRunScriptSync(script, obs) { _ =>
+    observeAndRunScriptSync(script, obs) { host =>
       eventually {
-        //handler(events)
         assert(events.nonEmpty)
       }
       handler(events)
     }
   }
 
+  def runScriptAndCollectEventsWhilePaused(code: String)(handler: Seq[PrintMessage] => Unit) = {
+    var events = Seq.empty[PrintMessage]
+    val stackframesPromise = Promise[Seq[StackFrame]]()
+    val obs = Observer.from[ScriptEvent] {
+      case ev: PrintMessage => events :+= ev
+      case bp: HitBreakpoint => stackframesPromise.success(bp.stackFrames)
+      case _ =>
+    }
 
+    observeAndRunScriptAsync("debugger;", obs) { host =>
+      stackframesPromise.future.map { sf =>
+
+        host.evaluateOnStackFrame(sf.head.id, code, Map.empty)
+
+        eventually {
+          assert(events.nonEmpty)
+        }
+        handler(events)
+      }
+    }
+  }
 }
 
 class PrintTest extends UnitTest with PrintTestFixture {
@@ -52,6 +71,13 @@ class PrintTest extends UnitTest with PrintTestFixture {
     "emits a PrintMessage even if the no-newline version is used" in {
       useNashornArguments(Seq("print-no-newline"))
       expectMessage("print('hello world');", "hello world")
+    }
+
+    //TODO: Make this work, but perhaps the message should be ignored!
+    "works as code evaluation when the debugger is paused" ignore {
+      runScriptAndCollectEventsWhilePaused("print('it works');") { events =>
+        expectMessage(events, "it works")
+      }
     }
   }
 
