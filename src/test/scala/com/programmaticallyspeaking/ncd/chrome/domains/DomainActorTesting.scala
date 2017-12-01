@@ -101,6 +101,9 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
         id match {
           case IdBasedScriptIdentity(sid) => scripts.find(_.id == sid)
           case URLBasedScriptIdentity(url) => scripts.find(_.url.toString == url)
+          case URLRegexBasedScriptIdentity(regex) =>
+            val compiled = regex.r
+            scripts.find(s => compiled.pattern.matcher(s.url.toString).matches())
         }
     })
     mockScriptHost
