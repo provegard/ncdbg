@@ -295,52 +295,9 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
           val eventIsConsumed = ev.handle().contains(true)
 
           if (!eventIsConsumed) {
-            // Note: Beyond this point, currentPausedData should work since we prepared for pausing in the
-            // before-event handler above.
-            ev match {
-              case ev: MethodEntryEvent if pausedData.isEmpty =>
-                doResume = handleStepOrMethodEvent(ev)
+            val pf = if (pausedData.isDefined) handleEventPaused else handleEventNotPaused
+            doResume = pf.orElse(handleEventCommon).apply(ev)
 
-              case ev: MethodExitEvent if pausedData.isEmpty =>
-                doResume = handleStepOrMethodEvent(ev)
-
-              case ev: StepEvent if pausedData.isEmpty =>
-                doResume = handleStepOrMethodEvent(ev)
-
-              case ev: BreakpointEvent if pausedData.isEmpty =>
-                infoAboutLastStep match {
-                  case Some(info) if info == StepLocationInfo.from(ev) =>
-                    // We stopped in the same location. Continue!
-                    log.debug(s"Breakpoint event in the same location (${ev.location()}) as the previous step event. Ignoring!")
-                  case _ =>
-                    removeAnyStepRequest()
-
-                    doResume = _pauser.handleBreakpoint(ev, prepareForPausing(ev))
-                }
-
-              case ev: ClassPrepareEvent =>
-                _scanner.handleEvent(ev)
-              case ev: ExceptionEvent if pausedData.isEmpty =>
-                val exceptionTypeName = ev.exception().referenceType().name()
-                val isECMAException = exceptionTypeName == NIR_ECMAException
-                if (isECMAException) {
-                  val pd = prepareForPausing(ev)
-                  maybeEmitErrorEvent(pd)
-                  doResume = _pauser.handleBreakpoint(ev, pd)
-                } else log.trace(s"Ignoring non-ECMA exception of type $exceptionTypeName")
-
-              case _: VMStartEvent =>
-                // ignore it, but don't log a warning
-
-              case other if pausedData.isDefined =>
-                // Don't react on events if we're paused. Only one thread can be debugged at a time. Only log this on
-                // trace level to avoid excessive logging in a multi-threaded system.
-                val eventName = other.getClass.getSimpleName
-                log.trace(s"Ignoring Nashorn event $eventName since we're already paused.")
-
-              case other =>
-                log.warn("Unknown event: " + other)
-            }
             // Clear info about the last step as soon as we see a non-step event.
             if (!ev.isInstanceOf[StepEvent]) {
               infoAboutLastStep = None
@@ -357,6 +314,59 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
       }
     case operation =>
       throw new IllegalArgumentException("Unknown operation: " + operation)
+  }
+
+  private val handleEventCommon: PartialFunction[Event, Boolean] = {
+    case ev: ClassPrepareEvent =>
+      _scanner.handleEvent(ev)
+      true
+
+    case _: VMStartEvent =>
+      // ignore it, but don't log a warning
+      true
+
+    case other if pausedData.isDefined =>
+      // Don't react on events if we're paused. Only one thread can be debugged at a time. Only log this on
+      // trace level to avoid excessive logging in a multi-threaded system.
+      val eventName = other.getClass.getSimpleName
+      log.trace(s"Ignoring Nashorn event $eventName since we're already paused.")
+      true
+
+    case other =>
+      log.warn("Unknown event: " + other)
+      true
+  }
+
+  private val handleEventPaused: PartialFunction[Event, Boolean] = PartialFunction.empty
+
+  private val handleEventNotPaused: PartialFunction[Event, Boolean] = {
+    case ev: MethodEntryEvent => handleStepOrMethodEvent(ev)
+    case ev: MethodExitEvent => handleStepOrMethodEvent(ev)
+    case ev: StepEvent => handleStepOrMethodEvent(ev)
+
+    case ev: BreakpointEvent =>
+      infoAboutLastStep match {
+        case Some(info) if info == StepLocationInfo.from(ev) =>
+          // We stopped in the same location. Continue!
+          log.debug(s"Breakpoint event in the same location (${ev.location()}) as the previous step event. Ignoring!")
+          true
+        case _ =>
+          removeAnyStepRequest()
+
+          _pauser.handleBreakpoint(ev, prepareForPausing(ev))
+      }
+
+    case ev: ExceptionEvent =>
+      val exceptionTypeName = ev.exception().referenceType().name()
+      val isECMAException = exceptionTypeName == NIR_ECMAException
+      if (isECMAException) {
+        val pd = prepareForPausing(ev)
+        maybeEmitErrorEvent(pd)
+        _pauser.handleBreakpoint(ev, pd)
+      } else {
+        log.trace(s"Ignoring non-ECMA exception of type $exceptionTypeName")
+        true
+      }
   }
 
   private def resume(eventSet: EventSet): Unit = {
