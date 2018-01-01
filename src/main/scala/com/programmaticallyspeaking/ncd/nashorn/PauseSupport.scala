@@ -20,7 +20,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
   import PauseSupport._
   import JDIExtensions._
 
-  protected def enableExceptionPausing(ct: ClassType): Unit = {
+  protected def enableExceptionPausing(): Unit = {
     log.info(s"Enabling breaking on exceptions in script classes.")
     val erm = virtualMachine.eventRequestManager()
     // Note that we want to pause on both caught and uncaught exceptions at all times, because we have

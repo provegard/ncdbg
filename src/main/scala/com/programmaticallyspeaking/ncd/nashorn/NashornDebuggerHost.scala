@@ -34,7 +34,6 @@ object NashornDebuggerHost {
     JL_Long -> true,
     JL_Double -> true,
     NIO_Global -> true,
-    NIR_ECMAException -> false, // don't stop init
     NIR_JSType -> false // don't stop init
   )
 
@@ -149,7 +148,6 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     */
   private val actionPerWantedType: Map[String, (ClassType) => Unit] = Map(
     NIR_ScriptRuntime -> enableBreakingAtDebuggerStatement _,
-    NIR_ECMAException -> enableExceptionPausing _,
     NIO_Global -> enablePrintCapture _
   )
 
@@ -168,6 +166,8 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   private val _stackFramEval = new StackFrameEvaluator(mappingRegistry, boxer)
 
   def initialize(): Unit = {
+    enableExceptionPausing()
+
     _scanner.setup(new Observer[ScanAction] {
       // Not used...
       override def onError(error: Throwable): Unit = {}
