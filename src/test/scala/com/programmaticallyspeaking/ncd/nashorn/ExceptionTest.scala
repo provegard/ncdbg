@@ -97,6 +97,20 @@ class ExceptionTest extends BreakpointTestFixture with TableDrivenPropertyChecks
     }
   }
 
+  "should stop on an uncaught reference error" in {
+    val script =
+      """var f = function() {
+        |  return foo + 1; // stop here
+        |  debugger; // required
+        |};
+        |f();
+      """.stripMargin
+
+    waitForBreakpoint(script, _.pauseOnExceptions(ExceptionPauseType.Uncaught)) { (_, breakpoint) =>
+      lineNumber(breakpoint) should be (2)
+    }
+  }
+
   "when the error is caught but a Java adapter is between the throw and catch locations, meaning that we don't really know caught-ness" - {
     val script =
       """var runf = function() {

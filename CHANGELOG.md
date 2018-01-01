@@ -4,6 +4,7 @@
 
 * Don't rely on Nashorn syntax extensions in the property extractor code, since the target may
   have disabled them (issue #68)
+* Pause on reference errors if pausing on exceptions.
 
 ## 0.6.0 (2017-10-22)
 

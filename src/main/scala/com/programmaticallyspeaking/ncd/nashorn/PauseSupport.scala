@@ -29,8 +29,9 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
     // We don't necessarily find ECMAException at VM startup, so we don't have it available here.
     val request = erm.createExceptionRequest(null, true, true)
     request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD) // TODO: Duplicate code
-    // We're only interested in exceptions thrown in scripts
-    request.addClassFilter(ScriptClassNamePrefix + "*")
+    // We're mostly interested in exceptions thrown in scripts, but a reference error is thrown from
+    // jdk.nashorn.internal.objects.Global.__noSuchProperty__, so include the entire internal Nashorn package.
+    request.addClassFilter("jdk.nashorn.internal.*")
     request.setEnabled(true)
   }
 
