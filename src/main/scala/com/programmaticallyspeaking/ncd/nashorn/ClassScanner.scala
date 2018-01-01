@@ -45,11 +45,15 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
     */
   private var classesToScan = List.empty[ReferenceType]
 
-  def handleEvent(ev: ClassPrepareEvent): Unit = {
+  def handleEvent(ev: ClassPrepareEvent): Unit = consider(ev.referenceType(), Some(ev.thread()))
+
+  def consider(rt: ReferenceType): Unit = consider(rt, None)
+
+  private def consider(rt: ReferenceType, thread: Option[ThreadReference]): Unit = {
     if (hasInitiatedClassScanning) {
       // A new class, added after we have initiated scanning
-      considerReferenceType(Some(ev.thread()), ev.referenceType())
-    } else if (relevantForPostponingClassScan(ev.referenceType())) {
+      considerReferenceType(thread, rt)
+    } else if (relevantForPostponingClassScan(rt)) {
       bumpScanTimer()
     }
   }

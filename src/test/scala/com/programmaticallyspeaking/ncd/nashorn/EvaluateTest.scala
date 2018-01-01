@@ -113,6 +113,28 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
 
     }
 
+    "detects a script added using 'load'" in {
+      var events = Seq.empty[ScriptAdded]
+
+      val loadIt =
+        """
+          |load({
+          |  script: "var x = 42 * 42;",
+          |  name: "loaded.js"
+          |});
+        """.stripMargin
+
+      def recordEvent(e: ScriptEvent): Unit = e match {
+        case s: ScriptAdded => events :+= s
+        case _ =>
+      }
+      evaluateInScript("debugger;", recordEvent) { (host, stackframes) =>
+        host.evaluateOnStackFrame(stackframes.head.id, loadIt, Map.empty).get // get forces any failure
+      }
+
+      events.find(_.script.contents.contains("42 * 42")) should be ('defined)
+    }
+
     "and throwing a JS error" - {
       val script = "(function () { debugger; })();"
       val expression = "throw new TypeError('ugh');"
