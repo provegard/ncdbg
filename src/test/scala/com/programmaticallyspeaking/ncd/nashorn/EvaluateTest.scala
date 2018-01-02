@@ -4,6 +4,7 @@ import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropert
 import com.programmaticallyspeaking.ncd.host._
 import org.scalatest.prop.TableDrivenPropertyChecks
 
+import scala.concurrent.Promise
 import scala.util.{Failure, Success, Try}
 
 class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
@@ -114,7 +115,7 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
     }
 
     "detects a script added using 'load'" in {
-      var events = Seq.empty[ScriptAdded]
+      val foundIt = Promise[Unit]()
 
       val loadIt =
         """
@@ -125,14 +126,14 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
         """.stripMargin
 
       def recordEvent(e: ScriptEvent): Unit = e match {
-        case s: ScriptAdded => events :+= s
+        case s: ScriptAdded if s.script.contents.contains("42 * 42") => foundIt.success(())
         case _ =>
       }
       evaluateInScript("debugger;", recordEvent) { (host, stackframes) =>
         host.evaluateOnStackFrame(stackframes.head.id, loadIt, Map.empty).get // get forces any failure
       }
 
-      events.find(_.script.contents.contains("42 * 42")) should be ('defined)
+      whenReady(foundIt.future) { _ => }
     }
 
     "and throwing a JS error" - {

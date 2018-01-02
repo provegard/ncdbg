@@ -3,11 +3,12 @@ package com.programmaticallyspeaking.ncd.nashorn
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.UnitTest
+import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Promise}
 
-class EvaluateTestFixture extends UnitTest with NashornScriptHostTestFixture {
+class EvaluateTestFixture extends UnitTest with NashornScriptHostTestFixture with ScalaFutures with IntegrationPatience {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
