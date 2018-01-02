@@ -39,9 +39,6 @@ trait PrintTestFixture extends NashornScriptHostTestFixture with Eventually with
 
         host.evaluateOnStackFrame(sf.head.id, code, Map.empty)
 
-        eventually {
-          assert(events.nonEmpty)
-        }
         handler(events)
       }
     }
@@ -73,10 +70,9 @@ class PrintTest extends UnitTest with PrintTestFixture {
       expectMessage("print('hello world');", "hello world")
     }
 
-    //TODO: Make this work, but perhaps the message should be ignored!
-    "works as code evaluation when the debugger is paused" ignore {
-      runScriptAndCollectEventsWhilePaused("print('it works');") { events =>
-        expectMessage(events, "it works")
+    "is ignored when the debugger is paused to avoid deadlock" in {
+      runScriptAndCollectEventsWhilePaused("print('ignored');") { events =>
+        events should be ('empty)
       }
     }
   }

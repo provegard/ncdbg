@@ -6,6 +6,7 @@
   have disabled them (issue #68)
 * Pause on reference errors if pausing on exceptions.
 * Detect a script added during code evaluation, e.g. when the `load` extension is used (issue #66)
+* Don't capture print statements while paused, in order to avoid deadlock (issue #66)
 
 ## 0.6.0 (2017-10-22)
 

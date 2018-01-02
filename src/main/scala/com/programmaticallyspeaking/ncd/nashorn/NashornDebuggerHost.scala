@@ -111,6 +111,11 @@ object NashornDebuggerHost {
     val belongsToScript = stackFrame.isDefined
     val isAtDebuggerStatement = location.isDebuggerStatement
   }
+
+  sealed trait InternalState
+  case object Initialize extends InternalState
+  case object Pause extends InternalState
+  case object Unpause extends InternalState
 }
 
 class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
@@ -126,6 +131,8 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   protected val stackframeIdGenerator = new IdGenerator("ndsf")
 
   private val eventSubject = Subject.serialized[ScriptEvent]
+
+  protected val internalStateSubject = Subject.serialized[InternalState] //TODO: Serialized isn't needed
 
   private var hostInitializationComplete = false
 
@@ -166,6 +173,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   private val _stackFramEval = new StackFrameEvaluator(mappingRegistry, boxer)
 
   def initialize(): Unit = {
+    internalStateSubject.onNext(Initialize)
     enableExceptionPausing()
 
     _scanner.setup(new Observer[ScanAction] {
@@ -257,6 +265,8 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     // for the evaluation to complete).
     virtualMachine.eventRequestManager().exceptionRequests().asScala.foreach(_.disable())
 
+    internalStateSubject.onNext(Pause)
+
     implicit val thread = ev.thread()
     val pd = new PausedData(thread, createMarshaller(), stackBuilder, ev)
     pausedData = Some(pd)
@@ -273,6 +283,8 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
 
     // Enable exception requests again (see prepareForPausing)
     virtualMachine.eventRequestManager().exceptionRequests().asScala.foreach(_.enable())
+
+    internalStateSubject.onNext(Unpause)
 
     if (addedClasses.nonEmpty) {
       log.debug(s"Scanning ${addedClasses.size} classes to detect scripts added during code evaluation.")
