@@ -113,7 +113,6 @@ object NashornDebuggerHost {
   }
 
   sealed trait InternalState
-  case object Initialize extends InternalState
   case object Pause extends InternalState
   case object Unpause extends InternalState
 }
@@ -173,7 +172,6 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   private val _stackFramEval = new StackFrameEvaluator(mappingRegistry, boxer)
 
   def initialize(): Unit = {
-    internalStateSubject.onNext(Initialize)
     enableExceptionPausing()
 
     _scanner.setup(new Observer[ScanAction] {
@@ -260,11 +258,6 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     // Start with a fresh object registry
     mappingRegistry.clear()
 
-    // Disable exception requests while we're paused since otherwise an exception thrown during JS evaluation
-    // will deadlock (an ExceptionEvent event will be generated but cannot be delivered to NDH since NDH is waiting
-    // for the evaluation to complete).
-    virtualMachine.eventRequestManager().exceptionRequests().asScala.foreach(_.disable())
-
     internalStateSubject.onNext(Pause)
 
     implicit val thread = ev.thread()
@@ -280,9 +273,6 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     val addedClasses = pausedData.toSeq.flatMap(_.addedClasses())
     pausedData = None
     mappingRegistry.clear() // only valid when paused
-
-    // Enable exception requests again (see prepareForPausing)
-    virtualMachine.eventRequestManager().exceptionRequests().asScala.foreach(_.enable())
 
     internalStateSubject.onNext(Unpause)
 

@@ -1,6 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.ExceptionPauseType
+import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.isInfrastructureThread
 import com.sun.jdi.event.Event
 import com.sun.jdi.request.EventRequest
@@ -33,6 +34,14 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
     // jdk.nashorn.internal.objects.Global.__noSuchProperty__, so include the entire internal Nashorn package.
     request.addClassFilter("jdk.nashorn.internal.*")
     request.setEnabled(true)
+
+    // Disable exception requests while we're paused since otherwise an exception thrown during JS evaluation
+    // will deadlock (an ExceptionEvent event will be generated but cannot be delivered to NDH since NDH is waiting
+    // for the evaluation to complete).
+    internalStateSubject.subscribe(Observer.from[InternalState] {
+      case Pause   => request.disable()
+      case Unpause => request.enable()
+    })
   }
 
   override def pauseOnExceptions(pauseType: ExceptionPauseType): Unit = {
