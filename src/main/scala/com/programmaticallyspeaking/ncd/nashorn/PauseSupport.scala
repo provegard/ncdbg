@@ -102,6 +102,10 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
     configureRequest(request)
   }
 
+  private def isScriptFrame(sf: StackFrame) = {
+    sf.location().declaringType().name().startsWith(ScriptClassNamePrefix)
+  }
+
   override def pauseAtNextStatement(): Unit = pausedData match {
     case Some(_) =>
       log.warn("Won't pause at next statement because we're already paused!")
@@ -127,7 +131,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
         val locationsToSetBreakpointsOn = relevantThreads.flatMap { thread =>
           // Create a view so that we can map and find lazily
           val viewOfFrames = thread.frames().asScala.view
-          viewOfFrames.map(locationsForStackFrame).find(_.nonEmpty).getOrElse(Seq.empty)
+          viewOfFrames.filter(isScriptFrame).map(locationsForStackFrame).find(_.nonEmpty).getOrElse(Seq.empty)
         }
 
         log.info("Will pause at next script statement")
