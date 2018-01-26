@@ -6,13 +6,19 @@ import com.typesafe.config.ConfigFactory
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.{Answer, OngoingStubbing}
 import org.scalatest._
+import org.scalatest.concurrent.ScalaFutures
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 trait UnitTest extends FreeSpec with Matchers
 trait IsolatedUnitTest extends path.FreeSpec with Matchers
+
+trait AsyncUnitTest extends UnitTest with ScalaFutures {
+  implicit val executionContext: ExecutionContext = ExecutionContext.global
+}
 
 object SelectiveActorLogging {
   def config = {

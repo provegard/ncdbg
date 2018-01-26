@@ -8,6 +8,7 @@
 * Detect a script added during code evaluation, e.g. when the `load` extension is used (issue #66)
 * Don't capture print statements while paused, in order to avoid deadlock (issue #66)
 * Try to make general pause more stable, only set breakpoints in script frames (issue #71)
+* Make script contents hashing thread safe - avoids duplicate scripts with the same contents.
 
 ## 0.6.0 (2017-10-22)
 
