@@ -49,6 +49,7 @@ class BreakableLocation private(val script: Script, eventRequestManager: EventRe
     * (i.e. if this BreakableLocation is a placehoilder), though [[isEnabled]] will return true.
     */
   def enable(): Unit = {
+    if (_isEnabled) return
     location.foreach { loc =>
       breakpointRequest = eventRequestManager.createBreakpointRequest(loc)
 

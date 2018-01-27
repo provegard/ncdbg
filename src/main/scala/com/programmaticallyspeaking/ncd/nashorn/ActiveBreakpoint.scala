@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.Breakpoint
+import com.programmaticallyspeaking.ncd.host.{Breakpoint, LocationInScript, Script}
 
 /**
   * An active breakpoint may map to one or more breakable locations, since we cannot distinguish between location
@@ -10,15 +10,11 @@ import com.programmaticallyspeaking.ncd.host.Breakpoint
   * @param breakableLocations the breakable locations
   */
 case class ActiveBreakpoint(id: String, breakableLocations: Seq[BreakableLocation], condition: Option[String]) {
-  assert(breakableLocations.nonEmpty, "An active breakpoint needs at least one breakable location")
-
-  val firstBreakableLocation = breakableLocations.head
 
   def toBreakpoint: Breakpoint = {
-    val script = firstBreakableLocation.script
     // There may be multiple breakable locations for a line (each with its own Location), but to DevTools we
     // only report unique locations.
-    Breakpoint(id, script.id, Some(script.url), breakableLocations.map(_.scriptLocation).distinct)
+    Breakpoint(id, breakableLocations.map(bl => LocationInScript(bl.script.id, bl.scriptLocation)).distinct)
   }
 
   def disable(): Unit = breakableLocations.foreach(_.disable())

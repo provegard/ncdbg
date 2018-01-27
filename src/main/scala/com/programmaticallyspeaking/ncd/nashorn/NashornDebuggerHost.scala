@@ -426,7 +426,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   protected def findBreakableLocation(location: Location): Option[BreakableLocation] =
     _breakableLocations.byLocation(location)
 
-  protected def findBreakableLocationsAtLine(id: ScriptIdentity, lineNumber: Int): Option[Seq[BreakableLocation]] =
+  protected def findBreakableLocationsAtLine(id: ScriptIdentity, lineNumber: Int): Seq[BreakableLocation] =
     _breakableLocations.atLine(id, lineNumber)
 
   protected def resumeWhenPaused(): Unit = pausedData match {
@@ -448,9 +448,6 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     removeAllBreakpoints()
     resume()
   }
-
-  override def removeBreakpointById(id: String): Unit = _breakpoints.disableById(id)
-
 
   override def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode] = Try {
     pausedData match {

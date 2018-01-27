@@ -87,6 +87,52 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     }
   }
 
+  "setting a breakpoint for an unknown script" - {
+    "works and returns no locations" in {
+      waitForBreakpoint("debugger;") { (host, _) =>
+        val bp = host.setBreakpoint(URLRegexBasedScriptIdentity(".*unknown\\.js$"), ScriptLocation(1, None), None)
+        bp.locations should be (Seq.empty)
+      }
+    }
+
+    "results in a BreakpointResolved event later on" in {
+      waitForBreakpointThenEvent("debugger;") { (host, hb) =>
+        host.ignoreBreakpoints()
+        host.setBreakpoint(URLRegexBasedScriptIdentity(".*unknown\\.js$"), ScriptLocation(1, None), None)
+
+        val loader =
+          """
+            |load({
+            |  script: "'use strict';",
+            |  name: "unknown.js"
+            |});
+          """.stripMargin
+        host.evaluateOnStackFrame(hb.stackFrames.head.id, loader, Map.empty)
+      } {
+        case BreakpointResolved(_, location) =>
+          location.location.lineNumber1Based should be (1)
+      }
+    }
+
+    "actually breaks in a new script" in {
+      waitForBreakpoints("debugger; this.ff();")({ (host, hb) =>
+        host.setBreakpoint(URLRegexBasedScriptIdentity(".*unknown2\\.js$"), ScriptLocation(2, None), None)
+
+        val loader =
+          """
+            |load({
+            |  script: "this.ff = function(){\nreturn 42;\n}",
+            |  name: "unknown2.js"
+            |});
+            |print("ff = " + this.ff);
+          """.stripMargin
+        host.evaluateOnStackFrame(hb.stackFrames.head.id, loader, Map.empty)
+      }, { (host, hb) =>
+        hb.stackFrames.head.scriptURL.toString should include ("unknown2.js")
+      })
+    }
+  }
+
   "when a breakpoint is hit" - {
     "the scopes should be sorted out" - {
       forAll(scopeTests) { (desc, script, expectationRegExps) =>
@@ -266,7 +312,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
       }
     }
 
-    def columnNumbers(bp: Option[Breakpoint]) = bp.map(_.locations.flatMap(_.columnNumber1Based)).getOrElse(Seq.empty)
+    def columnNumbers(bp: Option[Breakpoint]) = bp.map(_.locations.flatMap(_.location.columnNumber1Based)).getOrElse(Seq.empty)
 
     "in a script with a 'with' statement last in a function" - {
       val script =
@@ -324,10 +370,9 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
 
           if (data.hitsSoFar == 1) {
             // debugger
-            (for {
-              s <- getHost.findScript(ScriptIdentity.fromId(scriptId))
-              bp <- getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(2, None), None)
-            } yield bp) match {
+            getHost.findScript(ScriptIdentity.fromId(scriptId)).map { s =>
+              getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(2, None), None)
+            } match {
               case Some(bps) => breakpointIds += bps.breakpointId
               case None => donePromise.failure(new Exception("No script or breakpoint"))
             }
@@ -395,9 +440,14 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     val donePromise = Promise[Unit]()
     val observer = Observer.from[ScriptEvent] {
       case bp: HitBreakpoint if bp.reason == BreakpointReason.Debugger =>
+        println("Calling setBreakpoint")
         setBreakpoint(bp, breakpointLine, None) match {
-          case Some(_) => getHost.resume()
-          case None => donePromise.failure(new Exception(s"Failed to set breakpoint at line $lineBase1"))
+          case Some(x) =>
+            println("BP: " + x)
+            getHost.resume()
+          case None =>
+            println("OOPS")
+            donePromise.failure(new Exception(s"Failed to set breakpoint at line $lineBase1"))
         }
       case bp: HitBreakpoint =>
         donePromise.complete(Try(handler(getHost, bp)))
@@ -410,10 +460,9 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
 
   def setBreakpoint(bp: HitBreakpoint, line: Int, col: Option[Int]): Option[Breakpoint] = {
     val scriptId = bp.stackFrames.head.scriptId
-    for {
-      s <- getHost.findScript(ScriptIdentity.fromId(scriptId))
-      bp <- getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(line, col), None)
-    } yield bp
+    getHost.findScript(ScriptIdentity.fromId(scriptId)).map { s =>
+      getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(line, col), None)
+    }
   }
 
   private def describeScope(host: ScriptHost, scope: Scope) = {

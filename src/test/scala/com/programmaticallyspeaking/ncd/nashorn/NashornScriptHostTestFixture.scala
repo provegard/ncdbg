@@ -207,6 +207,7 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
     // Reset things
     host.setSkipAllPauses(false)
     host.pauseOnExceptions(ExceptionPauseType.None)
+    host.pauseOnBreakpoints()
 
     // First let the implementing test class do any setup. RealDebuggerTest enables the Debugger actor, for example.
     beforeEachTest()

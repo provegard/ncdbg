@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import java.util.concurrent.Executors
+import java.util.concurrent.{Executors, ThreadFactory}
 
 import akka.actor.ActorSystem
 import com.programmaticallyspeaking.ncd.infra.ExecutorProxy
@@ -34,9 +34,17 @@ class NashornDebuggerConnector(hostName: String, port: Int) extends Logging {
   }
 }
 
+class NashornDebuggerThreadFactory extends ThreadFactory {
+  override def newThread(r: Runnable): Thread = {
+    val thread = new Thread(r)
+    thread.setName("NashornDebugger")
+    thread
+  }
+}
+
 class NashornDebugger(implicit executionContext: ExecutionContext) extends Logging {
 
-  private val hostExecutor = Executors.newSingleThreadExecutor()
+  private val hostExecutor = Executors.newSingleThreadExecutor(new NashornDebuggerThreadFactory)
 
   private def initAndListen(host: NashornScriptHost): Unit = {
     // TODO: Do we want to react on init success/failure here? Probably...

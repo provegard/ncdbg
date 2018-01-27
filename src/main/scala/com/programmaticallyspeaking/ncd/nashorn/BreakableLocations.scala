@@ -1,7 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{Script, ScriptIdentity}
-import com.sun.jdi.{Location, VirtualMachine}
+import com.programmaticallyspeaking.ncd.host.{IdBasedScriptIdentity, Script, ScriptIdentity}
+import com.sun.jdi.Location
 import org.slf4s.Logging
 
 import scala.collection.concurrent.TrieMap
@@ -55,19 +55,30 @@ class BreakableLocations(virtualMachine: XVirtualMachine, scripts: Scripts) exte
     // on the correct line. The fallback is necessary since the passed-in Location may have a code index that is
     // different from the one stored in a BreakableLocation.
     val id = ScriptIdentity.fromURL(url)
-    atLine(id, location.lineNumber()).flatMap { bls =>
-      bls.find(_.hasLocation(location)).orElse(bls.find(_.sameMethodAndLineAs(location)))
-    }
+    val bls = atLine(id, location.lineNumber())
+    bls.find(_.hasLocation(location)).orElse(bls.find(_.sameMethodAndLineAs(location)))
   }
 
-  def atLine(id: ScriptIdentity, lineNumber: Int): Option[Seq[BreakableLocation]] = findScriptUrl(id) match {
+  /**
+    * Called indirectly when the user sets a breakpoint in DevTools.
+    *
+    * @param id script identity
+    * @param lineNumber line number for the breakpoint
+    */
+  def atLine(id: ScriptIdentity, lineNumber: Int): Seq[BreakableLocation] = findScriptUrl(id) match {
     case Some(scriptUrl) =>
       breakableLocationsByScriptUrl.get(scriptUrl).map { breakableLocations =>
         breakableLocations.filter(_.scriptLocation.lineNumber1Based == lineNumber)
-      }
-
+      }.getOrElse(Seq.empty)
     case None =>
-      throw new IllegalArgumentException("Unknown script: " + id)
+      id match {
+        case IdBasedScriptIdentity(scriptId) =>
+          throw new IllegalArgumentException("Unknown script: " + scriptId)
+        case _ =>
+          // This is not an error since the URL-based ID may match a future script in which case we will
+          // emit a BreakpointResolved event at that time.
+          Seq.empty
+      }
   }
 
   private def findScriptUrl(id: ScriptIdentity): Option[String] = scripts.byId(id).map(_.url.toString)

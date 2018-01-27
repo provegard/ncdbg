@@ -52,3 +52,11 @@ object InitialInitializationComplete extends ScriptEvent
   * @param message the message passed to the print function
   */
 case class PrintMessage(message: String) extends ScriptEvent
+
+/**
+  * Emitted when a new script is detected and there are breakpoints that match it.
+  *
+  * @param breakpointId the ID of the breakpoint
+  * @param location the matched location
+  */
+case class BreakpointResolved(breakpointId: String, location: LocationInScript) extends ScriptEvent

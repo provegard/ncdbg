@@ -11,10 +11,17 @@ case class ScriptLocation(lineNumber1Based: Int, columnNumber1Based: Option[Int]
   override def toString: String = lineNumber1Based + columnNumber1Based.map(c => ":" + c).getOrElse("")
 }
 
-case class Breakpoint(breakpointId: String, scriptId: String, scriptURL: Option[ScriptURL], locations: Seq[ScriptLocation]) {
-  require(locations.nonEmpty, "A Breakpoint must have locations")
-  def location: ScriptLocation = locations.head //TODO: for tests, remove
-}
+/**
+  * This is a script identity _and_ location. [[ScriptLocation]] is used as input parameter in which case script
+  * identity is typically separate. When we return a location it's convenient to include the script identity though.
+  * TODO: Fix naming confusion
+  *
+  * @param scriptId the script ID
+  * @param location the script location
+  */
+case class LocationInScript(scriptId: String, location: ScriptLocation)
+
+case class Breakpoint(breakpointId: String, locations: Seq[LocationInScript])
 
 sealed trait ScopeType
 object ScopeType {
@@ -108,7 +115,7 @@ trait ScriptHost {
     * @param condition optional condition to use for the breakpoint
     * @return a structure describing the breakpoint that was set
     */
-  def setBreakpoint(id: ScriptIdentity, location: ScriptLocation, condition: Option[String]): Option[Breakpoint]
+  def setBreakpoint(id: ScriptIdentity, location: ScriptLocation, condition: Option[String]): Breakpoint
 
   def getBreakpointLocations(id: ScriptIdentity, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation]
 

@@ -97,14 +97,7 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
     when(mockScriptHost.scripts).thenReturn(scripts) // mutable list
     when(mockScriptHost.events).thenReturn(scriptEventSubject)
     when(mockScriptHost.findScript(any[ScriptIdentity])).thenAnswerWith({
-      case List(id: ScriptIdentity) =>
-        id match {
-          case IdBasedScriptIdentity(sid) => scripts.find(_.id == sid)
-          case URLBasedScriptIdentity(url) => scripts.find(_.url.toString == url)
-          case URLRegexBasedScriptIdentity(regex) =>
-            val compiled = regex.r
-            scripts.find(s => compiled.pattern.matcher(s.url.toString).matches())
-        }
+      case List(id: ScriptIdentity) => scripts.find(id.matchesScript)
     })
     mockScriptHost
   }

@@ -4,23 +4,60 @@ import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Promise}
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 class BreakpointTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
-  protected def waitForBreakpoint(script: String, hostSetup: (NashornScriptHost) => Unit = (_) => {})(tester: (ScriptHost, HitBreakpoint) => Unit): Unit = {
+  type Tester = (ScriptHost, HitBreakpoint) => Unit
+
+  protected def waitForBreakpoints(script: String, hostSetup: (NashornScriptHost) => Unit = (_) => {})(testers: Tester*): Unit = {
     assert(script.contains("debugger;"), "Script must contain a 'debugger' statement")
+    assert(testers.nonEmpty, "Must have at least one tester")
+    val testerQueue = mutable.Queue[Tester](testers: _*)
+    val donePromise = Promise[Unit]()
+    val observer = Observer.from[ScriptEvent] {
+      case bp: HitBreakpoint =>
+        val host = getHost
+        val next = testerQueue.dequeue()
+        Try(next(host, bp)) match {
+          case Success(_) =>
+            host.resume()
+            if (testerQueue.isEmpty) donePromise.success(())
+
+          case Failure(t) =>
+            donePromise.failure(t)
+        }
+
+      case _ => // ignore
+    }
+    observeAndRunScriptAsync(script, observer, hostSetup)(_ => donePromise.future)
+  }
+
+  protected def waitForBreakpoint(script: String, hostSetup: (NashornScriptHost) => Unit = (_) => {})(tester: Tester): Unit = {
+    waitForBreakpoints(script, hostSetup)(tester)
+  }
+
+  protected def waitForBreakpointThenEvent(script: String, hostSetup: (NashornScriptHost) => Unit = (_) => {})
+                                          (tester: (ScriptHost, HitBreakpoint) => Unit)
+                                          (eventHandler: PartialFunction[ScriptEvent, Unit]): Unit = {
+    assert(script.contains("debugger;"), "Script must contain a 'debugger' statement")
+    val eventPromise = Promise[Unit]()
     val stackframesPromise = Promise[HitBreakpoint]()
     val observer = Observer.from[ScriptEvent] {
       case bp: HitBreakpoint => stackframesPromise.trySuccess(bp)
-      case _ => // ignore
+      case other =>
+        if (eventHandler.isDefinedAt(other)) {
+          eventPromise.complete(Try(eventHandler.apply(other)))
+        }
     }
     observeAndRunScriptAsync(script, observer, hostSetup) { host =>
-      stackframesPromise.future.map(bp => {
+      stackframesPromise.future.flatMap(bp => {
         try tester(host, bp) finally host.resume()
+        eventPromise.future
       })
     }
   }

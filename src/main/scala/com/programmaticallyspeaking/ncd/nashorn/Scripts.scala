@@ -50,13 +50,8 @@ class Scripts {
 
   def byId(id: ScriptIdentity): Option[Script] = {
     id match {
-      case IdBasedScriptIdentity(x) =>
-        _scripts.values.find(_.id == x)
-      case URLBasedScriptIdentity(url) =>
-        _scripts.get(ScriptURL.create(url))
-      case URLRegexBasedScriptIdentity(urlRegex) =>
-        val compiled = urlRegex.r
-        _scripts.values.find(s => compiled.pattern.matcher(s.url.toString).matches())
+      case u: URLBasedScriptIdentity => _scripts.get(u.scriptURL)
+      case other => _scripts.values.find(other.matchesScript)
     }
   }
 }

@@ -214,16 +214,8 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
       // DevTools passes "" when the breakpoint isn't conditional
       val actualCondition = condition.filter(_ != "")
       val location = ScriptLocation(lineNumberBase0 + 1, maybeColumnNumberBase0.map(_ + 1))
-      scriptHost.setBreakpoint(identity, location, actualCondition) match {
-        case Some(bp) =>
-          SetBreakpointByUrlResult(bp.breakpointId, bp.locations.map(l => Location(bp.scriptId, l.lineNumber1Based - 1, l.columnNumber1Based.map(_ - 1))))
-        case None =>
-          val loc = lineNumberBase0 + maybeColumnNumberBase0.map(c => ":" + c).getOrElse("")
-          log.warn(s"Cannot identify breakpoint at $url:$loc")
-          //TODO: Huh, should this be an error instead??
-          SetBreakpointByUrlResult(null, Seq.empty)
-      }
-
+      val bp = scriptHost.setBreakpoint(identity, location, actualCondition)
+      SetBreakpointByUrlResult(bp.breakpointId, bp.locations.map(l => Location(l.scriptId, l.location.lineNumber1Based - 1, l.location.columnNumber1Based.map(_ - 1))))
 
     case Debugger.resume =>
       lastCallFrameList = None
@@ -324,16 +316,11 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
       // DevTools always use column 0 (there's a comment: "Always use 0 column."), but if we pass a column to
       // the host, it will be too picky, so pass no column at all.
       val scriptLocation = ScriptLocation(location.lineNumber + 1, None)
-      scriptHost.setBreakpoint(ScriptIdentity.fromId(location.scriptId), scriptLocation, None) match {
-        case Some(bp) =>
-          log.debug(s"Continue to location with temporary breakpoint ID ${bp.breakpointId}")
-          temporaryBreakpointIds += bp.breakpointId
+      val bp = scriptHost.setBreakpoint(ScriptIdentity.fromId(location.scriptId), scriptLocation, None)
+      log.debug(s"Continue to location with temporary breakpoint ID ${bp.breakpointId}")
+      temporaryBreakpointIds += bp.breakpointId
 
-          scriptHost.resume()
-
-        case None =>
-          throw new IllegalArgumentException(s"Failed to continue to location $location, couldn't set a breakpoint there.")
-      }
+      scriptHost.resume()
   }
 
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {

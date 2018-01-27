@@ -560,7 +560,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
       case (scriptId: ScriptIdentity) :: (location: ScriptLocation) :: _ :: Nil =>
         val bpId = "bp_" + location.lineNumber1Based
         // Arbitrary test stuff. High line numbers don't exist!
-        if (location.lineNumber1Based > 100) None
+        if (location.lineNumber1Based > 100) Breakpoint(bpId, Seq.empty)
         else {
           activeBreakpoints += bpId
           val sid = scriptId match {
@@ -568,7 +568,8 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
             case URLBasedScriptIdentity(url) => url
             case URLRegexBasedScriptIdentity(re) => "re_" + re
           }
-          Some(Breakpoint(bpId, sid + "_id", None, Seq(location)))
+          val theScriptId = sid + "_id"
+          Breakpoint(bpId, Seq(LocationInScript(theScriptId, location)))
         }
     })
     when(host.removeBreakpointById(any[String])).thenAnswerWith({
