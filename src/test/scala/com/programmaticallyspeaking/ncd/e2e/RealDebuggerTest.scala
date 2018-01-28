@@ -67,18 +67,6 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
 
 
   "Debugging" - {
-//
-//    "supports setBreakpointByUrl for an unknown script" - {
-//      val script = "debugger;"
-//      "by returning a breakpoint with no locations (yet)" in {
-//        runScript(script)(callFrames => {
-//          withScript(callFrames) { s =>
-//            sendRequest(Debugger.setBreakpointByUrl(3, Some(s.url.toString), None, Some(2), Some("i>0")))
-//          }
-//        })
-//      }
-//    }
-
     "should support setVariableValue" in {
       val script =
         """
@@ -358,7 +346,7 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
         """debugger;
           |var x = 0;
           |while (x < 2) {
-          |  x = x + 1; // target, but also where we set a breakpoint
+          |  x = x + 1; // continue to here, but there's also a normal breakpoint
           |}
         """.stripMargin
 
@@ -366,8 +354,8 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
         withHead(callFrames) { cf =>
           val scriptId = cf.location.scriptId
           // Debugger API doesn't allow us to set a breakpoint by ID, so we have to access ScriptHost directly.
-          getHost.setBreakpoint(ScriptIdentity.fromId(scriptId), ScriptLocation(4, None), None)
-          sendRequest(Debugger.continueToLocation(Location(scriptId, 3, None)))
+          getHost.setBreakpoint(ScriptIdentity.fromId(scriptId), ScriptLocation(4, None), None) // 1-based line
+          sendRequest(Debugger.continueToLocation(Location(scriptId, 3, None)))                 // 0-based line
         }
         DontAutoResume
       }, callFrames => {

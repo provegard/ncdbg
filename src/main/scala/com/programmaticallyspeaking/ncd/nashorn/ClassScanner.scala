@@ -27,6 +27,7 @@ object ClassScanner {
 
 class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFactory: ScriptFactory,
                    scriptPublisher: ScriptPublisher, breakableLocations: BreakableLocations,
+                   activeBreakpoints: ActiveBreakpoints,
                    actionPerWantedType: Map[String, (ClassType) => Unit])(implicit executionContext: ExecutionContext) extends Logging {
   import ClassScanner._
 
@@ -84,7 +85,8 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
         case Success(Some(identifiedScript)) =>
           try {
             val script = scripts.suggest(identifiedScript.script)
-            breakableLocations.add(script, refType.allLineLocations().asScala)
+            val bls = breakableLocations.add(script, refType.allLineLocations().asScala)
+            activeBreakpoints.addBreakableLocations(script, bls)
             scriptPublisher.publish(script)
           } catch {
             case NonFatal(t) =>

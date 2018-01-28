@@ -1,6 +1,9 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{Breakpoint, LocationInScript, Script}
+import com.programmaticallyspeaking.ncd.host._
+import com.sun.jdi.request.{BreakpointRequest, EventRequestManager}
+
+import scala.collection.mutable.ListBuffer
 
 /**
   * An active breakpoint may map to one or more breakable locations, since we cannot distinguish between location
@@ -9,7 +12,31 @@ import com.programmaticallyspeaking.ncd.host.{Breakpoint, LocationInScript, Scri
   * @param id the breakpoint ID
   * @param breakableLocations the breakable locations
   */
-case class ActiveBreakpoint(id: String, breakableLocations: Seq[BreakableLocation], condition: Option[String]) {
+class ActiveBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation], val condition: Option[String],
+                       scriptIdentity: ScriptIdentity, scriptLocation: ScriptLocation) {
+
+  private object lock
+  private val allLocations = ListBuffer[BreakableLocation]()
+  private val breakpointRequests = ListBuffer[Option[BreakpointRequest]]()
+
+  addBreakableLocations(breakableLocations)
+
+  def belongsTo(script: Script): Boolean = scriptIdentity.matchesScript(script)
+
+  def isUnresolved: Boolean = allLocations.isEmpty
+
+  def addBreakableLocations(locations: Seq[BreakableLocation]): Unit = lock.synchronized {
+    locations.foreach { bl =>
+      allLocations += bl
+      val enabledRequest = bl.createBreakpointRequest().map { req =>
+        // TODO: associate breakpoint id
+
+        req.enable()
+        req
+      }
+      breakpointRequests += enabledRequest
+    }
+  }
 
   def toBreakpoint: Breakpoint = {
     // There may be multiple breakable locations for a line (each with its own Location), but to DevTools we
@@ -17,8 +44,20 @@ case class ActiveBreakpoint(id: String, breakableLocations: Seq[BreakableLocatio
     Breakpoint(id, breakableLocations.map(bl => LocationInScript(bl.script.id, bl.scriptLocation)).distinct)
   }
 
-  def disable(): Unit = breakableLocations.foreach(_.disable())
-  def enable(): Unit = breakableLocations.foreach(_.enable())
+  def disable(): Unit = lock.synchronized {
+    breakpointRequests.foreach { req =>
+      req.foreach { r =>
+        //TODO: Fix ugly
+        r.virtualMachine().eventRequestManager().deleteEventRequest(r)
+      }
+    }
+  } //breakableLocations.foreach(_.disable())
+//  def enable(): Unit = ??? //breakableLocations.foreach(_.enable())
 
   def contains(breakableLocation: BreakableLocation) = breakableLocations.contains(breakableLocation)
+
+  def matches(breakableLocation: BreakableLocation): Boolean = {
+    // TODO: Do we need to check column here? Or can we simply remove column support altogether??
+    breakableLocation.scriptLocation.lineNumber1Based == scriptLocation.lineNumber1Based
+  }
 }

@@ -178,9 +178,9 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         result.locations.headOption.map(_.lineNumber) should be (Some(3))
       }
 
-      "should return null breakpoint ID if the breakpoint location is unknown" in {
+      "should return a breakpoint ID even if the breakpoint location is unknown, to support future-resolved breakpoints" in {
         val result = setBreakpointByUrl(101, "a")
-        result.breakpointId should be (null)
+        result.breakpointId should startWith ("bp_")
       }
 
       "should return no locations if the breakpoint location is unknown" in {

@@ -12,11 +12,11 @@ class BreakableLocations(virtualMachine: XVirtualMachine, scripts: Scripts) exte
 
   private val breakableLocationsByScriptUrl = TrieMap[String, Seq[BreakableLocation]]()
 
-  def add(script: Script, locations: Seq[Location]): Unit = {
+  def add(script: Script, locations: Seq[Location]): Seq[BreakableLocation] = {
     add0(script, gatherBreakableLocations(script, locations))
   }
 
-  private def add0(script: Script, breakableLocations: Seq[BreakableLocation]): Unit = {
+  private def add0(script: Script, breakableLocations: Seq[BreakableLocation]): Seq[BreakableLocation] = {
     val existing = breakableLocationsByScriptUrl.getOrElse(script.url.toString, Seq.empty)
 
     // Remove existing ones where Location is unset and the line number exists among the new ones. These are placeholders
@@ -29,20 +29,9 @@ class BreakableLocations(virtualMachine: XVirtualMachine, scripts: Scripts) exte
     // TODO: is enabled, it needs to be disabled.
     def isObsolete(bl: BreakableLocation) = bl.isPlaceholder && lineNumbersOfNewOnes.contains(bl.scriptLocation.lineNumber1Based)
 
-    val lineNumbersOfEnabled = existing.filter(_.isEnabled).map(_.scriptLocation.lineNumber1Based).toSet
-
-    // Auto-enable a BL if we have an existing one that is enabled for the same line number - regardless of whether
-    // it's a placeholder or not. This is untested for non-placeholders, since we probably need a big test script
-    // to trigger this case.
-    def shouldEnable(bl: BreakableLocation) = lineNumbersOfEnabled.contains(bl.scriptLocation.lineNumber1Based)
-
-    breakableLocations.filter(shouldEnable).foreach { bl =>
-      log.debug(s"Auto-enabling breakable location $bl since it's on the same line as a currently enabled one.")
-      bl.enable()
-    }
-
     val newList = existing.filterNot(isObsolete) ++ breakableLocations
     breakableLocationsByScriptUrl += script.url.toString -> newList
+    breakableLocations
   }
 
   def byScriptIdentity(id: ScriptIdentity): Option[Seq[BreakableLocation]] =

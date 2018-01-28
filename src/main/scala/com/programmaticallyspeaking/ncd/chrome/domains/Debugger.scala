@@ -317,7 +317,11 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
       // the host, it will be too picky, so pass no column at all.
       val scriptLocation = ScriptLocation(location.lineNumber + 1, None)
       val bp = scriptHost.setBreakpoint(ScriptIdentity.fromId(location.scriptId), scriptLocation, None)
-      log.debug(s"Continue to location with temporary breakpoint ID ${bp.breakpointId}")
+      if (log.underlying.isDebugEnabled)
+        log.debug(s"Continue to line ${scriptLocation.lineNumber1Based} in script ${location.scriptId} with temporary breakpoint ID ${bp.breakpointId}")
+      else
+        log.info(s"Continue to line ${scriptLocation.lineNumber1Based} in script ${location.scriptId}")
+
       temporaryBreakpointIds += bp.breakpointId
 
       scriptHost.resume()
@@ -328,6 +332,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
       log.debug("Handling breakpoint event: " + hb)
       pauseBasedOnBreakpoint(hb).foreach(breakpointId => {
         if (temporaryBreakpointIds.contains(breakpointId)) {
+          log.debug(s"Removing temporary breakpoint $breakpointId (created for continue-to-location)")
           // This was a temporary breakpoint, so remove it
           temporaryBreakpointIds -= breakpointId
           scriptHost.removeBreakpointById(breakpointId)

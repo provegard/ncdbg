@@ -1,65 +1,22 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import java.util.concurrent.ConcurrentHashMap
-
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
+import com.programmaticallyspeaking.ncd.messaging.Observer
 import org.slf4s.Logging
 
-/**
-  * Tracks requested breakpoints. When we see a new script with an URL that matches an existing breakpoint,
-  * we need to add new locations to it. This makes it possible to set a breakpoint in a script that hasn't been
-  * loaded yet.
-  *
-  * @param scriptIdentity script identity
-  * @param lineBase1 line number
-  * @param activeBreakpointId the identity of the breakpoint resulting from the request
-  */
-case class RequestedBreakpoint(scriptIdentity: ScriptIdentity, lineBase1: Int, activeBreakpointId: String)
-
 trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
-  import scala.collection.JavaConverters._
-  private val requestedBreakpoints = new ConcurrentHashMap[String, RequestedBreakpoint]()
-  private var _scriptAddedSubscription: Subscription = _
 
-  private def setupBreakpointResolution(): Unit = {
-    //TODO: I think it would be nice to do this earlier, like on init time. But the trait solution doesn't really
-    //TODO: allow that, does it?
-    if (_scriptAddedSubscription == null) {
-      _scriptAddedSubscription = events.subscribe(Observer.from[ScriptEvent] {
-        case ScriptAdded(script) =>
-          requestedBreakpoints.values().asScala.filter(_.scriptIdentity.matchesScript(script)).foreach { rb =>
-
-            val newBls = findBreakableLocationsAtLine(rb.scriptIdentity, rb.lineBase1)
-            _breakpoints.addBreakableLocations(rb.activeBreakpointId, newBls)
-
-            emitEvent(BreakpointResolved(rb.activeBreakpointId, LocationInScript(script.id, ScriptLocation(rb.lineBase1, None))))
-          }
-      })
-    }
-  }
-
-  private def recordBreakpointRequests(identity: ScriptIdentity, location: ScriptLocation, activeBreakpoint: ActiveBreakpoint): Unit = {
-    identity match {
-      case IdBasedScriptIdentity(_) => // no action
-      case other =>
-        // Record the desire to set a breakpoint, because we have two cases here:
-        // 1. It's a URL, in which case the user may have used DevTools Workspace to set a breakpoint in a file
-        //    that hasn't been seen as a script yet.
-        // 2. It's a URL regexp, in which case future scripts may match.
-        requestedBreakpoints.put(activeBreakpoint.id, RequestedBreakpoint(other, location.lineNumber1Based, activeBreakpoint.id))
-    }
+  protected def initBreakpointSupport(): Unit = {
+    _breakpoints.resolvedBreakpoints.subscribe(Observer.from[BreakpointResolved] {
+      case br: BreakpointResolved => emitEvent(br)
+    })
   }
 
   override def removeBreakpointById(id: String): Unit = {
-    //TODO: Figure out an appropriate way to test removal from requestedBreakpoints here
-    requestedBreakpoints.remove(id)
     _breakpoints.disableById(id)
   }
 
   override def setBreakpoint(id: ScriptIdentity, location: ScriptLocation, condition: Option[String]): Breakpoint = {
-    setupBreakpointResolution()
-
     val bls = findBreakableLocationsAtLine(id, location.lineNumber1Based)
     // If we have a column number, try to find exactly that location, but fall back to locations on the line.
     // The reason is that column numbers is not an exact science, especially when it comes to source maps.
@@ -80,9 +37,8 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
          |})()
      """.stripMargin)
 
-    val activeBp = _breakpoints.create(candidates, wrapper)
+    val activeBp = _breakpoints.create(id, location, candidates, wrapper)
     log.info(s"Setting a breakpoint with ID ${activeBp.id} for location(s) ${candidates.mkString(", ")} in $id$conditionDescription")
-    recordBreakpointRequests(id, location, activeBp)
     activeBp.toBreakpoint
   }
 

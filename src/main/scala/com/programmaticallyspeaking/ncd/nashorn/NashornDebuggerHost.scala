@@ -158,7 +158,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   )
 
   private val _scriptPublisher = new ScriptPublisher(emitEvent)
-  private val _scanner = new ClassScanner(virtualMachine, _scripts, _scriptFactory, _scriptPublisher, _breakableLocations, actionPerWantedType)
+  private val _scanner = new ClassScanner(virtualMachine, _scripts, _scriptFactory, _scriptPublisher, _breakableLocations, _breakpoints, actionPerWantedType)
 
   protected val typeLookup = new TypeLookup {
     override def apply(name: String): Option[ClassType] = _scanner.typeByName(name)
@@ -173,6 +173,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
 
   def initialize(): Unit = {
     enableExceptionPausing()
+    initBreakpointSupport()
 
     _scanner.setup(new Observer[ScanAction] {
       // Not used...
