@@ -1,5 +1,7 @@
 package com.programmaticallyspeaking.ncd.messaging
 
+import java.util.concurrent.ConcurrentHashMap
+
 trait Subject[T] extends Observable[T] with Observer[T]
 
 object Subject {
@@ -17,7 +19,7 @@ object Subject {
 class SerializedSubject[T] extends Subject[T] {
 
   private object lock
-  private var observers = Map[String, Observer[T]]()
+  private val observers = new ConcurrentHashMap[String, Observer[T]]()
   private var isDone = false
 
   override def onNext(item: T): Unit = invokeWithErrorCollection(o => o.onNext(item))
@@ -26,17 +28,13 @@ class SerializedSubject[T] extends Subject[T] {
 
   override def onComplete(): Unit = invokeWithErrorCollection(beDone(o => o.onComplete()))
 
-  override def subscribe(observer: Observer[T]): Subscription = lock.synchronized {
+  override def subscribe(observer: Observer[T]): Subscription = {
     val id = java.util.UUID.randomUUID().toString
-    observers += (id -> observer)
-    new Subscription {
-      override def unsubscribe(): Unit = removeObserverWithId(id)
-    }
+    observers.put(id, observer)
+    () => removeObserverWithId(id)
   }
 
-  private def removeObserverWithId(id: String): Unit = lock.synchronized {
-    observers -= id
-  }
+  private def removeObserverWithId(id: String): Unit = observers.remove(id)
 
   private def aggregateExceptions(exceptions: List[Exception]): Exception = {
     val ex = new RuntimeException("An error occurred during observer dispatching.")
@@ -53,10 +51,11 @@ class SerializedSubject[T] extends Subject[T] {
   }
 
   private def invokeWithErrorCollection(fun: (Observer[T]) => Unit): Unit = {
+    import scala.collection.JavaConverters._
     if (isDone) return
     lock.synchronized {
       var exceptions = List.empty[Exception]
-      observers.foreach { case (_, observer) =>
+      observers.values().asScala.foreach { observer =>
         try fun(observer) catch {
           case ex: Exception =>
             exceptions :+= ex

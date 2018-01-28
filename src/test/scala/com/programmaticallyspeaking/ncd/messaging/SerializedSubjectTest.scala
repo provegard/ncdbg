@@ -36,6 +36,19 @@ class SerializedSubjectTest extends UnitTest {
       sut.onNext("testing")
       items should be ('empty)
     }
+
+    "handles subscription during dispatching" in {
+      val items = ListBuffer[String]()
+      val sut = createSut
+      sut.subscribe(Observer.from[String] {
+        case s if s == "initial" =>
+          sut.subscribe(collectingObserver(items))
+        case _ =>
+      })
+      sut.onNext("initial")
+      sut.onNext("testing")
+      items should be (Seq("testing"))
+    }
   }
 
 }
