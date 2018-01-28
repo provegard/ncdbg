@@ -14,7 +14,6 @@ trait PrintTestFixture extends NashornScriptHostTestFixture with Eventually with
     var events = Seq.empty[PrintMessage]
     val obs = Observer.from[ScriptEvent] {
       case ev: PrintMessage => events :+= ev
-      case _ =>
     }
 
     observeAndRunScriptSync(script, obs) { host =>
@@ -31,7 +30,6 @@ trait PrintTestFixture extends NashornScriptHostTestFixture with Eventually with
     val obs = Observer.from[ScriptEvent] {
       case ev: PrintMessage => events :+= ev
       case bp: HitBreakpoint => stackframesPromise.success(bp.stackFrames)
-      case _ =>
     }
 
     observeAndRunScriptAsync("debugger;", obs) { host =>

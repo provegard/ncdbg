@@ -18,7 +18,6 @@ trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with FairAmoun
     var scripts = Seq.empty[Script]
     val observer = Observer.from[ScriptEvent]({
       case ScriptAdded(s) => scripts :+= s
-      case _ =>
     })
 
     observeAndRunScriptSync(scriptContents, observer) { host =>
@@ -32,7 +31,6 @@ trait ScriptAddedTestFixture extends NashornScriptHostTestFixture with FairAmoun
     var scripts = Seq.empty[Script]
     val observer = Observer.from[ScriptEvent]({
       case ScriptAdded(s) => scripts :+= s
-      case _ =>
     })
 
     val p = Promise[Seq[Script]]()

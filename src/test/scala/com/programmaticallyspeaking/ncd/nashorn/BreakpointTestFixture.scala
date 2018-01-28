@@ -31,8 +31,6 @@ class BreakpointTestFixture extends UnitTest with NashornScriptHostTestFixture {
           case Failure(t) =>
             donePromise.failure(t)
         }
-
-      case _ => // ignore
     }
     observeAndRunScriptAsync(script, observer, hostSetup)(_ => donePromise.future)
   }

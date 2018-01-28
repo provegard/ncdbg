@@ -1,14 +1,16 @@
 package com.programmaticallyspeaking.ncd.messaging
 
 object Observer {
-  /** Creates an observer with only a next handler that invokes the given partal function.
+  /** Creates an observer with only a next handler that invokes the given partial function, if it is defined for
+    * the actual type of the item.
     *
     * @param fun the function to invoke when an item is observed
     * @tparam T the item type
     * @return an observer
     */
   def from[T](fun: PartialFunction[T, Unit]): Observer[T] = new Observer[T] {
-    override def onNext(item: T): Unit = fun(item)
+    override def onNext(item: T): Unit =
+      if (fun.isDefinedAt(item)) fun.apply(item)
     override def onError(error: Throwable): Unit = {}
     override def onComplete(): Unit = {}
   }

@@ -43,7 +43,6 @@ class SerializedSubjectTest extends UnitTest {
       sut.subscribe(Observer.from[String] {
         case s if s == "initial" =>
           sut.subscribe(collectingObserver(items))
-        case _ =>
       })
       sut.onNext("initial")
       sut.onNext("testing")

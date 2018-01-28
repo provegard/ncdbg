@@ -35,7 +35,6 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
 
             emitEvent(BreakpointResolved(rb.activeBreakpointId, LocationInScript(script.id, ScriptLocation(rb.lineBase1, None))))
           }
-        case _ => //TODO: Get rid of the need for this
       })
     }
   }

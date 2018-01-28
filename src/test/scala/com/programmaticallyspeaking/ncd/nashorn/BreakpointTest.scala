@@ -293,7 +293,6 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         case bp: HitBreakpoint =>
           breakpointsHitSoFar += 1
           handler(MultiBreakpointsData(bp, breakpointsHitSoFar))
-        case _ => // ignore
       }
       observer
     }
@@ -421,7 +420,6 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
               }
             }
             else donePromise.failure(new Exception("Wrong line: " + line))
-          case _ => // ignore
         }
         observeAndRunScriptAsync(script, observer) { _ =>
           donePromise.future
@@ -451,7 +449,6 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         }
       case bp: HitBreakpoint =>
         donePromise.complete(Try(handler(getHost, bp)))
-      case _ => // ignore
     }
     observeAndRunScriptAsync(realScript, observer) { _ =>
       donePromise.future
