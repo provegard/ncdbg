@@ -25,33 +25,24 @@ object BreakableLocation {
   * @param eventRequestManager [[EventRequestManager]] instance for creating/removing a breakpoint
   * @param location the location
   */
-class BreakableLocation private(val script: Script, eventRequestManager: EventRequestManager, val scriptLocation: ScriptLocation, location: Option[Location]) {
+class BreakableLocation private(val script: Script, eventRequestManager: EventRequestManager, val scriptLocation: ScriptLocation, location: Location) {
+  def hasLocation(loc: Location): Boolean = loc == location
+
   import JDIExtensions._
 
   def this(script: Script, eventRequestManager: EventRequestManager, location: Location) =
-    this(script, eventRequestManager, BreakableLocation.scriptLocationFromScriptAndLocation(script, location), Some(location))
+    this(script, eventRequestManager, BreakableLocation.scriptLocationFromScriptAndLocation(script, location), location)
 
-  def this(script: Script, eventRequestManager: EventRequestManager, lineNumber1: Int) =
-    this(script, eventRequestManager, BreakableLocation.scriptLocationFromScriptAndLine(script, lineNumber1), None)
+  def sameMethodAndLineAs(l: Location): Boolean = l.sameMethodAndLineAs(Some(location))
 
-  def isPlaceholder: Boolean = location.isEmpty
+  def createBreakpointRequest(): BreakpointRequest = {
+    val breakpointRequest = eventRequestManager.createBreakpointRequest(location)
 
-  def hasLocation(l: Location): Boolean = location.contains(l)
-  def sameMethodAndLineAs(l: Location): Boolean = l.sameMethodAndLineAs(location)
+    // Assume script code runs in a single thread, so pausing that thread should be enough.
+    breakpointRequest.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
 
-  def createBreakpointRequest(): Option[BreakpointRequest] = {
-    location.map { loc =>
-      val breakpointRequest = eventRequestManager.createBreakpointRequest(loc)
-
-      // Assume script code runs in a single thread, so pausing that thread should be enough.
-      breakpointRequest.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
-
-      breakpointRequest
-    }
+    breakpointRequest
   }
 
-  override def toString: String = {
-    val candidateStr = location.map(l => s" ($l)").getOrElse(" (placeholder)")
-    script.id + "/" + scriptLocation.toString + candidateStr
-  }
+  override def toString: String = s"${script.id}/$scriptLocation ($location)"
 }

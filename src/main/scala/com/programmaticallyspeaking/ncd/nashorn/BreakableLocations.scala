@@ -19,17 +19,7 @@ class BreakableLocations(virtualMachine: XVirtualMachine, scripts: Scripts) exte
   private def add0(script: Script, breakableLocations: Seq[BreakableLocation]): Seq[BreakableLocation] = {
     val existing = breakableLocationsByScriptUrl.getOrElse(script.url.toString, Seq.empty)
 
-    // Remove existing ones where Location is unset and the line number exists among the new ones. These are placeholders
-    // added so that it's possible to set a breakpoint in a function before it has been executed, but now we have real
-    // locations for that function (supposedly).
-    // TODO: This may be broken if multiple one-liner functions are defined on the same line...
-    val lineNumbersOfNewOnes = breakableLocations.map(_.scriptLocation.lineNumber1Based).toSet
-
-    // TODO: Identify BLs no longer relevant due to recompilation. Perhaps by function node ID? If such a BL
-    // TODO: is enabled, it needs to be disabled.
-    def isObsolete(bl: BreakableLocation) = bl.isPlaceholder && lineNumbersOfNewOnes.contains(bl.scriptLocation.lineNumber1Based)
-
-    val newList = existing.filterNot(isObsolete) ++ breakableLocations
+    val newList = existing ++ breakableLocations
     breakableLocationsByScriptUrl += script.url.toString -> newList
     breakableLocations
   }
@@ -72,24 +62,12 @@ class BreakableLocations(virtualMachine: XVirtualMachine, scripts: Scripts) exte
 
   private def findScriptUrl(id: ScriptIdentity): Option[String] = scripts.byId(id).map(_.url.toString)
 
-  private def potentiallyBreakableLines(script: Script): Seq[Int] = {
-    def hasRelevantContent(line: String) = {
-      val trimmed = line.trim()
-      trimmed != "" && trimmed != "{" && trimmed != "}"
-    }
-    def looksBreakable(line: Int) = script.sourceLine(line).exists(hasRelevantContent)
-    (1 to script.lineCount).filter(looksBreakable)
-  }
-
   private def gatherBreakableLocations(script: Script, locations: Seq[Location]): Seq[BreakableLocation] = {
     val erm = virtualMachine.eventRequestManager()
     // Find all potentially breakable lines. Create breakable locations from actual locations. Then create
     // candidates for the potentially breakable lines that weren't covered. Such a line may for example belong to
     // a function that hasn't been executed yet.
-    var lineNumbers = potentiallyBreakableLines(script).toSet
-    val breakableLocations = locations.map(l => new BreakableLocation(script, erm, l))
-    breakableLocations.foreach(bl => lineNumbers -= bl.scriptLocation.lineNumber1Based)
-    breakableLocations ++ lineNumbers.map(line => new BreakableLocation(script, erm, line))
+    locations.map(l => new BreakableLocation(script, erm, l))
   }
 
 }

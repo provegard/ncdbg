@@ -17,7 +17,7 @@ class ActiveBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation
 
   private object lock
   private val allLocations = ListBuffer[BreakableLocation]()
-  private val breakpointRequests = ListBuffer[Option[BreakpointRequest]]()
+  private val breakpointRequests = ListBuffer[BreakpointRequest]()
 
   addBreakableLocations(breakableLocations)
 
@@ -28,13 +28,10 @@ class ActiveBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation
   def addBreakableLocations(locations: Seq[BreakableLocation]): Unit = lock.synchronized {
     locations.foreach { bl =>
       allLocations += bl
-      val enabledRequest = bl.createBreakpointRequest().map { req =>
-        // TODO: associate breakpoint id
-
-        req.enable()
-        req
-      }
-      breakpointRequests += enabledRequest
+      val req = bl.createBreakpointRequest()
+      // TODO: associate breakpoint id for logging
+      req.enable()
+      breakpointRequests += req
     }
   }
 
@@ -44,16 +41,13 @@ class ActiveBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation
     Breakpoint(id, breakableLocations.map(bl => LocationInScript(bl.script.id, bl.scriptLocation)).distinct)
   }
 
+  //TODO: Fix bad name, this is really delete!
   def disable(): Unit = lock.synchronized {
     breakpointRequests.foreach { req =>
-      req.foreach { r =>
         //TODO: Fix ugly
-        r.virtualMachine().eventRequestManager().deleteEventRequest(r)
-      }
+     req.virtualMachine().eventRequestManager().deleteEventRequest(req)
     }
-  } //breakableLocations.foreach(_.disable())
-//  def enable(): Unit = ??? //breakableLocations.foreach(_.enable())
-
+  }
   def contains(breakableLocation: BreakableLocation) = breakableLocations.contains(breakableLocation)
 
   def matches(breakableLocation: BreakableLocation): Boolean = {

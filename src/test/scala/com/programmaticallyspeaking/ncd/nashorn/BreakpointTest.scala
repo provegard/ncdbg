@@ -403,7 +403,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
 
       "should be possible" in {
         testSetBreakpoint(script, 2, None) { bp =>
-          columnNumbers(bp) should be(Seq(3))
+          bp should be ('defined)
         }
       }
 
