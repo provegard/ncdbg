@@ -17,9 +17,10 @@ class ScriptPublisher(eventEmitter: ScriptEventEmitter) extends Logging {
     if (isKnownScript) {
       log.debug(s"Script with URI '${script.url}' is already known")
     } else {
-      // Reason for logging double at different levels: info typically goes to the console, debug to the log file.
-      log.debug(s"Adding script with ID '${script.id}', URI '${script.url}' and hash '${script.contentsHash()}'")
-      log.info(s"Adding script with URI '${script.url}'")
+      if (log.underlying.isDebugEnabled)
+        log.debug(s"Adding script with ID '${script.id}', URI '${script.url}' and hash '${script.contentsHash()}'")
+      else
+        log.info(s"Adding script '${script.id}' with URI '${script.url}'")
       eventEmitter.emit(ScriptAdded(script))
     }
   }

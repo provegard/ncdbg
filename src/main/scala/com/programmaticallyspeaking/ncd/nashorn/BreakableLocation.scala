@@ -44,5 +44,5 @@ class BreakableLocation private(val script: Script, eventRequestManager: EventRe
     breakpointRequest
   }
 
-  override def toString: String = s"${script.id}/$scriptLocation ($location)"
+  override def toString: String = s"${script.id}:${scriptLocation.lineNumber1Based} ($location)"
 }

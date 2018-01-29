@@ -41,7 +41,7 @@ class Pauser(breakpoints: ActiveBreakpoints, scripts: Scripts, emitter: ScriptEv
   }
 
   private def describeBreakpointId(ev: LocatableEvent): String = ev match {
-    case be: BreakpointEvent => ActiveBreakpoint.getBreakpointId(be).map(s => s" '$s'").getOrElse("")
+    case be: BreakpointEvent => ActiveBreakpoint.getBreakpointId(be).map(s => s" $s").getOrElse("")
     case _ => ""
   }
 

@@ -22,13 +22,15 @@ class ActiveBreakpoints extends Logging {
       val toAdd = newLocations.filter(bp.matches)
       if (toAdd.nonEmpty) {
         val willBeResolved = bp.isUnresolved
+        log.debug(s"Adding ${toAdd.size} breakable locations to breakpoint ${bp.id}")
         bp.addBreakableLocations(toAdd)
         if (willBeResolved) {
           // Hm, can there be more than one location here?
           val first = toAdd.head
           val item = BreakpointResolved(bp.id, LocationInScript(first.script.id, first.scriptLocation))
+          log.info(s"Resolving breakpoint ${bp.id} with location ${first.scriptLocation} in script ${script.id}")
           resolvedSubject.onNext(item)
-        }
+      }
       }
     }
   }
