@@ -81,8 +81,8 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
           log.warn(s"Found the $className type but it's a ${other.getClass.getName} rather than a ClassType")
       }
     } else {
-      scriptFactory.considerReferenceType(thread, refType).onComplete {
-        case Success(Some(identifiedScript)) =>
+      def callback(maybeIdentifiedScript: Option[IdentifiedScript]) = maybeIdentifiedScript match {
+        case Some(identifiedScript) =>
           try {
             val script = scripts.suggest(identifiedScript.script)
             val bls = breakableLocations.add(script, refType.allLineLocations().asScala)
@@ -92,11 +92,14 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
             case NonFatal(t) =>
               log.error("Script publish failure", t)
           }
-
-        case Success(None) => // noop, assume logged elsewhere
-        case Failure(t) =>
-          log.error("Script reference type error", t)
+        case None => // noop, assume logged elsewhere
       }
+
+      scriptFactory.considerReferenceType(thread, refType, callback)
+
+        //TODO: What about this failure case when we had a Future?
+//        case Failure(t) =>
+//          log.error("Script reference type error", t)
     }
   }
 
