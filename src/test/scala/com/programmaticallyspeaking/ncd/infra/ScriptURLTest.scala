@@ -105,4 +105,19 @@ class ScriptURLTest extends UnitTest with TableDrivenPropertyChecks {
       }
     }
   }
+
+  "equality and hash code" - {
+    "is case insensitive (at least on Windows)" in {
+      val url1 = ScriptURL.create("file:///C:/path/to/script.js")
+      val url2 = ScriptURL.create("file:///c:/path/to/script.js")
+      url2 should be (url1)
+    }
+
+    "computes hash code without considering case (at least on Windows)" in {
+      val url1 = ScriptURL.create("file:///C:/path/to/script.js")
+      val url2 = ScriptURL.create("file:///c:/path/to/script.js")
+      url2.hashCode() should be (url1.hashCode())
+    }
+
+  }
 }

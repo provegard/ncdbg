@@ -3,6 +3,10 @@ package com.programmaticallyspeaking.ncd.infra
 import java.io.File
 import java.net.{URI, URL}
 
+/**
+  * Represents a script URL. For file-based script URLs, we check equality and compute hash code via
+  * [[java.io.File]], to get case-insensitive URL comparison on Windows.
+  */
 final class ScriptURL private[infra](private val uri: URI) {
   import ScriptURL._
 
@@ -11,13 +15,13 @@ final class ScriptURL private[infra](private val uri: URI) {
   def isFile: Boolean = uri.getScheme == "file"
 
   override def equals(other: Any): Boolean = other match {
+    case that: ScriptURL if isFile && that.isFile => toFile == that.toFile
     case that: ScriptURL => uri == that.uri
     case _ => false
   }
 
   override def hashCode(): Int = {
-    val state = Seq(uri)
-    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+    if (isFile) toFile.hashCode() else uri.hashCode()
   }
 
   override def toString: String = uri.toString
