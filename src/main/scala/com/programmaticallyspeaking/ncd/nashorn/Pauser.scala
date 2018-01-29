@@ -40,9 +40,14 @@ class Pauser(breakpoints: ActiveBreakpoints, scripts: Scripts, emitter: ScriptEv
     disablePausingAltogether = disable
   }
 
+  private def describeBreakpointId(ev: LocatableEvent): String = ev match {
+    case be: BreakpointEvent => ActiveBreakpoint.getBreakpointId(be).map(s => s" '$s'").getOrElse("")
+    case _ => ""
+  }
+
   def handleBreakpoint(ev: LocatableEvent, pausedData: PausedData): Boolean = shouldPause(pausedData, ev) match {
     case Left(reason) =>
-      log.debug(s"Ignoring breakpoint at ${ev.location()} because $reason.")
+      log.debug(s"Ignoring breakpoint${describeBreakpointId(ev)} at ${ev.location()} because $reason.")
       true
     case Right(_) =>
       // Log at debug level because we get noise due to exception requests.
@@ -53,7 +58,7 @@ class Pauser(breakpoints: ActiveBreakpoints, scripts: Scripts, emitter: ScriptEv
           s" (at a JavaScript 'debugger' statement)"
         case _ => ""
       }
-      log.debug(s"Pausing at location ${ev.location()} in thread ${ev.thread().name()}$details")
+      log.debug(s"Pausing at breakpoint${describeBreakpointId(ev)} at location ${ev.location()} in thread ${ev.thread().name()}$details")
 
       val reason: BreakpointReason = pausedData.exceptionEventInfo match {
         case Some(info) =>
@@ -108,7 +113,7 @@ class Pauser(breakpoints: ActiveBreakpoints, scripts: Scripts, emitter: ScriptEv
               scripts.byId(ScriptIdentity.fromId(scriptId)).foreach { s =>
                 val location = topStackFrame.location
                 val line = s.sourceLine(location.lineNumber1Based).getOrElse("<unknown line>")
-                log.info(s"Pausing at ${s.url}:${location.lineNumber1Based}: $line")
+                log.info(s"Pausing at breakpoint $breakpointId at ${s.url}:${location.lineNumber1Based}: $line")
               }
 
               val hitBreakpoint = HitBreakpoint(stackFrames, Some(breakpointId), BreakpointReason.Breakpoint)

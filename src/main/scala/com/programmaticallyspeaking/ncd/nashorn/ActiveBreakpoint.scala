@@ -1,6 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host._
+import com.sun.jdi.event.BreakpointEvent
 import com.sun.jdi.request.{BreakpointRequest, EventRequestManager}
 
 import scala.collection.mutable.ListBuffer
@@ -29,7 +30,7 @@ class ActiveBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation
     locations.foreach { bl =>
       allLocations += bl
       val req = bl.createBreakpointRequest()
-      // TODO: associate breakpoint id for logging
+      ActiveBreakpoint.associateWithBreakpoint(req, this)
       req.enable()
       breakpointRequests += req
     }
@@ -53,5 +54,15 @@ class ActiveBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation
   def matches(breakableLocation: BreakableLocation): Boolean = {
     // TODO: Do we need to check column here? Or can we simply remove column support altogether??
     breakableLocation.scriptLocation.lineNumber1Based == scriptLocation.lineNumber1Based
+  }
+}
+
+object ActiveBreakpoint {
+  def associateWithBreakpoint(br: BreakpointRequest, ab: ActiveBreakpoint): Unit = {
+    br.putProperty("__breakpoint_id", ab.id)
+  }
+
+  def getBreakpointId(be: BreakpointEvent): Option[String] = {
+    Option(be.request().getProperty("__breakpoint_id")).map(_.toString)
   }
 }
