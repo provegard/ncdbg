@@ -16,6 +16,7 @@ import scala.util.{Failure, Success}
 
 object Debugger extends Logging {
   type CallFrameId = String
+  type BreakpointId = String
 
   case object stepOver
   case object stepInto
@@ -36,6 +37,8 @@ object Debugger extends Logging {
   case class evaluateOnCallFrame(callFrameId: CallFrameId, expression: String, silent: Option[Boolean], returnByValue: Option[Boolean], generatePreview: Option[Boolean])
 
   case class EvaluateOnCallFrameResult(result: Runtime.RemoteObject, exceptionDetails: Option[Runtime.ExceptionDetails] = None)
+
+  case class BreakpointResolvedEventParams(breakpointId: BreakpointId, location: Location)
 
   case class ScriptParsedEventParams(scriptId: String, url: String, startLine: Int, startColumn: Int, endLine: Int, endColumn: Int, executionContextId: Int, hash: String,
                                      hasSourceURL: Boolean, sourceMapURL: Option[String])
@@ -343,6 +346,10 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
 
     case Resumed =>
       emitEvent("Debugger.resumed", null)
+
+    case BreakpointResolved(breakpointId, loc) =>
+      val params = BreakpointResolvedEventParams(breakpointId, Location(loc.scriptId, loc.location.lineNumber1Based - 1, loc.location.columnNumber1Based.map(_ - 1)))
+      emitEvent("Debugger.breakpointResolved", params)
   }
 
   private def scopeType(s: HostScope): String = s.scopeType.toString

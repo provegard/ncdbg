@@ -6,7 +6,7 @@ import java.nio.charset.Charset
 
 import akka.actor.{ActorRef, PoisonPill}
 import akka.testkit.TestProbe
-import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{BreakLocation, Location, PausedEventParams, ScriptParsedEventParams}
+import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{Scope => _, _}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
 import com.programmaticallyspeaking.ncd.chrome.net.FilePublisher
 import com.programmaticallyspeaking.ncd.host._
@@ -284,6 +284,32 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val events = simulateScriptAdded(script("xx1", hash = "hash2"))
         val scriptIds = events.map(getEventParams).map(_.scriptId)
         scriptIds should be (Seq("xx1", "xx1"))
+      }
+    }
+
+    "ResolvedBreakpoint handling" - {
+      def simulateBreakpointResolved(breakpointId: String, location: LocationInScript): Messages.Event = {
+        val debugger = newActorInstance[Debugger]
+
+        receiveScriptEventTriggeredEvent(debugger, Seq(Messages.Request("1", Domain.enable)),
+          Seq(BreakpointResolved(breakpointId, location))
+        )
+      }
+
+      def getEventParams(ev: Messages.Event): BreakpointResolvedEventParams = ev.params match {
+        case p: BreakpointResolvedEventParams => p
+        case other => throw new IllegalArgumentException("Unknown params: " + other)
+      }
+
+      "should result in a Debugger.breakpointResolved event" in {
+        val ev = simulateBreakpointResolved("a", LocationInScript("s1", ScriptLocation(4, Some(1))))
+        ev.method should be("Debugger.breakpointResolved")
+      }
+
+      "translates BreakpointResolved into event parameters" in {
+        val ev = simulateBreakpointResolved("a", LocationInScript("s1", ScriptLocation(4, Some(1))))
+        val eventParams = getEventParams(ev)
+        eventParams should be (BreakpointResolvedEventParams("a", Debugger.Location("s1", 3, Some(0))))
       }
     }
 
