@@ -1,12 +1,13 @@
 package com.programmaticallyspeaking.ncd.infra
 
+import java.io.File
 import java.net.URL
 
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 class ScriptURLTest extends UnitTest with TableDrivenPropertyChecks {
-
+  val isCaseInsensitiveFileSystem = new File("A") == new File("a")
   val fromPathCases =
     Table(
       ("desc", "input", "output"),
@@ -106,18 +107,20 @@ class ScriptURLTest extends UnitTest with TableDrivenPropertyChecks {
     }
   }
 
-  "equality and hash code" - {
-    "is case insensitive (at least on Windows)" in {
-      val url1 = ScriptURL.create("file:///C:/path/to/script.js")
-      val url2 = ScriptURL.create("file:///c:/path/to/script.js")
-      url2 should be (url1)
-    }
+  if (isCaseInsensitiveFileSystem) {
+    "equality and hash code" - {
+      "is case insensitive (at least on Windows)" in {
+        val url1 = ScriptURL.create("file:///C:/path/to/script.js")
+        val url2 = ScriptURL.create("file:///c:/path/to/script.js")
+        url2 should be(url1)
+      }
 
-    "computes hash code without considering case (at least on Windows)" in {
-      val url1 = ScriptURL.create("file:///C:/path/to/script.js")
-      val url2 = ScriptURL.create("file:///c:/path/to/script.js")
-      url2.hashCode() should be (url1.hashCode())
-    }
+      "computes hash code without considering case (at least on Windows)" in {
+        val url1 = ScriptURL.create("file:///C:/path/to/script.js")
+        val url2 = ScriptURL.create("file:///c:/path/to/script.js")
+        url2.hashCode() should be(url1.hashCode())
+      }
 
+    }
   }
 }
