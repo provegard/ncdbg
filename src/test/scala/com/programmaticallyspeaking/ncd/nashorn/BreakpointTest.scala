@@ -438,13 +438,10 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     val donePromise = Promise[Unit]()
     val observer = Observer.from[ScriptEvent] {
       case bp: HitBreakpoint if bp.reason == BreakpointReason.Debugger =>
-        println("Calling setBreakpoint")
         setBreakpoint(bp, breakpointLine, None) match {
           case Some(x) =>
-            println("BP: " + x)
             getHost.resume()
           case None =>
-            println("OOPS")
             donePromise.failure(new Exception(s"Failed to set breakpoint at line $lineBase1"))
         }
       case bp: HitBreakpoint =>
