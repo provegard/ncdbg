@@ -9,6 +9,9 @@
 * Don't capture print statements while paused, in order to avoid deadlock (issue #66)
 * Try to make general pause more stable, only set breakpoints in script frames (issue #71)
 * Make script contents hashing thread safe - avoids duplicate scripts with the same contents.
+* Support setting a breakpoint in an unknown script (via URL or URL regexp). Emit BreakpointResolved
+  when a script that matches the requested breakpoint is seen. This makes it possible to use the
+  DevTools Filesystem/workspace feature.
 
 ## 0.6.0 (2017-10-22)
 
