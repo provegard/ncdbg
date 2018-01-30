@@ -5,30 +5,35 @@ import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 
-import scala.concurrent.duration._
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Promise}
+import scala.util.{Failure, Success, Try}
 
 class EvaluateTestFixture extends UnitTest with NashornScriptHostTestFixture with ScalaFutures with IntegrationPatience {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
-  protected def evaluateInScript(script: String, unknownEventHandler: (ScriptEvent) => Unit = _ => {})(tester: (ScriptHost, Seq[StackFrame]) => Unit): Unit = {
+  type Tester = (ScriptHost, Seq[StackFrame]) => Unit
+
+  protected def evaluateInScript(script: String, unknownEventHandler: (ScriptEvent) => Unit = _ => {})(testers: Tester*): Unit = {
     assert(script.contains("debugger;"), "Script must contain a 'debugger' statement")
-    val stackframesPromise = Promise[Seq[StackFrame]]()
+    assert(testers.nonEmpty, "Must have at least one tester")
+    val testerQueue = mutable.Queue[Tester](testers: _*)
+    val donePromise = Promise[Unit]()
     val observer = Observer.from[ScriptEvent] {
-      case bp: HitBreakpoint => stackframesPromise.trySuccess(bp.stackFrames)
+      case bp: HitBreakpoint =>
+        val host = getHost
+        val next = testerQueue.dequeue()
+        Try(next(host, bp.stackFrames)) match {
+          case Success(_) =>
+            host.resume()
+            if (testerQueue.isEmpty) donePromise.success(())
+
+          case Failure(t) =>
+            donePromise.failure(t)
+        }
       case x => unknownEventHandler(x)
     }
-    // Newline after $script so that comments won't cause syntax error
-    val wrapper =
-      s"""(function () {$script
-         |})();
-       """.stripMargin
-    observeAndRunScriptAsync(wrapper, observer) { host =>
-      stackframesPromise.future.map(stackframes => {
-        tester(host, stackframes)
-      })
-    }
+    observeAndRunScriptAsync(script, observer)(_ => donePromise.future)
   }
-
 }

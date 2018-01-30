@@ -12,6 +12,8 @@
 * Support setting a breakpoint in an unknown script (via URL or URL regexp). Emit BreakpointResolved
   when a script that matches the requested breakpoint is seen. This makes it possible to use the
   DevTools Filesystem/workspace feature.
+* Ensure that changing a local variable via console code evaluation works after step/resume, i.e.
+  that the new value actually remains (issue #72)
 
 ## 0.6.0 (2017-10-22)
 

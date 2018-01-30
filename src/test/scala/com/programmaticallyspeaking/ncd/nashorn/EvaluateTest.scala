@@ -111,7 +111,17 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
           }
         }
       }
+    }
 
+    "commits a change to a local var-defined variable" in {
+      val script = "(function () { var xx = 5; debugger; debugger; return xx; })();"
+      evaluateInScript(script)({ (host, stackframes) =>
+        host.evaluateOnStackFrame(stackframes.head.id, "xx = 99;", Map.empty)
+      }, { (host, stackframes) =>
+        testSuccess(host.evaluateOnStackFrame(stackframes.head.id, "xx", Map.empty)) { r =>
+          r should be (SimpleValue(99))
+        }
+      })
     }
 
     "detects a script added using 'load'" in {

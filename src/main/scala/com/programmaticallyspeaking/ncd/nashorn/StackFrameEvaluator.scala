@@ -10,22 +10,38 @@ import org.slf4s.Logging
 import scala.util.{Failure, Success, Try}
 
 class StackFrameEvaluator(mappingRegistry: MappingRegistry, boxer: Boxer) extends Logging {
+
+  private def nativeValueForObjectId(objectId: ObjectId): Option[Value] = {
+    mappingRegistry.byId(objectId) match {
+      // TODO: Should we handle extras here?
+      case Some(descriptor) if descriptor.native.isDefined => Some(descriptor.native.get)
+      case Some(_) => None
+      case _ =>
+        throw new IllegalArgumentException(s"No object with ID '$objectId' was found.")
+    }
+  }
+
+  private def valuesForObjects(namedObjects: Map[String, ObjectId]): Map[String, Value] = {
+    namedObjects.flatMap {
+      case (name, objectId) => nativeValueForObjectId(objectId).map(name -> _).toSeq
+    }
+  }
+
   def evaluateOnStackFrame(pd: PausedData, stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): ValueNode = {
     findStackFrame(pd, stackFrameId) match {
       case Some(sf: StackFrameImpl) =>
         implicit val marshaller = pd.marshaller
 
         // Get the Value instances corresponding to the named objects
-        val namedValues = namedObjects.flatMap {
-          case (name, objectId) =>
-            mappingRegistry.byId(objectId) match {
-              // TODO: Should we handle extras here?
-              case Some(descriptor) if descriptor.native.isDefined => Seq(name -> descriptor.native.get)
-              case Some(_) => Seq.empty
-              case _ =>
-                throw new IllegalArgumentException(s"No object with ID '$objectId' was found.")
-            }
+        val namedValues = valuesForObjects(namedObjects)
+
+        // To be able to detect changes to local variables, find the local scope (unless it's in namedObjects already,
+        // e.g. in the setVariableValue case).
+        val localScopeId = sf.scopeChain.find(_.scopeType == ScopeType.Local).map(_.value) match {
+          case Some(c: ComplexNode) if !namedObjects.values.toSeq.contains(c.objectId) => Some(c.objectId)
+          case _ => None
         }
+        val localScopeValue = localScopeId.flatMap(nativeValueForObjectId)
 
         // Evaluating code may modify any existing object, which means that we cannot keep our object properties
         // cache. There's no point trying to be smart here and only remove entries for the named objects, since the
@@ -40,13 +56,31 @@ class StackFrameEvaluator(mappingRegistry: MappingRegistry, boxer: Boxer) extend
 
         // Update locals that changed, if needed. It's not sufficient for the synthetic locals object to have
         // been updated, since generated Java code will access the local variables directly.
-        updateChangedLocals(sf, namedValues, namedObjects)
+        // Add the local scope here, if any.
+        val localScopeName = localsName(namedObjects.keys.toSet)
+        updateChangedLocals(sf,
+          namedValues ++ localScopeValue.map(localScopeName -> _),
+          namedObjects ++ localScopeId.map(localScopeName -> _))
 
         result
       case _ =>
         log.warn(s"No stack frame found with ID $stackFrameId. Available IDs: " + pd.stackFrames.map(_.id).mkString(", "))
         throw new IllegalArgumentException(s"Failed to find a stack frame with ID $stackFrameId")
     }
+  }
+
+  /**
+    * Finds a unique name for the locals object we pass to updateChangedLocals. Probably overkill.
+    */
+  private def localsName(objectNames: Set[String]): String = {
+    val origName = "___locals"
+    var name = origName
+    var idx = 1
+    while (objectNames.contains(name)) {
+      name = origName + idx
+      idx += 1
+    }
+    name
   }
 
   private def updateChangedLocals(sf: StackFrameImpl, namedValues: Map[String, AnyRef], namedObjects: Map[String, ObjectId])(implicit marshaller: Marshaller): Unit = {
