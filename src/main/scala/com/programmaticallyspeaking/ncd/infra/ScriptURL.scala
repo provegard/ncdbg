@@ -49,6 +49,10 @@ object ScriptURL {
       val uriPart = if (withUnixSlashes.startsWith("/")) withUnixSlashes else "/" + withUnixSlashes
 
       new URI("file", "", uriPart, null)
+    } else if (something.startsWith("jar:")) {
+      // Just drop the 'jar:' prefix. We keep the ! character so that the JAR file itself becomes
+      // sort of a special folder.
+      return create(something.substring(4))
     } else if (something.startsWith("file:") || something.startsWith("eval:")) {
       // Assume this is something resembling an URL already, e.g. file:/foo/bar,
       // but we don't know how many slashes there are.

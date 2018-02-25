@@ -22,7 +22,8 @@ class ScriptURLTest extends UnitTest with TableDrivenPropertyChecks {
       ("file URL without authority and ..", "file:/foo/subdir/../bar", "file:///foo/bar"),
       ("file URL with authority", "file:///foo/bar", "file:///foo/bar"),
       ("data URL", "data:application/json;base64,e30=", "data:application/json;base64,e30="),
-      ("HTTP URL", "http://localhost/test", "http://localhost/test")
+      ("HTTP URL", "http://localhost/test", "http://localhost/test"),
+      ("JAR file", "jar:file:/foo/bar.jar!/dir/file.js", "file:///foo/bar.jar!/dir/file.js")
     )
 
   val resolveCases =

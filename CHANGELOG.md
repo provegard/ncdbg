@@ -14,6 +14,8 @@
   DevTools Filesystem/workspace feature.
 * Ensure that changing a local variable via console code evaluation works after step/resume, i.e.
   that the new value actually remains (issue #72)
+* Handle JAR URLs better. The `jar:` prefix is dropped so that embedded resources appear as
+  "navigable" files in the DevTools source tree.
 
 ## 0.6.0 (2017-10-22)
 

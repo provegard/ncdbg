@@ -117,6 +117,15 @@ class ScriptAddedTest extends ScriptAddedTestFixture {
     }
   }
 
+  "a script in a JAR loaded as a resource" - {
+    "is detected" in {
+      val script = "load('classpath:stuff/a.js');"
+      testAddScript(script) { scripts =>
+        atLeast(1, scripts.map(_.contents)) should include("I'm in a JAR")
+      }
+    }
+  }
+
   "given a script with multiple breakable locations on the same line" - {
     val script =
       """function fun() { return 42; } // 2 breakable here, one in 'program' and one in 'fun'
