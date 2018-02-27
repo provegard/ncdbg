@@ -35,6 +35,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     objectIdString("toomanyindices") -> Map("0" -> valueDescriptor(42), "1" -> valueDescriptor(43), "2" -> valueDescriptor(44), "3" -> valueDescriptor(45)),
     objectIdString("withprotoprop") -> Map("foo" -> valueDescriptor(42), "bar" -> valueDescriptor(43, isOwn = false)),
     objectIdString("array2") -> Map("0" -> valueDescriptor(42), "1" -> valueDescriptor(43), "length" -> valueDescriptor(2)),
+    objectIdString("int32array") -> Map("0" -> valueDescriptor(42), "length" -> valueDescriptor(1), "byteLength" -> valueDescriptor(4), "byteOffset" -> valueDescriptor(0)),
     objectIdString("withpropnamedunderscoreproto") -> Map("__proto__" -> valueDescriptor("dummy")),
     objectIdString("arrayofobject") -> Map("0" -> valueDescriptor(ObjectNode("Object", ObjectId("obj")))),
     objectIdString("arrayoffunction") -> Map("0" -> valueDescriptor(aFunction)),
@@ -53,11 +54,10 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     ObjectPreview("object", s"Array[$length]", false, Some("array"), Seq(propertyPreview: _*))
   }
 
-  // TODO: What's the description for a typed array? Investigate!
-//  def typedarrayPreviewWithProperties(propertyPreview: PropertyPreview*) = {
-//    val length = propertyPreview.size
-//    ObjectPreview("object", s"Array[$length]", false, Some("typedarray"), Seq(propertyPreview: _*))
-//  }
+  def typedarrayPreviewWithProperties(arrayType: String, propertyPreview: PropertyPreview*) = {
+    val length = propertyPreview.size
+    ObjectPreview("object", s"$arrayType[$length]", false, Some("typedarray"), Seq(propertyPreview: _*))
+  }
 
   def getPreview(obj: RemoteObject, props: Seq[(String, ObjectPropertyDescriptor)]): Option[ObjectPreview] = {
     val generator = new PreviewGenerator(_ => props, PreviewGenerator.Options(maxStringLength, maxProperties, maxIndices))
@@ -114,6 +114,10 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     ("handles array of undefined",
       RemoteObject.forArray(1, None, objectIdString("arrayofundefined")),
       Some(arrayPreviewWithProperties(PropertyPreview("0", "undefined", "undefined", None)))),
+
+    ("ignores non-index properties of a typed array",
+      RemoteObject.forArray(1, Some("Int32Array"), objectIdString("int32array")),
+      Some(typedarrayPreviewWithProperties("Int32Array", PropertyPreview("0", "number", "42", None)))),
 
     ("ignores an object property with a function value",
       forObject(objectIdString("objwithfunctionvalue")),

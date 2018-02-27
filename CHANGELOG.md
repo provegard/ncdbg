@@ -16,6 +16,7 @@
   that the new value actually remains (issue #72)
 * Handle JAR URLs better. The `jar:` prefix is dropped so that embedded resources appear as
   "navigable" files in the DevTools source tree.
+* Fix preview generation for typed arrays (issue #73)
 
 ## 0.6.0 (2017-10-22)
 

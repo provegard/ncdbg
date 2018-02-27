@@ -124,12 +124,15 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
     preview.copy(properties = preview.properties :+ propertyPreview)
   }
 
+  private def isArrayLike(obj: RemoteObject) =
+    obj.subtype.contains("array") || obj.subtype.contains("typedarray")
+
   private def shouldUse(obj: RemoteObject, name: String, descriptor: ObjectPropertyDescriptor): Boolean = name match {
     case "__proto__" =>
       // Ignore __proto__ property.
       false
-    case "length" if obj.subtype.contains("array") => // || obj.subtype.contains("typedarray") =>
-      // Ignore length property of array.
+    case prop if isArrayLike(obj) && !isUnsignedInt(prop) =>
+      // For arrays, only include indices
       false
 //    case "size" if obj.subtype.contains("map") || obj.subtype.contains("set") =>
 //      // Ignore size property of map, set.
@@ -139,12 +142,12 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
       false
     case _ =>
       descriptor.value match {
-        case Some(value: FunctionNode) =>
+        case Some(_: FunctionNode) =>
           // Never render functions in object preview.
           // But, array of functions is ok!
           obj.subtype.contains("array") && isUnsignedInt(name)
 
-        case Some(value) =>
+        case Some(_) =>
           true
 
         case None =>
