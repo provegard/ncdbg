@@ -27,16 +27,16 @@ trait RemoteObjectBuilder {
   }
 
   def forMap(size: Int, weak: Boolean, objectId: String) = {
-    val subtype = if (weak) "weakmap" else "map"
-    val cn = if (weak) "WeakMap" else "Map"
+    val className = if (weak) "WeakMap" else "Map"
+    val subtype = className.toLowerCase
     val sizeStr = if (weak) "" else s"($size)"
-    RemoteObject("object", Some(subtype), Some(cn), Some(cn + sizeStr), None, None, validObjectId(objectId))
+    RemoteObject("object", Some(subtype), Some(className), Some(className + sizeStr), None, None, validObjectId(objectId))
   }
   def forSet(size: Int, weak: Boolean, objectId: String) = {
-    val subtype = if (weak) "weakset" else "set"
-    val cn = if (weak) "WeakSet" else "Set"
+    val className = if (weak) "WeakSet" else "Set"
+    val subtype = className.toLowerCase
     val sizeStr = if (weak) "" else s"($size)"
-    RemoteObject("object", Some(subtype), Some(cn), Some(cn + sizeStr), None, None, validObjectId(objectId))
+    RemoteObject("object", Some(subtype), Some(className), Some(className + sizeStr), None, None, validObjectId(objectId))
   }
 
   def forObject(value: Map[String, Any]) = {
