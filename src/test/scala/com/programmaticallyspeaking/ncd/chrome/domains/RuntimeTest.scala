@@ -306,6 +306,15 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
 
       def errorValue(msg: String) = ErrorValue(ExceptionData("Exception", msg, 1, 0, "", None), true, ObjectId("err"))
 
+      "should return user agent directly (VS Code asks)" in {
+        testEvaluate("navigator.userAgent") {
+          case Runtime.EvaluateResult(result, _) =>
+            val value = result.value.getOrElse("Missing response value in " + result)
+            value.toString should startWith ("NCDbg version")
+          case other => fail("Unexpected response: " + other)
+        }
+      }
+
       "should perform ScriptHost evaluation with a wrapped function using null (global) as 'this'" in {
         testEvaluate("42") { _ =>
           val expr = "(function(){return (42);}).call(null);"

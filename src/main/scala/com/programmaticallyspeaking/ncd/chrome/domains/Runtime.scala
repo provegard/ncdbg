@@ -179,18 +179,24 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       log.debug(s"Request to release object group '$grp'")
 
     case Runtime.evaluate(expr, _, _, maybeSilent, maybeReturnByValue, maybeGeneratePreview) =>
-      // Runtime.evaluate evaluates on the global object. Calling with null as 'this' results in exactly that.
-      val script = s"(function(){return ($expr);}).call(null);"
+      if (expr == "navigator.userAgent") {
+        // VS Code (Debugger for Chrome) wants to know
+        EvaluateResult(RemoteObject.forString(s"NCDbg version ${BuildProperties.version}"), None)
+      } else {
 
-      // TODO: Debugger.evaluateOnCallFrame + Runtime.callFunctionOn, duplicate code
-      val actualReturnByValue = maybeReturnByValue.getOrElse(false)
-      val reportException = !maybeSilent.getOrElse(false)
-      val generatePreview = maybeGeneratePreview.getOrElse(false)
+        // Runtime.evaluate evaluates on the global object. Calling with null as 'this' results in exactly that.
+        val script = s"(function(){return ($expr);}).call(null);"
 
-      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
+        // TODO: Debugger.evaluateOnCallFrame + Runtime.callFunctionOn, duplicate code
+        val actualReturnByValue = maybeReturnByValue.getOrElse(false)
+        val reportException = !maybeSilent.getOrElse(false)
+        val generatePreview = maybeGeneratePreview.getOrElse(false)
 
-      val evalResult = evaluate(scriptHost, "$top", script, Map.empty, reportException)
-      EvaluateResult(evalResult.result, evalResult.exceptionDetails)
+        implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
+
+        val evalResult = evaluate(scriptHost, "$top", script, Map.empty, reportException)
+        EvaluateResult(evalResult.result, evalResult.exceptionDetails)
+      }
 
     case Runtime.compileScript(expr, url, persist, _) =>
       log.debug(s"Request to compile script '$expr' with URL $url and persist = $persist")
