@@ -3,7 +3,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 import com.programmaticallyspeaking.ncd.host.Script
 import com.programmaticallyspeaking.ncd.infra.{IdGenerator, ScriptURL}
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{EvaluatedCodeMarker, NoScriptReason, ScriptClassNamePrefix}
-import com.sun.jdi.{Location, ReferenceType, ThreadReference}
+import com.sun.jdi.{AbsentInformationException, Location, ReferenceType, ThreadReference}
 import org.slf4s.Logging
 
 import scala.util.{Failure, Success, Try}
@@ -44,6 +44,10 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
               log.debug(s"Ignoring script type '${refType.name} because it has no line locations.")
               callback(None)
           }
+        case Failure(_: AbsentInformationException) =>
+          // Less intimidating log message here compared to below.
+          log.warn(s"No line locations available for ${refType.name}")
+          callback(None)
         case Failure(t) =>
           log.warn(s"Failed to get line locations for ${refType.name}", t)
           callback(None)
