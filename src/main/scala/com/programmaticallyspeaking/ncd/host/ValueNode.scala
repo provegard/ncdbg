@@ -71,9 +71,14 @@ case class SimpleValue(value: Any) extends ValueNode
   * @param isThrown a flag that indicates whether the error is thrown or not. A non-thrown error is just a value being
   *                 evaluated.
   * @param objectId object ID
+  * @param javaStack optional Java stack trace, for logging/debugging
   */
 // TODO: Naming - all ComplexNode classes are named XXNode, but not this.
-case class ErrorValue(data: ExceptionData, isThrown: Boolean, objectId: ObjectId) extends ComplexNode
+case class ErrorValue(data: ExceptionData, isThrown: Boolean, objectId: ObjectId, javaStack: Option[String]) extends ComplexNode {
+  def fullStack: String = {
+    data.stackIncludingMessage.getOrElse(data.message) + javaStack.map("\r\n---[Java:]---\r\n" + _).getOrElse("")
+  }
+}
 
 /**
   * Represents an array.

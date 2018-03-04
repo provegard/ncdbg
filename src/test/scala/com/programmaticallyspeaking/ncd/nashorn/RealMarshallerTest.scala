@@ -79,7 +79,7 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
     "Error" in {
       evaluateExpression("new TypeError('oops')") { (_, actual) =>
         inside(actual) {
-          case ErrorValue(data, isBasedOnThrowable, _) =>
+          case ErrorValue(data, isBasedOnThrowable, _, _) =>
             val stack = "TypeError: oops\n\tat <program> (<eval>:1)"
             data should be (ExceptionData("TypeError", "oops", 1, -1, "<eval>", Some(stack)))
             isBasedOnThrowable should be (false)
@@ -92,7 +92,7 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
 
       evaluateExpression(expr) { (_, actual) =>
         inside(actual) {
-          case ErrorValue(data, _, _) =>
+          case ErrorValue(data, _, _, _) =>
             data.columnNumberBase0 should be (0)
         }
       }

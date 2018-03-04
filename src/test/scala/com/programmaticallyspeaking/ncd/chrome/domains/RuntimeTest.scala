@@ -304,7 +304,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         fun(response)
       }
 
-      def errorValue(msg: String) = ErrorValue(ExceptionData("Exception", msg, 1, 0, "", None), true, ObjectId("err"))
+      def errorValue(msg: String) = ErrorValue(ExceptionData("Exception", msg, 1, 0, "", None), true, ObjectId("err"), None)
 
       "should return user agent directly (VS Code asks)" in {
         testEvaluate("navigator.userAgent") {
@@ -351,7 +351,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
     "when ScriptHost emits UncaughtError" - {
       def testIt = {
         val runtime = newActorInstance[Runtime]
-        val ev = ErrorValue(ExceptionData("Error", "oops", 1, 0, "http://some/where", None), true, ObjectId("o1"))
+        val ev = ErrorValue(ExceptionData("Error", "oops", 1, 0, "http://some/where", None), true, ObjectId("o1"), None)
         val req = Messages.Request("1", Domain.enable)
         // First 2 are executionContextCreated and consoleAPICalled
         receiveScriptEventTriggeredEvents(runtime, Seq(req), Seq(UncaughtError(ev)), 3).last

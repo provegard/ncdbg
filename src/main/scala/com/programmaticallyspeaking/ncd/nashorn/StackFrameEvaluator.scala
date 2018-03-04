@@ -64,7 +64,7 @@ class StackFrameEvaluator(mappingRegistry: MappingRegistry, boxer: Boxer) extend
 
         result
       case _ =>
-        log.warn(s"No stack frame found with ID $stackFrameId. Available IDs: " + pd.stackFrames.map(_.id).mkString(", "))
+        log.warn(s"Cannot evaluate '$expression', because no stack frame found with ID $stackFrameId. Available IDs: " + pd.stackFrames.map(_.id).mkString(", "))
         throw new IllegalArgumentException(s"Failed to find a stack frame with ID $stackFrameId")
     }
   }
@@ -155,7 +155,7 @@ class StackFrameEvaluator(mappingRegistry: MappingRegistry, boxer: Boxer) extend
          |});
        """.stripMargin
     sf.eval(js, namedValues) match {
-      case ErrorValue(data, _, _) =>
+      case ErrorValue(data, _, _, _) =>
         throw new RuntimeException("Failed to reset change tracking: " + data.message)
       case _ =>
     }

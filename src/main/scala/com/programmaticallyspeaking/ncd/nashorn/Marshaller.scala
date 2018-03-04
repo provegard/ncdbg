@@ -101,8 +101,8 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
   }
 
   def throwError(err: ThrownExceptionReference): Nothing = marshal(err) match {
-    case ErrorValue(data, _, _) =>
-      throw new RuntimeException("Error from object property extraction: " + data.stackIncludingMessage.getOrElse(data.message))
+    case ev: ErrorValue =>
+      throw new RuntimeException("Error from object property extraction: " + ev.fullStack)
     case other => throw new RuntimeException("Thrown exception, but marshalled to: " + other)
   }
 
@@ -137,8 +137,8 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
     case so if isScriptObject(so) => marshalScriptObject(so)
     case so if isJSObject(so) => marshalJSObject(so)
     case BoxedValue(vn) => vn
-    case ExceptionValue((vn, maybeJavaStack)) =>
-      val extra = maybeJavaStack.map(st => "JavaStack" -> SimpleValue(st)).toMap + ("Message" -> SimpleValue(vn.data.message))
+    case ExceptionValue(vn) =>
+      val extra = vn.javaStack.map(st => "JavaStack" -> SimpleValue(st)).toMap + ("Message" -> SimpleValue(vn.data.message))
       MarshallerResult(vn, extra)
     case str: ObjectReference if isConsString(str) =>
       toStringOf(str)
@@ -341,7 +341,7 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
       Option(fileNameValue).getOrElse("<unknown>"), //TODO: To URL?
       Option(stackValue)
     )
-    ErrorValue(exData, isThrown = false, objectId(mirror.scriptObject))
+    ErrorValue(exData, isThrown = false, objectId(mirror.scriptObject), None)
   }
 
   class LazyMarshalledValue(v: Value) extends LazyNode {
@@ -369,20 +369,20 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
       *
       * @param v the value that may be an exception
       */
-    def unapply(v: Value): Option[(ErrorValue, Option[String])] = v match {
+    def unapply(v: Value): Option[ErrorValue] = v match {
       case t: ThrownExceptionReference => unpack(t.exception, wasThrown = true)
       case objRef: ObjectReference => unpack(objRef, wasThrown = false)
       case _ => None
     }
 
-    private def unpack(exception: ObjectReference, wasThrown: Boolean): Option[(ErrorValue, Option[String])] = {
+    private def unpack(exception: ObjectReference, wasThrown: Boolean): Option[ErrorValue] = {
       val types = allReachableTypesIncluding(exception.referenceType())
       val isThrowable = types.exists(_.name() == classOf[Throwable].getName)
       val nashornException = types.find(_.name() == classOf[NashornException].getName)
 
       if (isThrowable) {
         val data = exceptionDataOf(exception, nashornException)
-        Some((ErrorValue(data.data, isThrown = wasThrown, objectId(exception)), data.javaStack))
+        Some(ErrorValue(data.data, isThrown = wasThrown, objectId(exception), data.javaStack))
       } else None
     }
 

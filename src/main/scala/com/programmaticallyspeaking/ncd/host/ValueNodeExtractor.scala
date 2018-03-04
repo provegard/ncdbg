@@ -69,7 +69,7 @@ class ValueNodeExtractor(objectInteraction: ObjectInteraction) {
     case EmptyNode => null
     case DateNode(stringRep, _) => stringRep
     case FunctionNode(name, _, _) => s"<function $name() {}>"
-    case ErrorValue(data, _, _) => s"<${data.name}: ${data.message}>"
+    case ErrorValue(data, _, _, _) => s"<${data.name}: ${data.message}>"
     // Don't know why I don't get a pattern match warning even though ValueNode is sealed. Is it because
     // LazyNode isn't sealed?
   }

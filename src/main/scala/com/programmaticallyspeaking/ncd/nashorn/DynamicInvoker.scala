@@ -117,7 +117,7 @@ abstract class Invoker(referenceTypeData: ReferenceTypeData) {
 
   class ThrowingMappingRegistry extends MappingRegistry {
     override def register(value: Value, valueNode: ComplexNode, extraProperties: Map[String, ValueNode]): Unit = valueNode match {
-      case ErrorValue(data, _, _) =>
+      case ErrorValue(data, _, _, _) =>
         val exceptionRef = value.asInstanceOf[ObjectReference]
         extraProperties.get("javaStack") match {
           case Some(stackWithMessage) =>

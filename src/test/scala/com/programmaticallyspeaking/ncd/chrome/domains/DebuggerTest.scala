@@ -378,7 +378,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
         "reason with data into reference data" in {
           val objId = ObjectId("err-id")
-          val errValue = ErrorValue(ExceptionData("Error", "err", 1, 0, "", None), true, objId)
+          val errValue = ErrorValue(ExceptionData("Error", "err", 1, 0, "", None), true, objId, None)
           val reason = BreakpointReason.Exception(Some(errValue))
           val ev = simulateHitBreakpoint(Seq(stackFrame), reason)
           val params = getEventParams(ev)
@@ -471,21 +471,21 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       "should return a response with value 'undefined' when ScriptHost evaluation returns a Throwable-based error value" in {
         val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
-        testEvalHandling(ErrorValue(exData, isThrown = true, ObjectId("$$err"))) { resp =>
+        testEvalHandling(ErrorValue(exData, isThrown = true, ObjectId("$$err"), None)) { resp =>
           resp.result should be (RemoteObject.undefinedValue)
         }
       }
 
       "should return a response with an error value when ScriptHost evaluation returns a non-Throwable-based error value" in {
         val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
-        testEvalHandling(ErrorValue(exData, isThrown = false, ObjectId("$$err"))) { resp =>
+        testEvalHandling(ErrorValue(exData, isThrown = false, ObjectId("$$err"), None)) { resp =>
           resp.result should be (RemoteObject.forError("Error", "oops", None, """{"id":"$$err"}"""))
         }
       }
 
       "should return a response with exception details when ScriptHost evaluation returns a Throwable-based error value" in {
         val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
-        testEvalHandling(ErrorValue(exData, isThrown = true, ObjectId("$$err"))) { resp =>
+        testEvalHandling(ErrorValue(exData, isThrown = true, ObjectId("$$err"), None)) { resp =>
           // Remember, Chrome line numbers are 0-based, so 10 => 9
           resp.exceptionDetails should be (Some(ExceptionDetails(1, "oops", 9, 1, Some("<eval>"), None, Runtime.StaticExecutionContextId)))
         }
@@ -493,7 +493,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       "should return a response with _only_ value 'undefined' when ScriptHost evaluation returns a Throwable-based error value but silent mode is requested" in {
         val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
-        testEvalHandling(ErrorValue(exData, isThrown = true, ObjectId("$$err")), Some(true)) { resp =>
+        testEvalHandling(ErrorValue(exData, isThrown = true, ObjectId("$$err"), None), Some(true)) { resp =>
           resp should be (Debugger.EvaluateOnCallFrameResult(RemoteObject.undefinedValue, None))
         }
       }
