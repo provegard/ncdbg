@@ -56,7 +56,7 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
           Seq.empty
       }
     case None =>
-      throw new IllegalStateException("Property extraction can only be done in a paused state.")
+      throw new IllegalStateException(s"Property extraction can only be done in a paused state (for object $objectId).")
   }
 
   private def createPropertyHolder(objectId: ObjectId, objectDescriptor: ObjectDescriptor, includeProto: Boolean)(implicit marshaller: Marshaller): Option[PropertyHolder] = {
