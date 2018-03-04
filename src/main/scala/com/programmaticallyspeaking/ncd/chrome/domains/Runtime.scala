@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
-import com.programmaticallyspeaking.ncd.infra.{IdGenerator, ObjectMapping}
+import com.programmaticallyspeaking.ncd.infra.{BuildProperties, IdGenerator, ObjectMapping}
 import com.programmaticallyspeaking.ncd.transpile.{CachingES5Transpiler, ClosureBasedES5Transpiler}
 import org.slf4s.Logging
 
@@ -171,7 +171,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       emitEvent("Runtime.executionContextCreated",
         ExecutionContextCreatedEventParams(ExecutionContextDescription(StaticExecutionContextId, "top", "top", null)))
 
-      consoleLog("Greetings from ncdbg!")
+      consoleLog(s"Greetings from NCDbg version ${BuildProperties.version}!")
 
     case Runtime.releaseObjectGroup(grp) =>
       log.debug(s"Request to release object group '$grp'")

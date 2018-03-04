@@ -6,6 +6,7 @@ import akka.actor.ActorSystem
 import com.programmaticallyspeaking.ncd.chrome.domains.DefaultDomainFactory
 import com.programmaticallyspeaking.ncd.chrome.net.{FilePublisher, FileServer, WebSocketServer}
 import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
+import com.programmaticallyspeaking.ncd.infra.BuildProperties
 import com.programmaticallyspeaking.ncd.ioc.Container
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.nashorn.{NashornDebugger, NashornDebuggerConnector, NashornScriptHost}
@@ -20,6 +21,7 @@ object Boot extends App with Logging {
   implicit val system = ActorSystem()
   import system.dispatcher
 
+  log.info("NCDbg version: " + BuildProperties.version)
   log.info("Local Java version: " + System.getProperty("java.version"))
 
   val connectAddr = conf.connect()
