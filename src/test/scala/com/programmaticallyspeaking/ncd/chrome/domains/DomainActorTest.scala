@@ -118,7 +118,7 @@ class DomainActorTest extends UnitTest with DomainActorTesting {
       enableActor(actor)
 
       val ex = intercept[ResponseException](requestAndReceiveResponse(actor, "2", TestDomainActor.fail))
-      ex.getMessage should be ("I failed")
+      ex.getMessage should be ("java.lang.Exception: I failed")
     }
 
     "should be able to return a value when handling a message" in {

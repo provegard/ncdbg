@@ -146,7 +146,7 @@ class ChromeServerTest extends UnitTest with DomainActorTesting with Inside with
         ("desc", "method", "resp"),
         ("normal response", "takeLock", Response(3, "lock done")),
         ("empty response", "takeLockEmpty", EmptyResponse(3)),
-        ("error response", "takeLockError", ErrorResponse(3, "class java.lang.RuntimeException: error"))
+        ("error response", "takeLockError", ErrorResponse(3, "java.lang.RuntimeException: error"))
       )
 
     forAll(serializeTests) { (desc, method, expResponse) =>

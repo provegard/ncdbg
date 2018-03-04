@@ -114,7 +114,7 @@ abstract class DomainActor(scriptHost: ScriptHost) extends Actor with Logging {
 
     case ProcessingError(req, ex) =>
       log.error(s"Message handling error for domain $name", ex)
-      val msg = ex.getClass + ": " + ex.getMessage
+      val msg = ex.getClass.getName + ": " + ex.getMessage
       sender() ! Messages.ErrorResponse(req.id, msg)
       finishProcessingRequest(req)
 
