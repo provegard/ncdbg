@@ -19,7 +19,7 @@ Debugger for Chrome. Follow the instructions to restart.
 
 VSCode tries to map scripts exposed by NCDbg to workspace scripts, so if your scripts reside
 in an existing workspace, it's a good idea to open that. In particular, you will need to add
-an entry in _launch.json_.
+an entry in _launch.json_ (see below).
 
 ## Modify launch.json
 
@@ -38,6 +38,14 @@ Open _launch.json_ and add the following configuration entry (in the `configurat
 Adjust the host name and port accordingly. For VSCode to be able to map a script with a relative
 path to a workspace script, the `webRoot` property should be set to the "base location" of
 relative script paths.
+
+### Where is launch.json?
+
+It should be in the _.vscode_ folder in the workspace root. If it's not there, go to the Debug
+view and click the settings gears towards the top. There should be a red indicator and a tooltip
+that reads something like "Configure or Fix 'launch.json'". After clicking, in the environment
+dropdown that appears, select Chrome. The _launch.json_ file should now open and you can modify
+the added Chrome entry to look like the entry above.
 
 ## Start debugging
 
