@@ -6,13 +6,14 @@ import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
 import akka.stream.testkit.scaladsl.{TestSink, TestSource}
 import akka.stream.testkit.{TestPublisher, TestSubscriber}
 import akka.testkit.TestProbe
-import com.programmaticallyspeaking.ncd.chrome.domains.DomainActorTesting
-import com.programmaticallyspeaking.ncd.chrome.net.Protocol.{EmptyResponse, ErrorResponse, Message}
+import com.programmaticallyspeaking.ncd.chrome.domains.{DomainActorTesting, FooTestDomain}
+import com.programmaticallyspeaking.ncd.chrome.net.Protocol.{EmptyResponse, ErrorResponse, Message, Response}
 import com.programmaticallyspeaking.ncd.infra.ObjectMapping.fromJson
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer}
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.reactivestreams.{Publisher, Subscriber, Subscription}
 import org.scalatest.Inside
+import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.language.implicitConversions
 
@@ -33,7 +34,7 @@ object AkkaTestMigration {
   }
 }
 
-class ChromeServerTest extends UnitTest with DomainActorTesting with Inside {
+class ChromeServerTest extends UnitTest with DomainActorTesting with Inside with TableDrivenPropertyChecks {
   import AkkaTestMigration._
   lazy val domainFactory = new CapturingDomainFactory()
   lazy implicit val materializer = ActorMaterializer()
@@ -138,6 +139,33 @@ class ChromeServerTest extends UnitTest with DomainActorTesting with Inside {
       sub.request(1)
       pub.sendNext("""{"id":"2","method":"UnknownDomain.enable"}""")
       sub.expectNext(ErrorResponse(2, unknownMethod("UnknownDomain.enable")))
+    }
+
+    val serializeTests =
+      Table(
+        ("desc", "method", "resp"),
+        ("normal response", "takeLock", Response(3, "lock done")),
+        ("empty response", "takeLockEmpty", EmptyResponse(3)),
+        ("error response", "takeLockError", ErrorResponse(3, "class java.lang.RuntimeException: error"))
+      )
+
+    forAll(serializeTests) { (desc, method, expResponse) =>
+      s"serializes requests to prevent domain actor races, testing $desc" in {
+        val (pub, sub) = setup(chromeServerFactory.create())
+
+        sub.request(1)
+        pub.sendNext("""{"id":"1","method":"FooTestDomain.enable"}""")
+        sub.expectNext(EmptyResponse(1))
+        pub.sendNext("""{"id":"2","method":"BazTestDomain.enable"}""")
+        sub.expectNext(EmptyResponse(2))
+        pub.sendNext(s"""{"id":"3","method":"FooTestDomain.$method"}""")
+        pub.sendNext("""{"id":"4","method":"BazTestDomain.echo","params":{"msg":"testing"}}""")
+        Thread.sleep(500)
+        FooTestDomain.releaseLock()
+        sub.expectNext(expResponse)
+        sub.expectNext(Response(4, "testing"))
+      }
+
     }
   }
 

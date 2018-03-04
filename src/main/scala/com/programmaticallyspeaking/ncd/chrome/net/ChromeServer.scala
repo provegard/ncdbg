@@ -27,6 +27,12 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
   val domains = mutable.Map[String, ActorRef]()
   val invalidMethods = mutable.Set[String]()
 
+  // Queue for requests that we won't send because there are outstanding requests. We serialize all requests
+  // to avoid race conditions between domain actors (e.g. resuming the VM when another domain is getting properties).
+  private val queuedRequests = mutable.Queue[(ActorRef, Messages.Request)]()
+
+  private val outstandingRequests = mutable.Set[String]()
+
   override def postStop(): Unit = try {
     stopDomainActors()
     domains.clear()
@@ -70,7 +76,15 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
 
       context.watch(domainActor)
 
-      domainActor ! Messages.Request(msg.id.toString, domainMessageArg)
+      val request = Messages.Request(msg.id.toString, domainMessageArg)
+
+      // If there are no outstanding requests, make this one (but it's now outstanding).
+      // Otherwise queue it.
+      if (outstandingRequests.isEmpty) {
+        sendRequestToDomainActor(domainActor, request)
+      } else {
+        queuedRequests += ((domainActor, request))
+      }
     } catch {
       case ex: IllegalArgumentException =>
         invalidMethods += msg.method
@@ -81,6 +95,18 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
         log.error("Failed to handle message", ex)
         sendToDevTools(Protocol.ErrorResponse(msg.id, "ERROR: " + ex.getMessage))
     }
+  }
+
+  private def sendRequestToDomainActor(actor: ActorRef, request: Messages.Request): Unit = {
+    outstandingRequests += request.id
+    actor ! request
+  }
+
+  private def handleRequestResponse(id: String): Unit = {
+    outstandingRequests -= id
+    queuedRequests.dequeueFirst(_ => true).foreach(tup => {
+      sendRequestToDomainActor(tup._1, tup._2)
+    })
   }
 
   override def receive: Receive = {
@@ -137,14 +163,17 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
     case response: Messages.Accepted =>
       log.trace("Got accepted-response (no response data) from domain: " + response)
       sendToDevTools(Protocol.EmptyResponse(response.id.toLong))
+      handleRequestResponse(response.id)
 
     case response: Messages.Response =>
       log.trace("Got response from domain: " + response)
       sendToDevTools(Protocol.Response(response.id.toLong, response.msg))
+      handleRequestResponse(response.id)
 
     case response: Messages.ErrorResponse =>
       log.warn("Got error response from domain: " + response)
       sendToDevTools(Protocol.ErrorResponse(response.id.toLong, response.error))
+      handleRequestResponse(response.id)
 
     case event: Messages.Event =>
       log.debug("Got event from domain: " + event)
