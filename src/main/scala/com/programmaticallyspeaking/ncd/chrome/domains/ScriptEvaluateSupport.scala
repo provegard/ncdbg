@@ -45,6 +45,8 @@ trait ScriptEvaluateSupport { self: Logging =>
         // Apparently we need to pass an actual value with the exception details
         EvaluationResult(RemoteObject.undefinedValue, Some(details))
       case Success(err: ErrorValue) if err.isThrown =>
+        val msg = err.data.stackIncludingMessage.getOrElse(err.data.message)
+        log.warn(s"Suppressed error for Runtime.evaluate at line ${err.data.lineNumberBase1}: $msg.\n\nOffending code:\n$expression")
         EvaluationResult(RemoteObject.undefinedValue)
       case Success(result) => EvaluationResult(remoteObjectConverter.toRemoteObject(result))
       case Failure(t) =>
