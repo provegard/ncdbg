@@ -20,6 +20,11 @@
 * Fix console expansion of big arrays (ES6 needs to be transpiled to ES5) (issue #76)
 * Fix object property extraction when Java is disabled (Nashorn script engine created with `--no-java`)
   (issue #80)
+* Fix VS Code connection problem, serve web sockets via /json/list also (issue #79)
+* Fix VS Code locals property extraction error, handle arguments to `Runtime.callFunctionOn`
+  being `null` (issue #79)
+* Be friendly towards VS Code when it asks about user agent (for internal Debugger for Chrome logging)
+  (issue #79)
 
 ## 0.6.0 (2017-10-22)
 
