@@ -69,24 +69,29 @@ class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with B
         requireContentType(file, "text/plain")
       }
 
-      "serves JSON at /json to tell VS Code et al. what to connect to" in {
-        fetchData(s"http://localhost:$currentPort/json") match {
-          case Success(data) =>
-            val items = ObjectMapping.fromJson[Seq[Any]](data)
-            items should be (Seq(
-              Map(
-                "description" -> "",
-                "url" -> "/",
-                "webSocketDebuggerUrl" -> s"ws://localhost:$currentPort/dbg",
-                "devtoolsFrontendUrl" -> s"/devtools/inspector.html?ws=localhost:$currentPort/dbg",
-                "title" -> "NCDbg",
-                "type" -> "page"
-              )
-            ))
+      Seq("/json", "/json/list").foreach { path =>
 
-          case Failure(t) => fail(t)
+        s"serves JSON at $path to tell VS Code et al. what to connect to" in {
+          fetchData(s"http://localhost:$currentPort$path") match {
+            case Success(data) =>
+              val items = ObjectMapping.fromJson[Seq[Any]](data)
+              items should be (Seq(
+                Map(
+                  "description" -> "",
+                  "url" -> "/",
+                  "webSocketDebuggerUrl" -> s"ws://localhost:$currentPort/dbg",
+                  "devtoolsFrontendUrl" -> s"/devtools/inspector.html?ws=localhost:$currentPort/dbg",
+                  "title" -> "NCDbg",
+                  "type" -> "page"
+                )
+              ))
+
+            case Failure(t) => fail(t)
+          }
         }
+
       }
+
     }
 
     "and a CoffeeScript file" - {

@@ -84,8 +84,8 @@ class FileServer(host: String, port: Int) extends Logging with Server.FallbackHa
         throw new UnsupportedOperationException("GET,HEAD")
       }
     } else {
-      if (path == "/json") {
-        log.debug("Serving WebSocket connection list (/json endpoint)")
+      if (path == "/json" || path == "/json/list") {
+        log.debug(s"Serving WebSocket connection list ($path endpoint)")
         serveWebSocketConnectionList(connection)
       } else {
         log.warn(s"File request outside base URL ($baseURL): ${connection.uri()}")
