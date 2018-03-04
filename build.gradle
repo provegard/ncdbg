@@ -16,8 +16,24 @@ sourceCompatibility = 1.8
 
 mainClassName = "com.programmaticallyspeaking.ncd.boot.Boot"
 
+def generatedResourcesFolder = "$buildDir/generated-resources"
+
 // For the application plugin
 applicationName = "ncdbg"
+
+sourceSets {
+    main {
+        output.dir(generatedResourcesFolder, builtBy: 'generateResources')
+    }
+}
+
+task generateResources {
+    doLast {
+        mkdir generatedResourcesFolder
+        def buildProps = new File(generatedResourcesFolder, "build.properties")
+        buildProps.text = "version=$version"
+    }
+}
 
 test {
     // Always run tests!
