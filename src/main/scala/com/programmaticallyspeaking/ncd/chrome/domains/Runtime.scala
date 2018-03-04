@@ -3,6 +3,7 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
 import com.programmaticallyspeaking.ncd.infra.{IdGenerator, ObjectMapping}
+import com.programmaticallyspeaking.ncd.transpile.{CachingES5Transpiler, ClosureBasedES5Transpiler}
 import org.slf4s.Logging
 
 import scala.util.{Failure, Success}
@@ -125,12 +126,13 @@ object Runtime {
   case class ExceptionThrownEventParams(timestamp: Timestamp, exceptionDetails: ExceptionDetails)
 }
 
-class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
+class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport with TranspileSupport {
 
   import Runtime._
 
   private val compiledScriptIdGenerator = new IdGenerator("compscr")
   private implicit val host = scriptHost
+
 
   private def mapInternalProperties(props: Seq[(String, ObjectPropertyDescriptor)]) = {
     // It seems as if internal properties never have a preview.
@@ -210,12 +212,28 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
 
       val targetName = namedObjects.useNamedObject(ObjectId.fromString(strObjectId))
 
-      val argsArrayString = ScriptEvaluateSupport.serializeArgumentValues(arguments, namedObjects).mkString("[", ",", "]")
-      val expression = s"($functionDeclaration).apply($targetName,$argsArrayString)"
+      // Transpile the code if needed.
+      // Some considerations:
+      // - perhaps we should transpile always? But we'd like to skip the transpilation runtime if it's not needed.
+      // - perhaps we should transpile in Runtime.evaluate also?
+      val maybeTranspiled = if (needsTranspile(functionDeclaration)) transpile(functionDeclaration) else functionDeclaration
 
+      val argsArrayString = ScriptEvaluateSupport.serializeArgumentValues(arguments, namedObjects).mkString("[", ",", "]")
+      val expression = s"($maybeTranspiled).apply($targetName,$argsArrayString)"
+
+      // Always report exception, because we want to log if something bad happens, e.g. DevTools is sending
+      // ES6 code that we don't transpile properly.
       // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
-      val evalResult = evaluate(scriptHost, "$top", expression, namedObjects.result, reportException)
-      CallFunctionOnResult(evalResult.result, evalResult.exceptionDetails)
+      val evalResult = evaluate(scriptHost, "$top", expression, namedObjects.result, reportException = true)
+
+      evalResult.exceptionDetails match {
+        case Some(err) if !reportException =>
+          // This would have been suppressed, so log it!
+          log.error(s"Suppressed error for Runtime.callFunctionOn at line ${err.lineNumber}: ${err.text}. Offending code:\n$expression")
+        case _ =>
+      }
+
+      CallFunctionOnResult(evalResult.result, if (reportException) evalResult.exceptionDetails else None)
 
     case Runtime.runIfWaitingForDebugger =>
       log.debug("Request to run if waiting for debugger")

@@ -17,6 +17,7 @@
 * Handle JAR URLs better. The `jar:` prefix is dropped so that embedded resources appear as
   "navigable" files in the DevTools source tree.
 * Fix preview generation for typed arrays (issue #73)
+* Fix console expansion of big arrays (ES6 needs to be transpiled to ES5) (issue #76)
 
 ## 0.6.0 (2017-10-22)
 

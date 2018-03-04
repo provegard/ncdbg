@@ -174,14 +174,15 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
 
     "callFunctionOn" - {
       def testCall(obj: ComplexNode, targetId: String, args: Seq[CallArgument], retVal: Option[Try[ValueNode]] = None, silent: Option[Boolean] = None,
-                   returnByValue: Option[Boolean] = None, generatePreview: Option[Boolean] = None)(fun: (Any) => Unit) = {
+                   returnByValue: Option[Boolean] = None, generatePreview: Option[Boolean] = None, functionDecl: Option[String] = None)(fun: (Any) => Unit) = {
 
         val actualRetVal = retVal.getOrElse(Success(SimpleValue("ok")))
         when(currentScriptHost.evaluateOnStackFrame(any[String], any[String], any[Map[String, ObjectId]])).thenReturn(actualRetVal)
 
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
-        val response = requestAndReceiveResponse(runtime, "2", Runtime.callFunctionOn(targetId, "function(){}", args, silent,
+        val functionDeclaration = functionDecl.getOrElse("function(){}")
+        val response = requestAndReceiveResponse(runtime, "2", Runtime.callFunctionOn(targetId, functionDeclaration, args, silent,
           returnByValue, generatePreview))
         fun(response)
       }
@@ -198,6 +199,14 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         testCall(obj, """{"id":"x"}""", Seq.empty) { resp =>
           val expr = "(function(){}).apply(__obj_1,[])"
           evaluateOnStackFrameArgs should be (EvaluateOnStackFrameArgs("$top", expr, Map("__obj_1" -> ObjectId("x"))))
+        }
+      }
+
+      "should transpile a generator function" in {
+        val obj = objectWithId("x")
+        testCall(obj, """{"id":"x"}""", Seq.empty, functionDecl = Some("function *gen() { yield 42; }")) { resp =>
+          val codePassedToHost = evaluateOnStackFrameArgs.expression
+          codePassedToHost shouldNot include ("yield")
         }
       }
 

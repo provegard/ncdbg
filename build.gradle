@@ -77,6 +77,8 @@ dependencies {
     compile 'org.scala-lang:scala-library:2.12.1'
 
     compile group: 'org.rogach', name: 'scallop_2.12', version: '2.1.0'
+
+    compile group: 'com.google.javascript', name: 'closure-compiler', version: 'v20180204'
 }
 
 // Exclude tools.jar from the distribution since we want to use the one from the user's JDK.
