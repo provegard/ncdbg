@@ -7,9 +7,9 @@ import jdk.nashorn.api.scripting.NashornScriptEngineFactory
 
 import scala.util.control.NonFatal
 
-object ScriptExecutor extends App with ScriptExecutorBase {
+abstract class ScriptExecutorC extends App with ScriptExecutorBase {
   println("ScriptExecutor starting. Java version: " + System.getProperty("java.version"))
-  val scriptEngine = new NashornScriptEngineFactory().getScriptEngine("--no-syntax-extensions")
+  val scriptEngine = new NashornScriptEngineFactory().getScriptEngine(nashornArgs: _*)
   val reader = new BufferedReader(new InputStreamReader(System.in))
   println(Signals.ready)
   waitForSignal(Signals.go)
@@ -36,4 +36,14 @@ object ScriptExecutor extends App with ScriptExecutorBase {
     }
     println(Signals.scriptDone)
   }
+
+  protected def nashornArgs: Array[String]
+}
+
+object ScriptExecutorNoJava extends ScriptExecutorC {
+  override protected def nashornArgs = Array("--no-syntax-extensions", "--no-java")
+}
+
+object ScriptExecutor extends ScriptExecutorC {
+  override protected def nashornArgs = Array("--no-syntax-extensions")
 }

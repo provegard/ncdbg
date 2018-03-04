@@ -144,7 +144,7 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
   // which Node does, so currently we get the property value by accessing the symbol property of the object.
   private val extractorFunctionSource =
     """(function () {
-      |  var hasJava = !!Java;
+      |  var hasJavaTo = typeof Java !== "undefined" && typeof Java.to === "function";
       |  var hasSymbols = !!Object.getOwnPropertySymbols;
       |  return function __getprops(target, isNative, onlyOwn, onlyAccessors, strPropertyBlacklistRegExp) {
       |    var result = [], proto, i, j;
@@ -220,7 +220,7 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |        }
       |      }
       |    }
-      |    return hasJava ? Java.to(result, "java.lang.Object[]") : result;
+      |    return hasJavaTo ? Java.to(result, "java.lang.Object[]") : result;
       |  };
       |  function safeGetProto(x) {
       |    try {

@@ -6,6 +6,22 @@ import com.programmaticallyspeaking.ncd.infra.StringAnyMap
 import org.scalatest.Inside
 import org.scalatest.prop.TableDrivenPropertyChecks
 
+class ObjectPropertiesNoJavaTest extends RealMarshallerTestFixture with Inside with TableDrivenPropertyChecks with ObjectPropertyTesting {
+
+  import RealMarshallerTest._
+  override val scriptExecutor: ScriptExecutorBase = ScriptExecutorNoJava
+
+  "Object property expansion when Java isn't around" - {
+    "works for a script object" in {
+      val expr = "{ foo: 42 }"
+      val expected = Map("foo" -> 42)
+      evaluateExpression(expr) { (host, actual) =>
+        expand(host, actual) should equal (expected)
+      }
+    }
+  }
+}
+
 class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with TableDrivenPropertyChecks with ObjectPropertyTesting {
   import RealMarshallerTest._
 

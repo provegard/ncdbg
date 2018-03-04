@@ -18,6 +18,8 @@
   "navigable" files in the DevTools source tree.
 * Fix preview generation for typed arrays (issue #73)
 * Fix console expansion of big arrays (ES6 needs to be transpiled to ES5) (issue #76)
+* Fix object property extraction when Java is disabled (Nashorn script engine created with `--no-java`)
+  (issue #80)
 
 ## 0.6.0 (2017-10-22)
 
