@@ -202,6 +202,14 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         }
       }
 
+      "should accept null arguments (VSCode may omit the arguments)" in {
+        val obj = objectWithId("x")
+        testCall(obj, """{"id":"x"}""", null) { resp =>
+          val expr = "(function(){}).apply(__obj_1,[])"
+          evaluateOnStackFrameArgs should be (EvaluateOnStackFrameArgs("$top", expr, Map("__obj_1" -> ObjectId("x"))))
+        }
+      }
+
       "should transpile a generator function" in {
         val obj = objectWithId("x")
         testCall(obj, """{"id":"x"}""", Seq.empty, functionDecl = Some("function *gen() { yield 42; }")) { resp =>

@@ -145,6 +145,8 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
     props.map((PropertyDescriptor.from _).tupled)
   }
 
+  private def safeArgs(arguments: Seq[CallArgument]): Seq[CallArgument] = Option(arguments).getOrElse(Seq.empty)
+
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case Runtime.getProperties(strObjectId, ownProperties, accessorPropertiesOnly, maybeGeneratePreview) =>
 
@@ -218,7 +220,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       // - perhaps we should transpile in Runtime.evaluate also?
       val maybeTranspiled = if (needsTranspile(functionDeclaration)) transpile(functionDeclaration) else functionDeclaration
 
-      val argsArrayString = ScriptEvaluateSupport.serializeArgumentValues(arguments, namedObjects).mkString("[", ",", "]")
+      val argsArrayString = ScriptEvaluateSupport.serializeArgumentValues(safeArgs(arguments), namedObjects).mkString("[", ",", "]")
       val expression = s"($maybeTranspiled).apply($targetName,$argsArrayString)"
 
       // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
