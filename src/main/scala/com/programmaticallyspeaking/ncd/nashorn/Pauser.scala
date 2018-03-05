@@ -45,21 +45,15 @@ class Pauser(breakpoints: ActiveBreakpoints, scripts: Scripts, emitter: ScriptEv
     case _ => ""
   }
 
+  /**
+    * RETURN TRUE TO RESUME
+    * RETURN FALSE TO PAUSE
+    */
   def handleBreakpoint(ev: LocatableEvent, pausedData: PausedData): Boolean = shouldPause(pausedData, ev) match {
     case Left(reason) =>
       log.debug(s"Ignoring breakpoint${describeBreakpointId(ev)} at ${ev.location()} because $reason.")
       true
     case Right(_) =>
-      // Log at debug level because we get noise due to exception requests.
-      val details = ev match {
-        case ex: ExceptionEvent =>
-          s" (due to exception ${ex.exception().referenceType().name()})"
-        case _ if pausedData.isAtDebuggerStatement =>
-          s" (at a JavaScript 'debugger' statement)"
-        case _ => ""
-      }
-      log.debug(s"Pausing at breakpoint${describeBreakpointId(ev)} at location ${ev.location()} in thread ${ev.thread().name()}$details")
-
       val reason: BreakpointReason = pausedData.exceptionEventInfo match {
         case Some(info) =>
           info.marshalledException match {
@@ -79,11 +73,27 @@ class Pauser(breakpoints: ActiveBreakpoints, scripts: Scripts, emitter: ScriptEv
           }
       }
 
+      // Log at debug level because we get noise due to exception requests.
+      val details = ev match {
+        case ex: ExceptionEvent =>
+          s" (due to exception ${ex.exception().referenceType().name()})"
+        case _ if pausedData.isAtDebuggerStatement =>
+          s" (at a JavaScript 'debugger' statement)"
+        case _ if reason == BreakpointReason.Step => " (due to stepping)"
+        case _ => ""
+      }
+
+      log.debug(s"Pausing at breakpoint${describeBreakpointId(ev)} at location ${ev.location()} in thread ${ev.thread().name()}$details")
+
       // Resume will be controlled externally
       implicit val marshaller = pausedData.marshaller
       !doPause(pausedData.stackFrames, reason)
   }
 
+  /**
+    * RETURN TRUE TO PAUSE
+    * RETURN FALSE TO RESUME
+    */
   private def doPause(stackFrames: Seq[StackFrame], reason: BreakpointReason)(implicit marshaller: Marshaller): Boolean = {
     stackFrames.headOption.collect { case sf: StackFrameImpl => sf } match {
       case Some(topStackFrame) =>
