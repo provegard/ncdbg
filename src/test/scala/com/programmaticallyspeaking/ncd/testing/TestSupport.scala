@@ -72,7 +72,7 @@ trait ActorOperations {
 }
 
 trait ActorTesting extends BeforeAndAfterEach with OneInstancePerTest with ActorOperations { self: UnitTest =>
-  val receiveTimeout = 1.second
+  val receiveTimeout = 4.seconds
 
   implicit val system: ActorSystem = createActorSystem
 
@@ -96,7 +96,7 @@ trait ActorTesting extends BeforeAndAfterEach with OneInstancePerTest with Actor
   * Unlike [[ActorTesting]], which mixes in [[OneInstancePerTest]]
   */
 trait SharedInstanceActorTesting extends BeforeAndAfterEach with BeforeAndAfterAll with ActorOperations { self: UnitTest =>
-  val receiveTimeout = 1.second
+  val receiveTimeout = 4.seconds
 
   implicit val system: ActorSystem = createActorSystem
 
