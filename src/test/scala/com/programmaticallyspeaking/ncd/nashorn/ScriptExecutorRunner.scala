@@ -100,7 +100,19 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
       reportProgress(p)
 
     case ObserveScriptEvents(obs) =>
-      val sub = eventSubject.subscribe(obs)
+      val sub = eventSubject.subscribe(new Observer[ScriptEvent] {
+        override def onNext(item: ScriptEvent): Unit = {
+          log.debug("Event observer got item: " + item)
+          obs.onNext(item)
+        }
+
+        override def onError(error: Throwable): Unit = {
+          log.error("Event observer got error", error)
+          obs.onError(error)
+        }
+
+        override def onComplete(): Unit = obs.onComplete()
+      })
       sender ! ObserveScriptEventsResponse(sub)
   }
 
@@ -195,7 +207,7 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
       sender ! ScriptWillExecute
       scriptTimeoutFuture = DelayedFuture(timeout) {
         Option(scriptSender).foreach { s =>
-          s ! ScriptFailure("Timed out waiting for the script: Progress:\n" + summarizeProgress())
+          s ! ScriptFailure(s"Timed out waiting for the script (for ${timeout.toMillis} ms): Progress:\n" + summarizeProgress())
           self ! Stop
         }
       }
