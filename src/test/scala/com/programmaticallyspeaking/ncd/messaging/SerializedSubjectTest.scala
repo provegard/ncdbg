@@ -48,6 +48,27 @@ class SerializedSubjectTest extends UnitTest {
       sut.onNext("testing")
       items should be (Seq("testing"))
     }
+
+    "re-throws a single observer exception" in {
+      val sut = createSut
+      sut.subscribe(Observer.from[String] {
+        case _ => throw new IllegalArgumentException("oops")
+      })
+      val ex = intercept[IllegalArgumentException](sut.onNext("testing"))
+      ex.getMessage should be ("oops")
+    }
+
+    "collects multiple observer exceptions as suppressed" in {
+      val sut = createSut
+      sut.subscribe(Observer.from[String] {
+        case _ => throw new IllegalArgumentException("oops")
+      })
+      sut.subscribe(Observer.from[String] {
+        case _ => throw new IllegalArgumentException("uh-oh")
+      })
+      val ex = intercept[RuntimeException](sut.onNext("testing"))
+      ex.getSuppressed.length should be (2)
+    }
   }
 
 }

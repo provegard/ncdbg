@@ -36,10 +36,12 @@ class SerializedSubject[T] extends Subject[T] {
 
   private def removeObserverWithId(id: String): Unit = observers.remove(id)
 
-  private def aggregateExceptions(exceptions: List[Exception]): Exception = {
-    val ex = new RuntimeException("An error occurred during observer dispatching.")
-    exceptions.foreach(ex.addSuppressed)
-    ex
+  private def aggregateExceptions(exceptions: List[Exception]): Exception = exceptions match {
+    case x :: Nil => x
+    case xs =>
+      val ex = new RuntimeException("An error occurred during observer dispatching.")
+      xs.foreach(ex.addSuppressed)
+      ex
   }
 
   private def beDone(fun: (Observer[T]) => Unit): (Observer[T]) => Unit = { obs =>
