@@ -10,6 +10,7 @@ import ch.qos.logback.classic.Level
 import com.programmaticallyspeaking.ncd.host.{InitialInitializationComplete, ScriptEvent}
 import com.programmaticallyspeaking.ncd.infra.{CancellableFuture, DelayedFuture}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
+import com.programmaticallyspeaking.ncd.nashorn.ScriptExecutorRunner.ScriptFailure
 import com.programmaticallyspeaking.ncd.testing.{MemoryAppender, StringUtils}
 import com.sun.jdi.{Bootstrap, VirtualMachine}
 import com.sun.jdi.connect.LaunchingConnector
@@ -67,7 +68,7 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
 
   private var startSender: ActorRef = _
   private var scriptSender: ActorRef = _
-  private var scriptTimeoutFuture: CancellableFuture[Unit] = _
+  private var scriptTimeoutHandler: TimeoutHandler = _
   private var startTimeoutFuture: CancellableFuture[Unit] = _
   private var startTimeout: FiniteDuration = _
 
@@ -102,11 +103,13 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
     case ObserveScriptEvents(obs) =>
       val sub = eventSubject.subscribe(new Observer[ScriptEvent] {
         override def onNext(item: ScriptEvent): Unit = {
+          Option(scriptTimeoutHandler).foreach(_.postpone())
           log.debug("Event observer got item: " + item)
           obs.onNext(item)
         }
 
         override def onError(error: Throwable): Unit = {
+          Option(scriptTimeoutHandler).foreach(_.postpone())
           log.error("Event observer got error", error)
           obs.onError(error)
         }
@@ -192,25 +195,29 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
       if (output == Signals.scriptDone) {
         scriptSender ! ScriptExecutionDone
         scriptSender = null
-        scriptTimeoutFuture.cancel()
-        scriptTimeoutFuture = null
+        scriptTimeoutHandler.cancel()
+        scriptTimeoutHandler = null
       } else {
         reportProgress("VM output: " + output)
+        Option(scriptTimeoutHandler).foreach(_.postpone())
       }
     case StdErr(error) =>
       reportProgress("VM error: " + error)
+      Option(scriptTimeoutHandler).foreach(_.postpone())
 
     case ExecuteScript(script, observer, timeout) if scriptSender == null =>
       clearProgress()
       reportProgress("Sending script to VM!")
       scriptSender = sender
       sender ! ScriptWillExecute
-      scriptTimeoutFuture = DelayedFuture(timeout) {
+
+      val capturedSelf = self
+      scriptTimeoutHandler = new TimeoutHandler(timeout, {
         Option(scriptSender).foreach { s =>
           s ! ScriptFailure(s"Timed out waiting for the script (for ${timeout.toMillis} ms): Progress:\n" + summarizeProgress())
-          self ! Stop
+          capturedSelf ! Stop
         }
-      }
+      })
 
       addObserver(observer)
       sendToVm(script, encodeBase64 = true)
@@ -323,4 +330,19 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
   }
 
   private def findLaunchingConnector(): LaunchingConnector = Bootstrap.virtualMachineManager().defaultConnector()
+}
+
+class TimeoutHandler(timeout: FiniteDuration, timeoutHandler: => Unit)
+                    (implicit executionContext: ExecutionContext) {
+  private var future: CancellableFuture[_] = _
+
+  def postpone(): Unit = {
+    cancel()
+    future = DelayedFuture(timeout)(timeoutHandler)
+  }
+
+  def cancel(): Unit = {
+    Option(future).foreach(_.cancel())
+    future = null
+  }
 }
