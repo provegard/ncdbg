@@ -26,7 +26,8 @@
 * Be friendly towards VS Code when it asks about user agent (for internal Debugger for Chrome logging)
   (issue #79)
 * Serialize domain actor requests to avoid race conditions that prevent object properties from
-  being fetched because the VM has resumed (#77)
+  being fetched because the VM has resumed (issue #77)
+* Fix stepping over a line where there is a breakpoint (issue #82)
 
 ## 0.6.0 (2017-10-22)
 

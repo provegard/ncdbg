@@ -272,6 +272,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     // result in an added script (e.g. when the 'load' extension is used). Go through added classes and let the
     // scanner decide if scripts were added.
     val addedClasses = pausedData.toSeq.flatMap(_.addedClasses())
+
     pausedData = None
     mappingRegistry.clear() // only valid when paused
 
@@ -294,13 +295,26 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     case None =>
   }
 
+  private def withoutBreakpointShadowingStep(events: Seq[Event]): Seq[Event] = {
+    // When the user is stepping to a line where there is a breakpoint, we will see two events in the
+    // event set - one breakpoint event and one step event. Filter out any breakpoint event that has
+    // a location equal to one of the step events. Otherwise the breakpoint event will result in the
+    // VM being resumed, even if the step event wanted the opposite.
+    val stepLocations = events.collect { case se: StepEvent => se }.map(_.location()).toSet
+    events.filter {
+      case be: BreakpointEvent => !stepLocations.contains(be.location())
+      case _ => true
+    }
+  }
+
   def handleOperation(eventQueueItem: NashornScriptOperation): Unit = eventQueueItem match {
     case NashornEventSet(es) if hasDeathOrDisconnectEvent(es) =>
       signalComplete()
     case NashornEventSet(eventSet) =>
       var doResume = true
       val wasPausedAtEntry = pausedData.isDefined
-      eventSet.asScala.foreach { ev =>
+
+      withoutBreakpointShadowingStep(eventSet.asScala.toSeq).foreach { ev =>
         try {
           // Invoke any event handler associated with the request for the event.
           val eventIsConsumed = ev.handle().contains(true)

@@ -67,6 +67,44 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
 
 
   "Debugging" - {
+    "should handle stepping over a line with a breakpoint" in {
+      val script =
+        """
+          |var i = 0;
+          |debugger;     // here, we set a breakpoint on +2 lines below, then step
+          |i++;          // step over from here
+          |i++;          // here is the breakpoint, step over from here
+          |i.toString(); // should end up here
+        """.stripMargin
+
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (2)
+          withScript(callFrames) { s =>
+            sendRequest(Debugger.setBreakpointByUrl(4, Some(s.url.toString), None, Some(0), None))
+          }
+          sendRequest(Debugger.stepOver)
+        }
+        DontAutoResume
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be(3)
+          sendRequest(Debugger.stepOver)
+        }
+        DontAutoResume
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be(4)
+          sendRequest(Debugger.stepOver)
+        }
+        DontAutoResume
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be(5)
+        }
+      })
+    }
+
     "should support setVariableValue" in {
       val script =
         """
