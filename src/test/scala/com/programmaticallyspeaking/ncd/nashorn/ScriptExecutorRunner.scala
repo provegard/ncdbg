@@ -19,7 +19,7 @@ import org.slf4s.Logging
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
@@ -266,16 +266,25 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
     val nashornArgs = (Seq("language=es6") ++ extraNashornArgs).map(prefixAsArg).mkString(" ")
     mainArg.setValue(s""""-Dnashorn.args=$nashornArgs" -cp "$cp" $className""")
 
-    val vm = conn.launch(args)
-
     def logVirtualMachineOutput(s: String) = self ! StdOut(s)
     def logVirtualMachineError(s: String) = self ! StdErr(s)
 
-    new StreamReadingThread(vm.process().getInputStream(), logVirtualMachineOutput).start()
-    new StreamReadingThread(vm.process().getErrorStream(), logVirtualMachineError).start()
+    measure(d => log.info(s"Started test VM in ${d.toMillis} ms")) {
+      val vm = conn.launch(args)
+      new StreamReadingThread(vm.process().getInputStream(), logVirtualMachineOutput).start()
+      new StreamReadingThread(vm.process().getErrorStream(), logVirtualMachineError).start()
 
-    waitUntilStarted(vm)
-    vm
+      waitUntilStarted(vm)
+      vm
+    }
+  }
+
+  private def measure[R](handler: Duration => Unit)(f: => R): R = {
+    val before = System.nanoTime()
+    try f finally {
+      val elapsed = (System.nanoTime() - before).nanos
+      handler(elapsed)
+    }
   }
 
   private def prefixAsArg(x: String) = if (x.startsWith("--")) x else "--" + x
