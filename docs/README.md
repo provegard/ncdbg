@@ -8,7 +8,7 @@
 
 I've tested running a _debug target_ with Java 9 (JDK build 9-ea+164) and NCDbg running with Java 8 could debug it just fine.
 
-Building with Java 9 currently doesn't work. The tests fail, in part due to [JDK-8187143](http://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8187143).
+Building with Java 9.0.1 works. One test fails due to [JDK-8187143](http://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8187143).
 
 ## The debug target
 
