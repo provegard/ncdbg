@@ -40,8 +40,8 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
 
   implicit val executionContext: ExecutionContext
 
-  val runVMTimeout: FiniteDuration = 12.seconds
-  val resultTimeout: FiniteDuration = 12.seconds
+  val runVMTimeout: FiniteDuration = 15.seconds
+  val resultTimeout: FiniteDuration = 15.seconds
   val scriptDoneTimeout: FiniteDuration = 5.seconds
 
   // Long timeout for receiving a response from the runner actor. The runner actor uses the timeouts above to send
