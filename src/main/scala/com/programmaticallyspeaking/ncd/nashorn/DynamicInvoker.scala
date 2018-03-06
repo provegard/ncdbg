@@ -98,6 +98,11 @@ abstract class Invoker(referenceTypeData: ReferenceTypeData) {
 
   protected def unpackError[R](handle: => R)(implicit thread: ThreadReference): R = {
     try handle catch {
+      case ex: IncompatibleThreadStateException =>
+        // IncompatibleThreadStateException typically has no message (null), which results in something like:
+        // Error: 'null' for object '{"id":"uid-10135"}
+        // Wrapping the exception improves the error message a bit.
+        throw new RuntimeException("Incompatible thread state", ex)
       case ex: InvocationException =>
         try {
           // Try to marshal the exception. We expect Marshaller to register an ErrorValue with extra property 'javaStack'.
