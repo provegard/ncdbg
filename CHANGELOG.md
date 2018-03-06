@@ -18,6 +18,8 @@
   "navigable" files in the DevTools source tree.
 * Fix preview generation for typed arrays (issue #73)
 * Fix console expansion of big arrays (ES6 needs to be transpiled to ES5) (issue #76)
+    * Add dependency on [Google Closure Compiler](https://github.com/google/closure-compiler)
+      for transpilation of ES6 code.
 * Fix object property extraction when Java is disabled (Nashorn script engine created with `--no-java`)
   (issue #80)
 * Fix VS Code connection problem, serve web sockets via /json/list also (issue #79)
