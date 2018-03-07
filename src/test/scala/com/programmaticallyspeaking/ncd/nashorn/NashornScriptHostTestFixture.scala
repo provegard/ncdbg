@@ -108,8 +108,17 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
     // invoke it before we pass the script, because it cannot rely on the exact order of things so it must react to
     // events.
     val f = handler(host)
-
     val inbox = Inbox.create(system)
+
+    // To get a much faster failure response, we react on Future failure and stop everything.
+    // We must send a message to the Inbox so that it doesn't time out waiting for a response.
+    f.onComplete {
+      case Success(_) =>
+      case Failure(_) =>
+        stopRunner()
+        inbox.getRef() ! ScriptExecutorRunner.ScriptFailure("handler failure")
+    }
+
     inbox.send(runner, ScriptExecutorRunner.ExecuteScript(script, observer, resultTimeout))
     inbox.receive(runnerTimeout) match {
       case ScriptExecutorRunner.ScriptWillExecute =>

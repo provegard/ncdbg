@@ -92,6 +92,7 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
       try Option(host).foreach(_.virtualMachine.process().destroy()) catch {
         case NonFatal(t) => log.error("Failed to destroy process", t)
       }
+      Option(scriptTimeoutHandler).foreach(_.cancel())
       context.stop(self)
 
     case GetProgress =>
