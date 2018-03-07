@@ -130,7 +130,7 @@ object ArbitraryObjectPropertyHolder {
 }
 
 trait Extractor {
-  def extract(target: Value, onlyOwn: Boolean, onlyAccessors: Boolean): Value
+  def extract(target: Value, onlyOwn: Boolean, onlyAccessors: Boolean)(implicit threadReference: ThreadReference): Value
 }
 
 object ScriptBasedPropertyHolderFactory {
@@ -235,7 +235,7 @@ object ScriptBasedPropertyHolderFactory {
   private val extractorFunctionSourceMinified = Minifier.minify(extractorFunctionSource)
 }
 
-class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (Value, Seq[Any]) => Value) {
+class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (Value, Seq[Any], ThreadReference) => Value) {
 
   private val extractorFunction = codeEval(ScriptBasedPropertyHolderFactory.extractorFunctionSourceMinified)
 
@@ -244,10 +244,17 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       case err: ThrownExceptionReference =>
         marshaller.throwError(err)
       case _ =>
-        new ScriptBasedPropertyHolder(obj, (target: Value, onlyOwn: Boolean, onlyAccessors: Boolean) => {
-          // Pass strings to avoid the need for boxing
-          executor(extractorFunction, Seq(target, asString(isNative), asString(onlyOwn), asString(onlyAccessors), propertyBlacklistRegExp))
-        })
+
+        val extractor = new Extractor {
+          override def extract(target: Value, onlyOwn: Boolean, onlyAccessors: Boolean)(implicit threadReference: ThreadReference): Value = {
+            // Pass strings to avoid the need for boxing
+            executor(extractorFunction,
+              Seq(target, asString(isNative), asString(onlyOwn), asString(onlyAccessors), propertyBlacklistRegExp),
+              threadReference)
+          }
+        }
+
+        new ScriptBasedPropertyHolder(obj, extractor)
     }
   }
 

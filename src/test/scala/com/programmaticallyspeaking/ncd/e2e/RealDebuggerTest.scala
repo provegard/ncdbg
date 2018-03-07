@@ -4,13 +4,16 @@ import akka.actor.{ActorRef, Inbox, PoisonPill}
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, EvaluateOnCallFrameResult, Location}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{CallArgument, RemoteObject}
 import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, Runtime => RuntimeD}
-import com.programmaticallyspeaking.ncd.host.{Script, ScriptIdentity, ScriptLocation}
+import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
+import com.programmaticallyspeaking.ncd.host.{ComplexNode, Script, ScriptIdentity, ScriptLocation}
 import com.programmaticallyspeaking.ncd.ioc.Container
+import com.programmaticallyspeaking.ncd.nashorn.types.ObjectPropertyDescriptorTest
 import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, SharedInstanceActorTesting}
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.concurrent.duration._
+import scala.util.Success
 
 trait RealDebuggerTestFixture extends E2ETestFixture with SharedInstanceActorTesting with ScalaFutures with IntegrationPatience {
 
@@ -67,6 +70,54 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
 
 
   "Debugging" - {
+    "supports getting object properties twice from a second thread when the first is no longer usable" in {
+      val script =
+        """
+          |var Executors = Java.type("java.util.concurrent.Executors");
+          |var e1 = Executors.newSingleThreadExecutor();
+          |var e2 = Executors.newSingleThreadExecutor();
+          |
+          |var Runnable = Java.type('java.lang.Runnable');
+          |var func = Java.extend(Runnable, {
+          |    run: function() {
+          |        var obj = { foo: 42 };
+          |        debugger;
+          |        obj.toString();
+          |    }
+          |});
+          |
+          |var f1 = e1.submit(new func());
+          |f1.get();
+          |var f2 = e2.submit(new func());
+          |f2.get();
+          |
+        """.stripMargin
+
+      def getPropNames(objName: String, callFrame: CallFrame): Seq[String] = {
+        getHost.evaluateOnStackFrame(callFrame.callFrameId, objName, Map.empty) match {
+          case Success(c: ComplexNode) =>
+            getHost.getObjectProperties(c.objectId, true, false).map(_._1)
+          case other => fail("" + other)
+        }
+      }
+
+      runScript(script)(callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be (9)
+
+          // Get properties on the first thread, trigger creation of the extractor function
+          getPropNames("obj", cf) should be (Seq("foo", "__proto__"))
+        }
+      }, callFrames => {
+        withHead(callFrames) { cf =>
+          cf.location.lineNumber should be(9)
+
+          // Get properties on the second thread, extractor function cannot operate on the first (dead) one
+          getPropNames("obj", cf) should be (Seq("foo", "__proto__"))
+        }
+      })
+    }
+
     "should handle stepping over a line with a breakpoint" in {
       val script =
         """

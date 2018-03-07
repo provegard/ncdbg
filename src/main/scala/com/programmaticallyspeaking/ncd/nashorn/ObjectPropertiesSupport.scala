@@ -101,18 +101,23 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
     maybeScriptBasedPropertyHolderFactory match {
       case Some(f) => f
       case None =>
+        // This function is only used to evaluate the property extraction function
         val codeEvalFun: (String) => Value = src => codeEval.eval(None, None, src, Lifecycle.Session)
-        val funExec: (Value, Seq[Any]) => Value = (fun, args) => {
+
+        // It is important that the executor doesn't reuse the thread passed to scriptBasedPropertyHolderFactory
+        // and used for the initial code evaluation, since that thread may be dead once the extractor function
+        // is actually called.
+        def functionExecutor(function: Value, arguments: Seq[Any], execThreadReference: ThreadReference): Value = {
           typeLookup(NIR_ScriptRuntime) match {
             case Some(ct) =>
               val invoker = Invokers.shared.getStatic(ct)
               // Object apply(ScriptFunction target, Object self, Object... args) {
-              invoker.apply(fun, null, args.toArray)
+              invoker.apply(function, null, arguments.toArray)(execThreadReference)
 
             case None => throw new RuntimeException("ScriptRuntime wasn't found")
           }
         }
-        val f = new ScriptBasedPropertyHolderFactory(codeEvalFun, funExec)
+        val f = new ScriptBasedPropertyHolderFactory(codeEvalFun, functionExecutor)
         maybeScriptBasedPropertyHolderFactory = Some(f)
         f
     }
