@@ -133,7 +133,7 @@ trait Extractor {
   def extract(target: Value, onlyOwn: Boolean, onlyAccessors: Boolean): Value
 }
 
-class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (Value, Seq[Any]) => Value) {
+object ScriptBasedPropertyHolderFactory {
   // Note 1: Java.to doesn't wrap a ScriptObject in a ScriptObjectMirror when the target type is an array type. This is
   // good, since we don't want the __proto__ value to be mirrored, since that has negative consequences:
   // - a new mirror is created each time, which breaks the object properties cache
@@ -232,8 +232,12 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |  }
       |})();
     """.stripMargin
+  private val extractorFunctionSourceMinified = Minifier.minify(extractorFunctionSource)
+}
 
-  private val extractorFunction = codeEval(Minifier.minify(extractorFunctionSource))
+class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (Value, Seq[Any]) => Value) {
+
+  private val extractorFunction = codeEval(ScriptBasedPropertyHolderFactory.extractorFunctionSourceMinified)
 
   def create(obj: ObjectReference, propertyBlacklistRegExp: String, isNative: Boolean)(implicit marshaller: Marshaller): PropertyHolder = {
     extractorFunction match {
