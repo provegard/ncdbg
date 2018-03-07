@@ -30,6 +30,7 @@
 * Serialize domain actor requests to avoid race conditions that prevent object properties from
   being fetched because the VM has resumed (issue #77)
 * Fix stepping over a line where there is a breakpoint (issue #82)
+* Make sure script-based property extraction happens on the correct thread (issue #78)
 
 ## 0.6.0 (2017-10-22)
 
