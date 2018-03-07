@@ -163,30 +163,30 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |          var f_e = desc.enumerable ? "e" : "";
       |          var f_w = desc.writable ? "w" : "";
       |          var f_o = own ? "o" : "";
-      |          result.push(k);
-      |          result.push((f_c + f_e + f_w + f_o).toString()); // ConsString -> String when Java.to not available
-      |          result.push(desc.value);
-      |          result.push(desc.get);
-      |          result.push(desc.set);
-      |          result.push(null); // symbol
+      |          result.push(k,
+      |                      (f_c + f_e + f_w + f_o).toString(), // ConsString -> String when Java.to not available
+      |                      desc.value,
+      |                      desc.get,
+      |                      desc.set,
+      |                      null); // symbol
       |        }
       |        var symbols = hasSymbols && !onlyAccessors ? Object.getOwnPropertySymbols(current) : [];
       |        for (i = 0, j = symbols.length; i < j; i++) {
       |          var sym = symbols[i];
-      |          result.push(sym.toString());
-      |          result.push(own ? "o" : "");
-      |          result.push(current[sym]); // see Note 3 above
-      |          result.push(null);
-      |          result.push(null);
-      |          result.push(sym);
+      |          result.push(sym.toString(),
+      |                      own ? "o" : "",
+      |                      current[sym], // see Note 3 above
+      |                      null,
+      |                      null,
+      |                      sym);
       |        }
       |        if (own && !onlyAccessors && includeProp("__proto__") && (proto = safeGetProto(current))) {
-      |          result.push("__proto__");
-      |          result.push("wo"); // writable + own (not sure about configurable and enumerable)
-      |          result.push(proto);
-      |          result.push(null);
-      |          result.push(null);
-      |          result.push(null); // symbol
+      |          result.push("__proto__",
+      |                      "wo",  // writable + own (not sure about configurable and enumerable)
+      |                      proto,
+      |                      null,
+      |                      null,
+      |                      null); // symbol
       |        }
       |        if (own && onlyOwn) current = null; else {
       |          current = current.__proto__;
@@ -196,27 +196,27 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |    } else if (!onlyAccessors) {
       |      if (Array.isArray(target)) {
       |        for (var i = 0; i < target.length; i++) {
-      |          result.push(i.toString());
-      |          result.push("wo"); // writable (correct?) + own
-      |          result.push(target[i]);
-      |          result.push(null);
-      |          result.push(null);
-      |          result.push(null); // symbol
+      |          result.push(i.toString(),
+      |                      "wo", // writable (correct?) + own
+      |                      target[i],
+      |                      null,
+      |                      null,
+      |                      null); // symbol
       |        }
-      |        result.push("length");
-      |        result.push("o");
-      |        result.push(target.length);
-      |        result.push(null);
-      |        result.push(null);
-      |        result.push(null); // symbol
+      |        result.push("length",
+      |                    "o",
+      |                    target.length,
+      |                    null,
+      |                    null,
+      |                    null); // symbol
       |      } else {
       |        for (var k in target) {
-      |          result.push(k.toString());
-      |          result.push("wo"); // writable (correct?) + own
-      |          result.push(target[k]);
-      |          result.push(null);
-      |          result.push(null);
-      |          result.push(null); // symbol
+      |          result.push(k.toString(),
+      |                      "wo", // writable (correct?) + own
+      |                      target[k],
+      |                      null,
+      |                      null,
+      |                      null); // symbol
       |        }
       |      }
       |    }
