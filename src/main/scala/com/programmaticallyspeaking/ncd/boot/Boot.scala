@@ -1,6 +1,7 @@
 package com.programmaticallyspeaking.ncd.boot
 
 import java.net.ConnectException
+import java.util.logging.LogManager
 
 import akka.actor.ActorSystem
 import com.programmaticallyspeaking.ncd.chrome.domains.DefaultDomainFactory
@@ -20,6 +21,9 @@ object Boot extends App with Logging {
 
   implicit val system = ActorSystem()
   import system.dispatcher
+
+  // Disable java.util logging (used by the Closure Compiler)
+  LogManager.getLogManager.reset()
 
   log.info("NCDbg version: " + BuildProperties.version)
   log.info("Local Java version: " + System.getProperty("java.version"))

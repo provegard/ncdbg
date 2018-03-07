@@ -1,5 +1,7 @@
 package com.programmaticallyspeaking.ncd.testing
 
+import java.util.logging.LogManager
+
 import akka.actor.{Actor, ActorRef, ActorSystem, Inbox, PoisonPill, Props, Terminated}
 import com.programmaticallyspeaking.ncd.ioc.Container
 import com.typesafe.config.ConfigFactory
@@ -13,8 +15,28 @@ import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-trait UnitTest extends FreeSpec with Matchers
-trait IsolatedUnitTest extends path.FreeSpec with Matchers
+object DisabledJavaUtilLogging {
+  private object lock
+  private var hasDisabled = false
+  def disable(): Unit = {
+    if (!hasDisabled) {
+      lock.synchronized {
+        if (!hasDisabled) {
+          LogManager.getLogManager.reset()
+          hasDisabled = true
+        }
+      }
+    }
+
+  }
+}
+
+trait DisabledJavaUtilLogging {
+  DisabledJavaUtilLogging.disable()
+}
+
+trait UnitTest extends FreeSpec with Matchers with DisabledJavaUtilLogging
+trait IsolatedUnitTest extends path.FreeSpec with Matchers with DisabledJavaUtilLogging
 
 trait AsyncUnitTest extends UnitTest with ScalaFutures {
   implicit val executionContext: ExecutionContext = ExecutionContext.global

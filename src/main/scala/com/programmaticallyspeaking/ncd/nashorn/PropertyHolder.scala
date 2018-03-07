@@ -2,6 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType, Undefined}
+import com.programmaticallyspeaking.ncd.javascript.Minifier
 import com.sun.jdi._
 
 import scala.collection.mutable
@@ -232,7 +233,7 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
       |})();
     """.stripMargin
 
-  private val extractorFunction = codeEval(extractorFunctionSource)
+  private val extractorFunction = codeEval(Minifier.minify(extractorFunctionSource))
 
   def create(obj: ObjectReference, propertyBlacklistRegExp: String, isNative: Boolean)(implicit marshaller: Marshaller): PropertyHolder = {
     extractorFunction match {
