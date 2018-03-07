@@ -54,7 +54,7 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
     }
     scopeObjFactory += "return obj;}).call(this)"
 
-    val anObject = codeEval.eval(scopeObject, null, scopeObjFactory, Lifecycle.Paused).asInstanceOf[ObjectReference]
+    val anObject = codeEval.eval(Some(scopeObject), None, scopeObjFactory, Lifecycle.Paused).asInstanceOf[ObjectReference]
     val mirror = new ScriptObjectMirror(anObject)
     freeVariables.foreach {
       case (name, value) =>
@@ -187,7 +187,7 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
                 val scopeToUse = scopeWithFreeVariables(localScope, namedValues)
 
                 try {
-                  val ret = codeEval.eval(originalThis, scopeToUse, code, Lifecycle.Paused)
+                  val ret = codeEval.eval(Some(originalThis), Some(scopeToUse), code, Lifecycle.Paused)
                   marshaller.marshal(ret) match {
                     case SimpleValue(str: String) if str == EvaluatedCodeMarker =>
                       // A non-expression statements such as "var x = 42" causes the evaluation marker to leak as an

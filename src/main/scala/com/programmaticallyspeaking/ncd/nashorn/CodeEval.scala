@@ -6,14 +6,14 @@ import com.sun.jdi._
 class CodeEval(typeLookup: TypeLookup, preventGC: (Value, Lifecycle.EnumVal) => Unit) {
   import TypeConstants._
 
-  def eval(thisObject: Value, scopeObject: Value, code: String, lifecycle: Lifecycle.EnumVal)(implicit thread: ThreadReference): Value = {
+  def eval(thisObject: Option[Value], scopeObject: Option[Value], code: String, lifecycle: Lifecycle.EnumVal)(implicit thread: ThreadReference): Value = {
     // We've observed ObjectCollectedException while disabling GC... Try a few times before giving up!
     eval(thisObject, scopeObject, code, lifecycle, 3)
   }
 
-  private def eval(thisObject: Value, scopeObject: Value, code: String, lifecycle: Lifecycle.EnumVal, attemptsLeft: Int)(implicit thread: ThreadReference): Value = {
+  private def eval(thisObject: Option[Value], scopeObject: Option[Value], code: String, lifecycle: Lifecycle.EnumVal, attemptsLeft: Int)(implicit thread: ThreadReference): Value = {
     try {
-      val v = DebuggerSupport_eval_custom(thisObject, scopeObject, code)
+      val v = DebuggerSupport_eval_custom(thisObject.orNull, scopeObject.orNull, code)
       preventGC(v, lifecycle)
       v
     } catch {
