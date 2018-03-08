@@ -268,20 +268,10 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   }
 
   private def cleanupPausing(): Unit = {
-    // We evaluate code with all ClassPrepare requests disabled to avoid deadlock. However, code evaluation mau
-    // result in an added script (e.g. when the 'load' extension is used). Go through added classes and let the
-    // scanner decide if scripts were added.
-    val addedClasses = pausedData.toSeq.flatMap(_.addedClasses())
-
     pausedData = None
     mappingRegistry.clear() // only valid when paused
 
     internalStateSubject.onNext(Unpause)
-
-    if (addedClasses.nonEmpty) {
-      log.debug(s"Scanning ${addedClasses.size} classes to detect scripts added during code evaluation.")
-      addedClasses.foreach(_scanner.consider)
-    }
   }
 
   private def maybeEmitErrorEvent(pd: PausedData): Unit = pd.exceptionEventInfo match {
@@ -466,7 +456,8 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
 
   override def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode] = Try {
     pausedData match {
-      case Some(pd) => _stackFramEval.evaluateOnStackFrame(pd, stackFrameId, expression, namedObjects)
+      case Some(pd) =>
+        _scanner.withClassTracking(_stackFramEval.evaluateOnStackFrame(pd, stackFrameId, expression, namedObjects))
       case None =>
         log.warn(s"Evaluation of '$expression' for stack frame $stackFrameId cannot be done in a non-paused state.")
         throw new IllegalStateException("Code evaluation can only be done in a paused state.")

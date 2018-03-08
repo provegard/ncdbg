@@ -48,7 +48,30 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
 
   def handleEvent(ev: ClassPrepareEvent): Unit = consider(ev.referenceType(), Some(ev.thread()))
 
-  def consider(rt: ReferenceType): Unit = consider(rt, None)
+  /**
+    * Execute an operation and then scan added classes to see if there are any new scripts.
+    *
+    * @param f the operation
+    * @tparam R the operation return type
+    * @return the operation return value
+    */
+  def withClassTracking[R](f: => R): R = {
+    // We evaluate code with all ClassPrepare requests disabled to avoid deadlock. However, code evaluation may
+    // result in an added script (e.g. when the 'load' extension is used). Track added classes and let the
+    // scanner decide if scripts were added.
+    val classTracker = new ClassTracker(virtualMachine.inner)
+
+    try f finally {
+      val addedClasses = classTracker.addedClasses()
+      try {
+        log.debug(s"Scanning ${addedClasses.size} classes to detect scripts added during code evaluation.")
+        addedClasses.foreach(rt => consider(rt, None))
+      } catch {
+        case NonFatal(t) =>
+          log.error("Class scanning after code evaluation failed", t)
+      }
+    }
+  }
 
   private def consider(rt: ReferenceType, thread: Option[ThreadReference]): Unit = {
     if (hasInitiatedClassScanning) {

@@ -10,6 +10,8 @@ class XVirtualMachine(virtualMachine: VirtualMachine) {
   private var objectReferencesWithDisabledGC = Seq.empty[ObjectReference]
   private var objectReferencesWithDisabledGCForTheEntireSession = Seq.empty[ObjectReference]
 
+  def inner: VirtualMachine = virtualMachine
+
   def eventQueue(): EventQueue = virtualMachine.eventQueue()
 
   def process(): Process = virtualMachine.process()
