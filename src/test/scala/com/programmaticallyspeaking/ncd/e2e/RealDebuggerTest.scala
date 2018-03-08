@@ -327,7 +327,9 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
       })
     }
 
-    "should support frame restart when paused at a regular breakpoint" in {
+    // Test disabled due to https://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8187143
+    // Fails with Java 1.8u151 and up.
+    "should support frame restart when paused at a regular breakpoint" ignore {
       val script =
         """var f = function () {
           |  f.toString(); // regular breakpoint here
