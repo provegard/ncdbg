@@ -125,7 +125,8 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
 
         val handlerResult = Try(Await.result(f, resultTimeout))
 
-        host.resume()
+        // If we break due to a failure about, host is set to null.
+        Option(host).foreach(_.resume())
 
         def unexpectedError(reason: String) = {
           stopRunner()
