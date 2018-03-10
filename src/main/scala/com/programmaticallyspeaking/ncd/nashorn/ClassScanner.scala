@@ -61,7 +61,12 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
     // scanner decide if scripts were added.
     val classTracker = new ClassTracker(virtualMachine.inner)
 
-    try f finally {
+    var thrown: Throwable = null
+    try f catch {
+      case t: Throwable =>
+        thrown = t
+        throw t
+    } finally {
       val addedClasses = classTracker.addedClasses()
       try {
         log.debug(s"Scanning ${addedClasses.size} classes to detect scripts added during code evaluation.")
@@ -69,6 +74,8 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
       } catch {
         case NonFatal(t) =>
           log.error("Class scanning after code evaluation failed", t)
+          if (thrown != null) thrown.addSuppressed(t)
+          else throw t
       }
     }
   }
