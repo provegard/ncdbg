@@ -1,0 +1,5 @@
+Re compileScript/runScript
+
+* runScript when script has debugger statement results in a deadlock
+* compileScript(persist=false) seems to be used only to detect partial input, i.e.
+  if DevTools should show a continuation line. With hard-coded error message testing.
