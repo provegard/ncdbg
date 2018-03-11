@@ -6,16 +6,16 @@ import org.slf4s.Logging
 
 class ScriptPublisher(eventEmitter: ScriptEventEmitter) extends Logging {
 
-  private var _publishedScriptUrls = Set[ScriptURL]()
+  private var _publishedScriptIds = Set[String]()
 
   def publish(script: Script): Unit = {
     // Try to ensure that only the first thread observes "isKnownScript" to be true for a particular URL
-    val old = _publishedScriptUrls
-    _publishedScriptUrls += script.url
-    val isKnownScript = old.contains(script.url)
+    val old = _publishedScriptIds
+    _publishedScriptIds += script.id
+    val isKnownScript = old.contains(script.id)
 
     if (isKnownScript) {
-      log.debug(s"Script with URI '${script.url}' is already known")
+      log.debug(s"Script with ID '${script.id}' is already known")
     } else {
       if (log.underlying.isDebugEnabled)
         log.debug(s"Adding script with ID '${script.id}', URI '${script.url}' and hash '${script.contentsHash()}'")
