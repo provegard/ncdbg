@@ -26,6 +26,23 @@ class ScriptsTest extends IsolatedUnitTest {
       }
     }
 
+    "when an anonymous script is suggested" - {
+      val script = aScript("", "return 42;", "a")
+      scripts.suggest(script)
+
+      "accepts it" in {
+        scripts.scripts.map(_.id) should be (Seq("a"))
+      }
+
+      "allows lookup by ID" in {
+        scripts.byId(ScriptIdentity.fromId("a")).map(_.id) should be (Some("a"))
+      }
+
+      "doesn't allow lookup by URL" in {
+        scripts.byId(ScriptIdentity.fromURL("")) should be (None)
+      }
+    }
+
     "when a script with the same contents as an existing one is added" - {
       val script1 = aScript("script.js", "return 42;", "a")
       val script2 = aScript("scriptRecompilation.js", "return 42;", "b")

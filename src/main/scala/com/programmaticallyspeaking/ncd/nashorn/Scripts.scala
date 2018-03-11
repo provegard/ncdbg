@@ -1,19 +1,31 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import java.util.concurrent.LinkedBlockingQueue
+
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.infra.{IdGenerator, PathUtils, ScriptURL}
 
 import scala.collection.concurrent.TrieMap
 
 class Scripts {
+  import scala.collection.JavaConverters._
   private val scriptIdGenerator = new IdGenerator("ndx") // special prefix for replacement scripts
 
   private val _scripts = TrieMap[ScriptURL, Script]()
+  private val _anonScripts = new LinkedBlockingQueue[Script]()
 
-  def scripts: Seq[Script] = _scripts.values.groupBy(_.id).flatMap(_._2.headOption).toSeq
+  def scripts: Seq[Script] = _scripts.values.groupBy(_.id).flatMap(_._2.headOption).toSeq ++ _anonScripts.asScala
+
+  private def isAnonymousScript(s: Script) = s.url.toString == ""
 
   def suggest(script: Script): Script = {
     require(byId(ScriptIdentity.fromId(script.id)).isEmpty, s"Script with ID ${script.id} has already been added")
+
+    if (isAnonymousScript(script)) {
+      _anonScripts.add(script)
+      return script
+    }
+
     // For a recompilation, we will (most likely) already have the original script that was recompiled (recompilation
     // happens for example when a function inside the eval script is called with known types). We find the original
     // script by comparing contents hashes. If we find the original script, we just discard the new one and use the
@@ -51,7 +63,7 @@ class Scripts {
   def byId(id: ScriptIdentity): Option[Script] = {
     id match {
       case u: URLBasedScriptIdentity => _scripts.get(u.scriptURL)
-      case other => _scripts.values.find(other.matchesScript)
+      case other => scripts.find(other.matchesScript)
     }
   }
 }
