@@ -47,7 +47,8 @@ object Runtime {
 
   case class compileScript(expression: String, sourceURL: String, persistScript: Boolean, executionContextId: Option[ExecutionContextId])
 
-  case class runScript(scriptId: ScriptId, executionContextId: Option[ExecutionContextId])
+  case class runScript(scriptId: ScriptId, executionContextId: Option[ExecutionContextId],
+                       silent: Boolean, returnByValue: Boolean, generatePreview: Boolean)
 
   /**
     * Represents a value that from the perspective of Chrome Dev Tools is remote, i.e. resides in the host.
@@ -96,10 +97,10 @@ object Runtime {
   case class ExecutionContextDescription(id: ExecutionContextId, origin: String, name: String, auxData: AnyRef)
 
   case class EvaluateResult(result: RemoteObject, exceptionDetails: Option[ExceptionDetails])
-  case class RunScriptResult(result: RemoteObject)
+  case class RunScriptResult(result: RemoteObject, exceptionDetails: Option[ExceptionDetails])
   case class CallFunctionOnResult(result: RemoteObject, exceptionDetails: Option[ExceptionDetails])
 
-  case class CompileScriptResult(scriptId: ScriptId)
+  case class CompileScriptResult(scriptId: ScriptId, exceptionDetails: Option[ExceptionDetails])
 
   case class ExceptionDetails(exceptionId: Int, text: String, lineNumber: Int, columnNumber: Int, url: Option[String], scriptId: Option[ScriptId] = None, executionContextId: ExecutionContextId = StaticExecutionContextId)
 
@@ -133,7 +134,6 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
 
   import Runtime._
 
-  private val compiledScriptIdGenerator = new IdGenerator("compscr")
   private implicit val host = scriptHost
 
   private val callFunctionOnCache = mutable.Map[String, Runtime.RemoteObject]()
@@ -224,14 +224,27 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       }
 
     case Runtime.compileScript(expr, url, persist, _) =>
-      log.debug(s"Request to compile script '$expr' with URL $url and persist = $persist")
-      // In my testing, this method must be implemented for console evaluation to work properly, but Chrome never
-      // calls runScript to evaluate the script. So for now we just return a dummy script ID.
-      CompileScriptResult(compiledScriptIdGenerator.next)
+      log.info(s"Request to compile script '$expr' with URL $url and persist = $persist")
 
-    case Runtime.runScript(scriptId, _) =>
-      log.debug(s"Request to run script with ID $scriptId")
-      RunScriptResult(RemoteObject.forString("TODO: Implement Runtime.runScript"))
+      scriptHost.compileScript(expr, url, persist).map(s => CompileScriptResult(s.id, None)).recover {
+        case t =>
+          val exceptionDetails = exceptionDetailsFromError(t, 1)
+          CompileScriptResult(null, Some(exceptionDetails))
+      }
+
+    case Runtime.runScript(scriptId, _, silent, returnByValue, generatePreview) =>
+      //TODO: silent "Overrides setPauseOnException state."
+      log.info(s"Request to run script with ID $scriptId")
+      scriptHost.runCompiledScript(scriptId) match {
+        case Success(v) =>
+          val remoteObjectConverter = createRemoteObjectConverter(generatePreview, returnByValue)
+          val ro = remoteObjectConverter.toRemoteObject(v)
+          RunScriptResult(ro, None)
+
+        case Failure(t) =>
+          val exceptionDetails = if (silent) None else Some(exceptionDetailsFromError(t, 1))
+          RunScriptResult(RemoteObject.undefinedValue, exceptionDetails)
+      }
 
     case Runtime.callFunctionOn(strObjectId, functionDeclaration, arguments, maybeSilent, maybeReturnByValue, maybeGeneratePreview) =>
       // TODO: See Debugger.evaluateOnCallFrame - need to have a common impl

@@ -49,22 +49,24 @@ trait ScriptEvaluateSupport { self: Logging =>
         EvaluationResult(RemoteObject.undefinedValue)
       case Success(result) => EvaluationResult(remoteObjectConverter.toRemoteObject(result))
       case Failure(t) =>
-
-        val exceptionDetails = t.getStackTrace.headOption.flatMap { stackTraceElement =>
-          try {
-            val lineNumberBase1 = stackTraceElement.getLineNumber
-            val url = new File(stackTraceElement.getFileName).toURI.toString
-            Some(Runtime.ExceptionDetails(exceptionId, t.getMessage, lineNumberBase1 - 1, 0, Some(url)))
-          } catch {
-            case e: Exception =>
-              log.error(s"Error when trying to construct ExceptionDetails from $stackTraceElement", e)
-              None
-          }
-        }.getOrElse(Runtime.ExceptionDetails(exceptionId, t.getMessage, 0, 0, None))
-
+        val exceptionDetails = exceptionDetailsFromError(t, exceptionId)
         EvaluationResult(RemoteObject.undefinedValue, Some(exceptionDetails))
     }
 
+  }
+
+  protected def exceptionDetailsFromError(t: Throwable, exceptionId: Int): ExceptionDetails = {
+    t.getStackTrace.headOption.flatMap { stackTraceElement =>
+      try {
+        val lineNumberBase1 = stackTraceElement.getLineNumber
+        val url = new File(stackTraceElement.getFileName).toURI.toString
+        Some(Runtime.ExceptionDetails(exceptionId, t.getMessage, lineNumberBase1 - 1, 0, Some(url)))
+      } catch {
+        case e: Exception =>
+          log.error(s"Error when trying to construct ExceptionDetails from $stackTraceElement", e)
+          None
+      }
+    }.getOrElse(Runtime.ExceptionDetails(exceptionId, t.getMessage, 0, 0, None))
   }
 
   case class EvaluationResult(result: RemoteObject, exceptionDetails: Option[ExceptionDetails] = None)
