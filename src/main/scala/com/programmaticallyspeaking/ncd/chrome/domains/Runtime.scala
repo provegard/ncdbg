@@ -224,7 +224,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       }
 
     case Runtime.compileScript(expr, url, persist, _) =>
-      log.info(s"Request to compile script '$expr' with URL $url and persist = $persist")
+      log.info(s"Request to compile script '$expr' with URL '$url' and persist = $persist")
 
       scriptHost.compileScript(expr, url, persist).map(s => CompileScriptResult(s.id, None)).recover {
         case t =>

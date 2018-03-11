@@ -72,6 +72,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
       case Some(pd) =>
         runnerByScriptId.get(scriptId) match {
           case Some(runner) =>
+            log.info(s"Running script with ID $scriptId")
             runner.run()(pd.marshaller)
           case None =>
             val known = runnerByScriptId.keys.mkString(", ")
