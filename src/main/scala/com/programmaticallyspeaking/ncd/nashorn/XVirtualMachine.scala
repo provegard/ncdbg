@@ -20,6 +20,8 @@ class XVirtualMachine(virtualMachine: VirtualMachine) {
 
   def allClasses(): Seq[ReferenceType] = virtualMachine.allClasses().asScala
 
+  def classByName(name: String): Option[ReferenceType] = virtualMachine.classesByName(name).asScala.headOption
+
   def suspend(): Unit = virtualMachine.suspend()
 
   def resume(): Unit = virtualMachine.resume()

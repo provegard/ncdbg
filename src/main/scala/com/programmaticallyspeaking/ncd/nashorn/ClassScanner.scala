@@ -191,5 +191,7 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
     wantedTypes.contains(name) || name.startsWith(ScriptClassNamePrefix)
   }
 
-  def typeByName(name: String) = foundWantedTypes.get(name)
+  def typeByName(name: String): Option[ClassType] = foundWantedTypes.get(name).orElse {
+    virtualMachine.classByName(name).collect { case ct: ClassType => ct }
+  }
 }
