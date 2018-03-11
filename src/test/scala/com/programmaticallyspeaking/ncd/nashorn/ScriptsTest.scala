@@ -63,6 +63,42 @@ class ScriptsTest extends IsolatedUnitTest {
       }
     }
 
+    "when a script with different contents but same URL is added" - {
+      val script1 = aScript("script.js", "return 42;", "a")
+      val script2 = aScript("script.js", "return 52;", "b")
+      scripts.suggest(script1)
+      val actual = scripts.suggest(script2)
+
+      "returns a script with a generated ID" in {
+        actual.id should not be ("b")
+      }
+
+      "returns a script with a modified URL" in {
+        actual.url.toString should fullyMatch regex("script_.*\\.js$")
+      }
+
+      "returns the old script for lookup with the URL" in {
+        scripts.byId(ScriptIdentity.fromURL("script.js")).map(_.contents) should be (Some("return 42;"))
+      }
+
+      "returns the new script for lookup with the new URL" in {
+        scripts.byId(ScriptIdentity.fromURL(actual.url)).map(_.contents) should be (Some("return 52;"))
+      }
+
+      "doesn't have a script with the suggested ID" in {
+        scripts.byId(ScriptIdentity.fromId("b")) should be (None)
+      }
+
+      "has a script with the new ID" in {
+        scripts.byId(ScriptIdentity.fromId(actual.id)).map(_.contents) should be (Some("return 52;"))
+      }
+
+      "doesn't enumerate the script with its suggested ID" in {
+        val ids = scripts.scripts.map(_.id)
+        ids should not contain ("b")
+      }
+    }
+
     "rejects suggestion of the same script twice" in {
       val script = aScript("script.js", "return 42;", "a")
       scripts.suggest(script)
