@@ -23,11 +23,6 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
       case Some(pd) =>
         implicit val marshaller = pd.marshaller
 
-        // Notes:
-        // - DevTools always (?) uses an empty URL
-        // - We need to change a lot (Scripts, ScriptPublisher, etc.) to handle multiple scripts with
-        //   the same empty URL.
-
         // Create a hash that includes both the contents and the URL.
         val hash = Hasher.md5(s"$script:$url".getBytes(StandardCharsets.UTF_8))
 
