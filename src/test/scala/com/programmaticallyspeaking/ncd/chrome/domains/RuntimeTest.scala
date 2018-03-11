@@ -63,6 +63,15 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         requestAndReceiveResponse(runtime, "2", Runtime.compileScript("1+1", "file:///test", true, None))
       }
 
+      lazy val testCompileScriptFail = {
+        val script = new ScriptImpl(ScriptURL.create(""), Array.empty, "xx")
+        when(currentScriptHost.compileScript(any[String], any[String], any[Boolean])).thenReturn(Future.failed(new Exception("oops")))
+
+        val runtime = newActorInstance[Runtime]
+        requestAndReceive(runtime, "1", Domain.enable)
+        requestAndReceiveResponse(runtime, "2", Runtime.compileScript("1+1", "file:///test", true, None))
+      }
+
       "invokes the corresponding ScriptHost operation" in {
         testCompileScript
 
@@ -73,6 +82,16 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         val response = testCompileScript
 
         response should be (Runtime.CompileScriptResult("xx", None))
+      }
+
+      "reports an error" in {
+        val response = testCompileScriptFail
+
+        response match {
+          case r: Runtime.CompileScriptResult =>
+            r.exceptionDetails.map(_.text) should be (Some("oops"))
+          case other => fail("" + other)
+        }
       }
     }
 
