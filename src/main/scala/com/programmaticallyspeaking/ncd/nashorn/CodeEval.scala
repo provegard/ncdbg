@@ -1,24 +1,95 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import com.programmaticallyspeaking.ncd.host.ValueNode
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost._
+import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi._
+
+trait CompiledScriptRunner {
+  def run()(implicit marshaller: Marshaller): ValueNode
+}
 
 class CodeEval(typeLookup: TypeLookup, preventGC: (Value, Lifecycle.EnumVal) => Unit) {
   import TypeConstants._
 
+  /**
+    * Evaluates code and returns the result. The evaluation is attempted at most 3 times
+    * (since it may fail due to GC activity in the target VM).
+    *
+    * @param thisObject the object that is `this` during code evaluation
+    * @param scopeObject scope object, for lookup of free variables
+    * @param code the code to evaluate
+    * @param lifecycle lifecycle for GC prevention of the result
+    * @param thread thread for code evaluation
+    * @return the evaluation result
+    */
   def eval(thisObject: Option[Value], scopeObject: Option[Value], code: String, lifecycle: Lifecycle.EnumVal)(implicit thread: ThreadReference): Value = {
     // We've observed ObjectCollectedException while disabling GC... Try a few times before giving up!
-    eval(thisObject, scopeObject, code, lifecycle, 3)
+    attempt(lifecycle, 3) {
+      DebuggerSupport_eval_custom(thisObject.orNull, scopeObject.orNull, code)
+    }
   }
 
-  private def eval(thisObject: Option[Value], scopeObject: Option[Value], code: String, lifecycle: Lifecycle.EnumVal, attemptsLeft: Int)(implicit thread: ThreadReference): Value = {
+  private def runCompiledScript(scriptFunction: ObjectReference, lifecycle: Lifecycle.EnumVal)(implicit marshaller: Marshaller): ValueNode = {
+    // NashornScriptEngine.evalImpl:
+    //  var7 = ScriptObjectMirror.translateUndefined(ScriptObjectMirror.wrap(ScriptRuntime.apply(script, ctxtGlobal, new Object[0]), ctxtGlobal));
+    val mirror = new ScriptObjectMirror(scriptFunction).asFunction
+    val value = attempt(lifecycle, 3)(mirror.invokeNoArgs())
+    marshaller.marshal(value)
+  }
+
+  def compileScript(script: String, url: String, lifecycle: Lifecycle.EnumVal)(implicit marshaller: Marshaller): CompiledScriptRunner = {
+    val fun = attempt(lifecycle, 3) {
+      implicit val thread = marshaller.thread
+      NashornScriptEngine_asCompiledScript(script, url)
+    }
+    new CompiledScriptRunner {
+      override def run()(implicit marshaller: Marshaller): ValueNode =
+        runCompiledScript(fun, Lifecycle.Paused)
+    }
+  }
+
+  private def attempt[R <: Value](lifecycle: Lifecycle.EnumVal, attemptsLeft: Int)(f: => R): R = {
     try {
-      val v = DebuggerSupport_eval_custom(thisObject.orNull, scopeObject.orNull, code)
+      val v = f
       preventGC(v, lifecycle)
       v
     } catch {
       case _: ObjectCollectedException if attemptsLeft > 0 =>
-        eval(thisObject, scopeObject, code, lifecycle, attemptsLeft - 1)
+        attempt(lifecycle, attemptsLeft - 1)(f)
+    }
+  }
+
+  private def NashornScriptEngine_asCompiledScript(script: String, url: String)(implicit threadReference: ThreadReference): ObjectReference = {
+    // NashornScriptEngine.asCompiledScript:
+    //  1. src       = Source.sourceFor("<compiled>", script, true)
+    //  2. ctx       = Context.getContext()
+    //  3. mgcs      = ctx.compileScript(src:Source)
+    //  4. scriptFun = mgcs.getFunction(Context.getGlobal())
+    (for {
+      contextType <- typeLookup(NIR_Context)
+      sourceType <- typeLookup(NIR_Source)
+    } yield (contextType, sourceType)) match {
+      case Some((contextType: ClassType, sourceType: ClassType)) =>
+        // 1
+        val sourceInvoker = Invokers.shared.getStatic(sourceType)
+        val sig = "sourceFor(Ljava/lang/String;Ljava/lang/String;)Ljdk/nashorn/internal/runtime/Source;"
+        val source = sourceInvoker.applyDynamic(sig)(url, script)
+
+        // 2
+        val contextClassInvoker = Invokers.shared.getStatic(contextType)
+        val context = contextClassInvoker.getContext().asInstanceOf[ObjectReference]
+
+        // 3
+        val contextDynInvoker = Invokers.shared.getDynamic(context)
+        val mgcs = contextDynInvoker.compileScript(source).asInstanceOf[ObjectReference]
+
+        // 4
+        val global = contextClassInvoker.getGlobal()
+        val mgcsInvoker = Invokers.shared.getDynamic(mgcs)
+        mgcsInvoker.getFunction(global).asInstanceOf[ObjectReference]
+      case _ =>
+        throw new IllegalStateException("The Context and/or Source type wasn't found, cannot compile a script.")
     }
   }
 

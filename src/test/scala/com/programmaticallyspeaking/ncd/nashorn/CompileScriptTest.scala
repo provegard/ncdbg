@@ -1,0 +1,139 @@
+package com.programmaticallyspeaking.ncd.nashorn
+
+import java.util.concurrent.LinkedBlockingQueue
+
+import com.programmaticallyspeaking.ncd.host._
+import com.programmaticallyspeaking.ncd.messaging.Observer
+import com.programmaticallyspeaking.ncd.testing.UnitTest
+import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
+
+import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.util.Try
+
+class CompileScriptTest extends CompileScriptTestFixture {
+
+  def compileAndRun(code: String, url: String): ValueNode = {
+    var result: Try[ValueNode] = null
+    runTest { host =>
+      host.compileScript(code, url, surviveResume = false).map { s =>
+        result = host.runCompiledScript(s.id)
+      }
+    }
+    result.get
+  }
+
+  def compileAndCollectScripts(codesAndUrls: (String, String)*): Seq[Script] = {
+    import scala.collection.JavaConverters._
+    val scripts = new LinkedBlockingQueue[Script]()
+    runTest { host =>
+      var f = Future.successful(())
+      codesAndUrls.foreach { tup =>
+        val (code, url) = tup
+        f = f.flatMap { _ => host.compileScript(code, url, surviveResume = false).map(s => scripts.put(s)) }
+      }
+      f
+    }
+    scripts.asScala.toSeq
+  }
+
+  "Compiling a script with a requested URL" - {
+
+    lazy val compiledScript = compileAndCollectScripts(("1+2+3", "file://url")).head
+
+    "returns a script with the correct contents" in {
+      compiledScript.contents should include ("1+2+3")
+    }
+
+    "uses the requested URL (with ScriptURL transformation) for the script" in {
+      compiledScript.url.toString should be ("file:///url")
+    }
+  }
+
+  "Compiling two anonymous scripts with empty requested URLs" - {
+
+    lazy val compiledScripts = {
+      val scripts = compileAndCollectScripts(("1+2+3", ""), ("4+5+6", ""))
+      (scripts.head, scripts(1))
+    }
+
+    "allows lookup of script 1 by ID" in {
+      val (s1, _) = compiledScripts
+      getHost.findScript(IdBasedScriptIdentity(s1.id)).map(_.contents).getOrElse("") should include ("1+2+3")
+    }
+
+    "allows lookup of script 2 by ID" in {
+      val (_, s2) = compiledScripts
+      getHost.findScript(IdBasedScriptIdentity(s2.id)).map(_.contents).getOrElse("") should include ("4+5+6")
+    }
+
+    "uses the requested empty URL for a script" in {
+      val (s1, _) = compiledScripts
+      s1.url.toString should be ("")
+    }
+
+    "doesn't allow script lookup by empty URL" in {
+      val (s1, _) = compiledScripts
+      getHost.findScript(URLBasedScriptIdentity(s1.url.toString)) should be (None)
+    }
+
+//    "uses different actual URLs for the scripts" in {
+//      val (s1, s2) = compiledScripts
+//      s2.url should not be (s1.url)
+//    }
+  }
+
+  "Compiling the same script twice" - {
+
+    lazy val compiledScripts = {
+      val scripts = compileAndCollectScripts(("1+2+3", ""), ("1+2+3", ""))
+      (scripts.head, scripts(1))
+    }
+
+    "reuses the Script instance" in {
+      val (s1, s2) = compiledScripts
+      s2.id should be (s1.id)
+    }
+  }
+
+  "Running a compiled script" - {
+
+    lazy val result = compileAndRun("1+2+3", "")
+
+    "gives the correct result" in {
+      result should be (SimpleValue(6))
+    }
+  }
+
+  "Running a compiled script with a function" - {
+
+    lazy val result = compileAndRun(
+      """function f(a,b,c) {
+        |  return a + b + c;
+        |}
+        |f(1, 2, 3)
+      """.stripMargin, "")
+
+    "gives the correct result" in {
+      result should be (SimpleValue(6))
+    }
+  }
+}
+
+class CompileScriptTestFixture extends UnitTest with NashornScriptHostTestFixture with ScalaFutures with IntegrationPatience {
+
+  override implicit val executionContext: ExecutionContext = ExecutionContext.global
+
+  type Tester = ScriptHost => Future[Unit]
+
+  protected def runTest(tester: Tester): Unit = {
+    val donePromise = Promise[Unit]()
+    val observer = Observer.from[ScriptEvent] {
+      case bp: HitBreakpoint =>
+        val host = getHost
+        donePromise.future.onComplete(_ => host.resume())
+        donePromise.completeWith(tester(host))
+      case _ => // ignore
+    }
+    observeAndRunScriptAsync("debugger;", observer)(_ => donePromise.future)
+  }
+}

@@ -1,5 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import java.util.UUID
+
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.infra.IdGenerator
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
@@ -7,8 +9,10 @@ import com.sun.jdi.event._
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
+import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -34,7 +38,8 @@ object NashornDebuggerHost {
     JL_Long -> true,
     JL_Double -> true,
     NIO_Global -> true,
-    NIR_JSType -> false // don't stop init
+    NIR_Source -> false, // don't stop init
+    NIR_JSType -> false  // don't stop init
   )
 
   type CodeEvaluator = (String, Map[String, AnyRef]) => ValueNode
@@ -118,7 +123,8 @@ object NashornDebuggerHost {
 }
 
 class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
-    extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport with BreakpointSupport with PauseSupport with PrintSupport {
+    extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport with BreakpointSupport with PauseSupport with PrintSupport
+                              with CompiledScriptSupport {
   import Breakpoints._
   import JDIExtensions._
   import NashornDebuggerHost._
@@ -158,7 +164,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   )
 
   private val _scriptPublisher = new ScriptPublisher(emitEvent)
-  private val _scanner = new ClassScanner(virtualMachine, _scripts, _scriptFactory, _scriptPublisher, _breakableLocations, _breakpoints, actionPerWantedType)
+  protected val _scanner = new ClassScanner(virtualMachine, _scripts, _scriptFactory, _scriptPublisher, _breakableLocations, _breakpoints, actionPerWantedType)
 
   protected val typeLookup = new TypeLookup {
     override def apply(name: String): Option[ClassType] = _scanner.typeByName(name)

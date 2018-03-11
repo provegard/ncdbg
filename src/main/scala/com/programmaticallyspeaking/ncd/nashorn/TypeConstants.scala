@@ -6,6 +6,7 @@ object TypeConstants {
   val NIR_ECMAException = "jdk.nashorn.internal.runtime.ECMAException"
   val NIR_JSType = "jdk.nashorn.internal.runtime.JSType"
   val NIR_Context = "jdk.nashorn.internal.runtime.Context"
+  val NIR_Source = "jdk.nashorn.internal.runtime.Source"
   val NIO_Global = "jdk.nashorn.internal.objects.Global"
   val JL_Boolean = "java.lang.Boolean"
   val JL_Integer = "java.lang.Integer"

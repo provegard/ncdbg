@@ -94,6 +94,15 @@ class ScriptFunctionMirror(scriptObject: ObjectReference)(implicit marshaller: M
     } else None
   }
 
+  /**
+    * Invokes a no-argument function.
+    * The result is not marshalled, because the caller may want to prevent GC for the result - which perhaps
+    * is something Marshaller should do (in which case we can change to marshal here)?
+    *
+    * @return the native/JDI result
+    */
+  def invokeNoArgs(): Value = invoker.invoke(null, null)
+
   //TODO: Correct to return Value here? Marshalling is non-trivial due to special target (ScopeObject), i.e.
   //TODO: Marshaller doesn't auto-marshal to ScopeObject since it cannot recognize a scope object ref.
   def scopes: Seq[Value] = {
