@@ -1,11 +1,14 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
+import java.nio.charset.StandardCharsets
+
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
-import com.programmaticallyspeaking.ncd.infra.{BuildProperties, IdGenerator, ObjectMapping}
+import com.programmaticallyspeaking.ncd.infra.{BuildProperties, Hasher, IdGenerator, ObjectMapping}
 import com.programmaticallyspeaking.ncd.transpile.{CachingES5Transpiler, ClosureBasedES5Transpiler}
 import org.slf4s.Logging
 
+import scala.collection.mutable
 import scala.util.{Failure, Success}
 
 object Runtime {
@@ -133,6 +136,11 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
   private val compiledScriptIdGenerator = new IdGenerator("compscr")
   private implicit val host = scriptHost
 
+  private val callFunctionOnCache = mutable.Map[String, Runtime.RemoteObject]()
+
+  private def clearCallFunctionOnCache(): Unit = {
+    callFunctionOnCache.clear()
+  }
 
   private def mapInternalProperties(props: Seq[(String, ObjectPropertyDescriptor)]) = {
     // It seems as if internal properties never have a preview.
@@ -146,6 +154,21 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
   }
 
   private def safeArgs(arguments: Seq[CallArgument]): Seq[CallArgument] = Option(arguments).getOrElse(Seq.empty)
+
+  private def callFunctionOnCacheKey(strObjectId: RemoteObjectId, functionDeclaration: String, arguments: Seq[CallArgument], returnByValue: Boolean, generatePreview: Boolean) = {
+    val parts = Seq(strObjectId, functionDeclaration, returnByValue, generatePreview) ++ safeArgs(arguments).map(_.toString)
+    Hasher.md5(parts.mkString("|").getBytes(StandardCharsets.UTF_8))
+  }
+
+  private def shouldCacheCallFunctionOn(functionDeclaration: String) = {
+    // Ugly hack :(
+    // There's no good way of knowing if a function is side-effect free, so we go on known
+    // functions for now.
+    functionDeclaration.contains("packRanges") ||
+      functionDeclaration.contains("toStringForClipboard") ||
+      functionDeclaration.contains("getEntries") ||
+      functionDeclaration.contains("getCompletions")
+  }
 
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case Runtime.getProperties(strObjectId, ownProperties, accessorPropertiesOnly, maybeGeneratePreview) =>
@@ -183,6 +206,8 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
         // VS Code (Debugger for Chrome) wants to know
         EvaluateResult(RemoteObject.forString(s"NCDbg version ${BuildProperties.version}"), None)
       } else {
+        // Arbitrary script execution may affect objects involved in the callFunctionOn cache, so clear.
+        clearCallFunctionOnCache()
 
         // Runtime.evaluate evaluates on the global object. Calling with null as 'this' results in exactly that.
         val script = s"(function(){return ($expr);}).call(null);"
@@ -214,24 +239,45 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       val reportException = !maybeSilent.getOrElse(false)
       val generatePreview = maybeGeneratePreview.getOrElse(false)
 
-      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
+      val cacheKey = callFunctionOnCacheKey(strObjectId, functionDeclaration, arguments, actualReturnByValue, generatePreview)
+      val isCacheableFunction = shouldCacheCallFunctionOn(functionDeclaration)
 
-      val namedObjects = new NamedObjects
+      if (!isCacheableFunction) {
+        // The function may have side effects, so clear the cache.
+        clearCallFunctionOnCache()
+      }
 
-      val targetName = namedObjects.useNamedObject(ObjectId.fromString(strObjectId))
+      callFunctionOnCache.get(cacheKey) match {
+        case Some(result) =>
+          log.debug(s"Reusing cached result for callFunctionOn on object $strObjectId")
+          CallFunctionOnResult(result, None)
 
-      // Transpile the code if needed.
-      // Some considerations:
-      // - perhaps we should transpile always? But we'd like to skip the transpilation runtime if it's not needed.
-      // - perhaps we should transpile in Runtime.evaluate also?
-      val maybeTranspiled = if (needsTranspile(functionDeclaration)) transpile(functionDeclaration) else functionDeclaration
+        case None =>
+          implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
 
-      val argsArrayString = ScriptEvaluateSupport.serializeArgumentValues(safeArgs(arguments), namedObjects).mkString("[", ",", "]")
-      val expression = s"($maybeTranspiled).apply($targetName,$argsArrayString)"
+          val namedObjects = new NamedObjects
 
-      // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
-      val evalResult = evaluate(scriptHost, "$top", expression, namedObjects.result, reportException)
-      CallFunctionOnResult(evalResult.result, evalResult.exceptionDetails)
+          val targetName = namedObjects.useNamedObject(ObjectId.fromString(strObjectId))
+
+          // Transpile the code if needed.
+          // Some considerations:
+          // - perhaps we should transpile always? But we'd like to skip the transpilation runtime if it's not needed.
+          // - perhaps we should transpile in Runtime.evaluate also?
+          val maybeTranspiled = if (needsTranspile(functionDeclaration)) transpile(functionDeclaration) else functionDeclaration
+
+          val argsArrayString = ScriptEvaluateSupport.serializeArgumentValues(safeArgs(arguments), namedObjects).mkString("[", ",", "]")
+          val expression = s"($maybeTranspiled).apply($targetName,$argsArrayString)"
+
+          // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
+          val evalResult = evaluate(scriptHost, "$top", expression, namedObjects.result, reportException)
+
+          if (evalResult.exceptionDetails.isEmpty && isCacheableFunction) {
+            // Store in cache
+            callFunctionOnCache += cacheKey -> evalResult.result
+          }
+
+          CallFunctionOnResult(evalResult.result, evalResult.exceptionDetails)
+      }
 
     case Runtime.runIfWaitingForDebugger =>
       log.debug("Request to run if waiting for debugger")
@@ -247,6 +293,10 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
 
     case PrintMessage(msg) =>
       consoleLog(msg)
+
+    case Resumed =>
+      // It seems like a good idea to not keep the cache in this case.
+      clearCallFunctionOnCache()
   }
 
   private def consoleLog(msg: String) = {
