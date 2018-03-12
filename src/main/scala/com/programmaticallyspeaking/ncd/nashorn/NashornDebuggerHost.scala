@@ -120,6 +120,9 @@ object NashornDebuggerHost {
   sealed trait InternalState
   case object Pause extends InternalState
   case object Unpause extends InternalState
+
+  // Internal version of ScriptAdded which we need since we may suppress ScriptAdded
+  private[nashorn] case class InternalScriptAdded(script: Script) extends ScriptEvent
 }
 
 class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
@@ -163,7 +166,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     NIO_Global -> enablePrintCapture _
   )
 
-  private val _scriptPublisher = new ScriptPublisher(emitEvent)
+  protected val _scriptPublisher = new ScriptPublisher(emitEvent)
   protected val _scanner = new ClassScanner(virtualMachine, _scripts, _scriptFactory, _scriptPublisher, _breakableLocations, _breakpoints, actionPerWantedType)
 
   protected val typeLookup = new TypeLookup {

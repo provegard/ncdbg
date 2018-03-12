@@ -44,7 +44,7 @@ object FakeScriptHost extends ScriptHost {
 
   override def setSkipAllPauses(skip: Boolean): Unit = notImpl
 
-  override def compileScript(script: String, url: String, surviveResume: Boolean): Future[Script] = Future.failed(notImpl)
+  override def compileScript(script: String, url: String, persist: Boolean): Future[Option[Script]] = Future.failed(notImpl)
 
   override def runCompiledScript(scriptId: String): Try[ValueNode] = notImpl
 }

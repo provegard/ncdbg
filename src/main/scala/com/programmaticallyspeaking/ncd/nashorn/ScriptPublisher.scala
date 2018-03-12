@@ -8,6 +8,11 @@ class ScriptPublisher(eventEmitter: ScriptEventEmitter) extends Logging {
 
   private var _publishedScriptIds = Set[String]()
 
+  private var _muteScriptAdded: Boolean = false
+
+  def mute(): Unit = _muteScriptAdded = true
+  def unmute(): Unit = _muteScriptAdded = false
+
   def publish(script: Script): Unit = {
     // Try to ensure that only the first thread observes "isKnownScript" to be true for a particular URL
     val old = _publishedScriptIds
@@ -21,7 +26,12 @@ class ScriptPublisher(eventEmitter: ScriptEventEmitter) extends Logging {
         log.debug(s"Adding script with ID '${script.id}', URI '${script.url}' and hash '${script.contentsHash()}'")
       else
         log.info(s"Adding script '${script.id}' with URI '${script.url}'")
-      eventEmitter.emit(ScriptAdded(script))
+
+      // Emit InternalScriptAdded afterwards in case it unmutes.
+      if (!_muteScriptAdded) {
+        eventEmitter.emit(ScriptAdded(script))
+      }
+      eventEmitter.emit(NashornDebuggerHost.InternalScriptAdded(script))
     }
   }
 

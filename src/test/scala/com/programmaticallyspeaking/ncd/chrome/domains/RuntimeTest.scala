@@ -56,7 +56,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
 
       lazy val testCompileScript = {
         val script = new ScriptImpl(ScriptURL.create(""), Array.empty, "xx")
-        when(currentScriptHost.compileScript(any[String], any[String], any[Boolean])).thenReturn(Future.successful(script))
+        when(currentScriptHost.compileScript(any[String], any[String], any[Boolean])).thenReturn(Future.successful(Some(script)))
 
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)

@@ -226,7 +226,8 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
     case Runtime.compileScript(expr, url, persist, _) =>
       log.info(s"Request to compile script '$expr' with URL '$url' and persist = $persist")
 
-      scriptHost.compileScript(expr, url, persist).map(s => CompileScriptResult(s.id, None)).recover {
+      // If persist is false, then we may get None back in which case we cannot report an ID.
+      scriptHost.compileScript(expr, url, persist).map(s => CompileScriptResult(s.map(_.id).orNull, None)).recover {
         case t =>
           val exceptionDetails = exceptionDetailsFromError(t, 1)
           CompileScriptResult(null, Some(exceptionDetails))

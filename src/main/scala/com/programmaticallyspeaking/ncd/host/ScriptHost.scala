@@ -175,11 +175,12 @@ trait ScriptHost {
     *
     * @param script the script code
     * @param url the URL to use for the script; may be empty
-    * @param surviveResume controls the lifecycle of the compiled script; if true, the script will be available for
-    *                      running also after the VM has been resumed
-    * @return a [[Future]] resolved with the created [[Script]] instance
+    * @param persist if false, the resulting script is not emitted as [[ScriptAdded]] and the result can only be
+    *                used for error checking.
+    * @return a [[Future]] resolved with the created [[Script]] instance, or `None` if persist is false and the
+    *         script is error-free
     */
-  def compileScript(script: String, url: String, surviveResume: Boolean): Future[Script]
+  def compileScript(script: String, url: String, persist: Boolean): Future[Option[Script]]
 
   /**
     * Runs a script compiled with [[compileScript]].

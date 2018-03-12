@@ -15,10 +15,10 @@ import scala.util.Try
 trait CompiledScriptSupport { self: NashornDebuggerHost =>
 
   private val runnerByScriptId = new TrieMap[String, CompiledScriptRunner]() // must be thread safe
-  private val scriptPromiseByHash = mutable.Map[String, Promise[Script]]() // doesn't need to be thread safe
+  private val scriptPromiseByHash = mutable.Map[String, Promise[Option[Script]]]() // doesn't need to be thread safe
 
   //TODO: Let surviveResume control our maps + scripts in Scripts.
-  override def compileScript(script: String, url: String, surviveResume: Boolean): Future[Script] = {
+  override def compileScript(script: String, url: String, persist: Boolean): Future[Option[Script]] = {
     pausedData match {
       case Some(pd) =>
         implicit val marshaller = pd.marshaller
@@ -43,23 +43,33 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
                """.stripMargin
 
             var runner: CompiledScriptRunner = null
-            val promise = Promise[Script]
+            val promise = Promise[Option[Script]]
 
             // Enter the promise into the script-reuse cache
             scriptPromiseByHash += hash -> promise
 
+            // In non-persist mode, script compilation is for error checking
+            if (!persist) _scriptPublisher.mute()
+
+            // Listen to InternalScriptAdded since we may have muted ScriptAdded
             var subscription: Subscription = null
             subscription = events.subscribe(Observer.from[ScriptEvent] {
-              case s: ScriptAdded if s.script.contents.contains(correlationId) =>
+              case s: NashornDebuggerHost.InternalScriptAdded if s.script.contents.contains(correlationId) =>
                 subscription.unsubscribe()
-                runnerByScriptId += s.script.id -> runner
-                promise.success(s.script)
+
+                if (persist) {
+                  runnerByScriptId += s.script.id -> runner
+                  promise.success(Some(s.script))
+                } else {
+                  _scriptPublisher.unmute()
+                  promise.success(None)
+                }
+
             })
 
             val actualUrl = CompiledScript(correlationId, url).toCodeUrl
 
-            val lifecycle = if (surviveResume) Lifecycle.Session else Lifecycle.Paused
-            runner = _scanner.withClassTracking(codeEval.compileScript(wrapper, actualUrl, lifecycle))
+            runner = _scanner.withClassTracking(codeEval.compileScript(wrapper, actualUrl, Lifecycle.Session))
             promise.future
         }
       case None =>
