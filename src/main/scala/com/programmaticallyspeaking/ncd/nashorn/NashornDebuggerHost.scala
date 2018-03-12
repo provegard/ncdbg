@@ -1,7 +1,5 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import java.util.UUID
-
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.infra.IdGenerator
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
@@ -9,10 +7,7 @@ import com.sun.jdi.event._
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
-import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 import scala.util.control.NonFatal
 
