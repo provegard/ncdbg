@@ -33,6 +33,7 @@
 * Make sure script-based property extraction happens on the correct thread (issue #78)
 * Cache certain functions in Runtime.callFunctionOn. DevTools in Chrome 65.0.3325.146 introduces some
   caching but prior to that autocompletion is slow.
+* Handle event request that is `null` when invoking a request-specific event handler (issue #88)
 
 ## 0.6.0 (2017-10-22)
 
