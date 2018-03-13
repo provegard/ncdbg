@@ -60,13 +60,13 @@ trait ScriptEvaluateSupport { self: Logging =>
       try {
         val lineNumberBase1 = stackTraceElement.getLineNumber
         val url = new File(stackTraceElement.getFileName).toURI.toString
-        Some(Runtime.ExceptionDetails(exceptionId, t.getMessage, lineNumberBase1 - 1, 0, Some(url)))
+        Some(Runtime.ExceptionDetails(exceptionId, t.getMessage, lineNumberBase1 - 1, 0, Some(url), exception = None))
       } catch {
         case e: Exception =>
           log.error(s"Error when trying to construct ExceptionDetails from $stackTraceElement", e)
           None
       }
-    }.getOrElse(Runtime.ExceptionDetails(exceptionId, t.getMessage, 0, 0, None))
+    }.getOrElse(Runtime.ExceptionDetails(exceptionId, t.getMessage, 0, 0, None, exception = None))
   }
 
   case class EvaluationResult(result: RemoteObject, exceptionDetails: Option[ExceptionDetails] = None)

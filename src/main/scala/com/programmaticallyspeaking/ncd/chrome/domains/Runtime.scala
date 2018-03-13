@@ -102,13 +102,16 @@ object Runtime {
 
   case class CompileScriptResult(scriptId: ScriptId, exceptionDetails: Option[ExceptionDetails])
 
-  case class ExceptionDetails(exceptionId: Int, text: String, lineNumber: Int, columnNumber: Int, url: Option[String], scriptId: Option[ScriptId] = None, executionContextId: ExecutionContextId = StaticExecutionContextId)
+  case class ExceptionDetails(exceptionId: Int, text: String, lineNumber: Int, columnNumber: Int, url: Option[String], scriptId: Option[ScriptId] = None,
+                              exception: Option[RemoteObject],
+                              executionContextId: ExecutionContextId = StaticExecutionContextId)
 
   object ExceptionDetails {
-    def fromErrorValue(err: ErrorValue, exceptionId: Int): ExceptionDetails = {
+    def fromErrorValue(err: ErrorValue, exceptionId: Int)(implicit remoteObjectConverter: RemoteObjectConverter): ExceptionDetails = {
       val data = err.data
+      val exception = remoteObjectConverter.toRemoteObject(err)
       // Note that Chrome wants line numbers to be 0-based
-      ExceptionDetails(exceptionId, data.message, data.lineNumberBase1 - 1, data.columnNumberBase0, Some(data.url))
+      ExceptionDetails(exceptionId, data.message, data.lineNumberBase1 - 1, data.columnNumberBase0, Some(data.url), exception = Some(exception))
     }
   }
 
@@ -170,6 +173,21 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       functionDeclaration.contains("getCompletions")
   }
 
+  // Translate certain Nashorn errors into Chrome errors that DevTools understands.
+  // "Expected ... but found eof" => "SyntaxError: Unexpected end of input"
+  // "Missing close quote"        => "SyntaxError: Unterminated template literal"
+  private def withFakedExceptionMessage(expr: String, exceptionDetails: ExceptionDetails): ExceptionDetails = {
+    def errorObject(name: String, msg: String) =
+      RemoteObject.forError(name, msg, Some(s"$name: $msg"), "fake")
+    if (exceptionDetails.text.contains("but found eof")) {
+      exceptionDetails.copy(exception = Some(errorObject("SyntaxError", "Unexpected end of input")))
+    } else if (exceptionDetails.text.contains("Missing close quote") && expr.contains('`')) {
+      // Java 9, not foolproof though (false positive for e.g. "`foo`+'bar")
+      exceptionDetails.copy(exception = Some(errorObject("SyntaxError", "Unterminated template literal")))
+    }
+    else exceptionDetails
+  }
+
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case Runtime.getProperties(strObjectId, ownProperties, accessorPropertiesOnly, maybeGeneratePreview) =>
 
@@ -188,7 +206,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
           GetPropertiesResult(mapProperties(external, generatePreview), None, mapInternalProperties(internal))
 
         case Failure(t) =>
-          val exceptionDetails = ExceptionDetails(1, s"Error: '${t.getMessage}' for object '$strObjectId'", 0, 1, None)
+          val exceptionDetails = ExceptionDetails(1, s"Error: '${t.getMessage}' for object '$strObjectId'", 0, 1, None, exception = None)
           GetPropertiesResult(Seq.empty, Some(exceptionDetails), Seq.empty)
       }
 
@@ -230,7 +248,8 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       scriptHost.compileScript(expr, url, persist).map(s => CompileScriptResult(s.map(_.id).orNull, None)).recover {
         case t =>
           val exceptionDetails = exceptionDetailsFromError(t, 1)
-          CompileScriptResult(null, Some(exceptionDetails))
+          val returnedDetails = if (persist) exceptionDetails else withFakedExceptionMessage(expr, exceptionDetails)
+          CompileScriptResult(null, Some(returnedDetails))
       }
 
     case Runtime.runScript(scriptId, _, silent, returnByValue, generatePreview) =>
@@ -303,6 +322,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
     case UncaughtError(ev) =>
       // TODO: What do use for exceptionId?
+      implicit val remoteObjectConverter = createRemoteObjectConverter(false, false)
       emitEvent("Runtime.exceptionThrown", ExceptionThrownEventParams(Timestamp.now, ExceptionDetails.fromErrorValue(ev, 1)))
 
     case PrintMessage(msg) =>

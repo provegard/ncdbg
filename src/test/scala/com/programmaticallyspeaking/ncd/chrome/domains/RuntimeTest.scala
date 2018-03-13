@@ -252,7 +252,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         testGet(Left(new Exception("oops")), arbitraryObjectIdStr, None, None) { response =>
           // Note: Unsure if property descriptors should be empty sequence here or null. The protocol spec doesn't say.
           response should be (GetPropertiesResult(Seq.empty,
-            Some(ExceptionDetails(1, s"""Error: 'oops' for object '$arbitraryObjectIdStr'""", 0, 1, None, None, Runtime.StaticExecutionContextId)),
+            Some(ExceptionDetails(1, s"""Error: 'oops' for object '$arbitraryObjectIdStr'""", 0, 1, None, None, None, Runtime.StaticExecutionContextId)),
             Seq.empty))
         }
       }
@@ -460,7 +460,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         val event = testIt
         event.params match {
           case Runtime.ExceptionThrownEventParams(ts, exceptionDetails) =>
-            exceptionDetails should be (ExceptionDetails(1, "oops", 0, 0, Some("http://some/where")))
+            exceptionDetails should be (ExceptionDetails(1, "oops", 0, 0, Some("http://some/where"), exception = None))
           case other => fail("Unexpected: " + other)
         }
       }
