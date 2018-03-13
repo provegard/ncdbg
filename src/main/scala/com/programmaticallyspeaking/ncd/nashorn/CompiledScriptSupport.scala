@@ -36,10 +36,14 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
             val correlationId = UUID.randomUUID().toString.replace("-", "")
             log.info(s"Compiling script with requested URL '$url' and hash $hash and unique ID $correlationId.")
 
+            // If not persisting, embed a marker that makes ScriptPublisher suppress ScriptAdded, now and
+            // on subsequent sessions
+            val marker = if (persist) "" else s";${ScriptPublisher.PreventPublishingMarker}"
+
             // Embed a unique ID in the script so that we can match the ScriptAdded event.
             val wrapper =
               s"""$script
-                 |/*$correlationId*/
+                 |/*$correlationId$marker*/
                """.stripMargin
 
             var runner: CompiledScriptRunner = null
@@ -47,9 +51,6 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
 
             // Enter the promise into the script-reuse cache
             scriptPromiseByHash += hash -> promise
-
-            // In non-persist mode, script compilation is for error checking
-            if (!persist) _scriptPublisher.mute()
 
             // Listen to InternalScriptAdded since we may have muted ScriptAdded
             var subscription: Subscription = null
@@ -61,10 +62,8 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
                   runnerByScriptId += s.script.id -> runner
                   promise.success(Some(s.script))
                 } else {
-                  _scriptPublisher.unmute()
                   promise.success(None)
                 }
-
             })
 
             val actualUrl = CompiledScript(correlationId, url).toCodeUrl
