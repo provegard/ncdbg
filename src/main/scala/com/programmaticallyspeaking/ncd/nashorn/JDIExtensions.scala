@@ -21,7 +21,8 @@ object JDIExtensions {
 
   class ExtEvent(event: Event) {
     def handle(): Option[Boolean] = {
-      Option(event.request().getProperty(EventHandlerKey)).collect {
+      // Null-testing the request for https://github.com/provegard/ncdbg/issues/88
+      Option(event.request()).flatMap(r => Option(r.getProperty(EventHandlerKey))).collect {
         case h: EventHandler => h(event)
       }
     }
