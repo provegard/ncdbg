@@ -461,7 +461,11 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   override def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode] = Try {
     pausedData match {
       case Some(pd) =>
-        _scanner.withClassTracking(_stackFramEval.evaluateOnStackFrame(pd, stackFrameId, expression, namedObjects))
+        _scanner.withClassTracking {
+          virtualMachine.withDisabledBreakpoints {
+            _stackFramEval.evaluateOnStackFrame(pd, stackFrameId, expression, namedObjects)
+          }
+        }
       case None =>
         log.warn(s"Evaluation of '$expression' for stack frame $stackFrameId cannot be done in a non-paused state.")
         throw new IllegalStateException("Code evaluation can only be done in a paused state.")

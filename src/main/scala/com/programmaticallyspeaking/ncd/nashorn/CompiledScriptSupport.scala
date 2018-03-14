@@ -82,7 +82,9 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
         runnerByScriptId.get(scriptId) match {
           case Some(runner) =>
             log.info(s"Running script with ID $scriptId")
-            runner.run()(pd.marshaller)
+            virtualMachine.withDisabledBreakpoints {
+              runner.run()(pd.marshaller)
+            }
           case None =>
             val known = runnerByScriptId.keys.mkString(", ")
             log.warn(s"Cannot find compiled script with ID $scriptId. Known compiled script IDs: $known")

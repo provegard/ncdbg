@@ -124,6 +124,19 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
       })
     }
 
+    "ignores a debugger statement in the evaluated code" in {
+      val script =
+        """(function (x) {
+          |  debugger;
+          |  return x;
+          |})(42)
+        """.stripMargin
+      evaluateInScript("debugger;") { (host, stackframes) =>
+        val result = host.evaluateOnStackFrame(stackframes.head.id, script, Map.empty)
+        result should be (Success(SimpleValue(42)))
+      }
+    }
+
     "detects a script added using 'load'" in {
       val foundIt = Promise[Unit]()
 

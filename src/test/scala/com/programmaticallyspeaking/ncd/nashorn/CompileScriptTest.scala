@@ -136,6 +136,19 @@ class CompileScriptTest extends CompileScriptTestFixture {
       result should be (SimpleValue(6))
     }
   }
+
+  "Running a compiled script with a debugger statement" - {
+
+    lazy val result = compileAndRun(
+      """var x = 5, y = 6;
+        |debugger;
+        |x + y
+      """.stripMargin, "")
+
+    "works since debugging is disabled while compiled scripts are run" in {
+      result should be (SimpleValue(11))
+    }
+  }
 }
 
 class CompileScriptTestFixture extends UnitTest with NashornScriptHostTestFixture with ScalaFutures with IntegrationPatience {

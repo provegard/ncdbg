@@ -50,4 +50,12 @@ class XVirtualMachine(virtualMachine: VirtualMachine) {
       else objectReferencesWithDisabledGC +:= objRef
     case _ =>
   }
+
+  def withDisabledBreakpoints[R](f: => R): R = {
+    val enabledRequests = eventRequestManager().breakpointRequests().asScala.filter(_.isEnabled)
+    enabledRequests.foreach(_.disable())
+    try f finally {
+      enabledRequests.foreach(_.enable())
+    }
+  }
 }
