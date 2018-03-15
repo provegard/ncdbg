@@ -13,10 +13,9 @@ class RealRuntimeTest extends RealRuntimeTestFixture with TableDrivenPropertyChe
 
   private def compileWithError(code: String)(f: RuntimeD.CompileScriptResult => Unit) = {
     waitForDebugger(_ => {
-      val result = sendRequest(RuntimeD.compileScript("`foo", "", false, None))
+      val result = sendRequest(RuntimeD.compileScript(code, "", false, None))
       result match {
         case r: RuntimeD.CompileScriptResult =>
-          println(r)
           f(r)
         case other => fail("unexpected: " + other)
       }
@@ -35,8 +34,8 @@ class RealRuntimeTest extends RealRuntimeTestFixture with TableDrivenPropertyChe
 
       "doesn't translate a non-template literal related quite error" in {
         compileWithError("'foo") { r =>
-          val Some(desc) = r.exceptionDetails.flatMap(_.exception).flatMap(_.description)
-          desc should not startWith ("SyntaxError: Unterminated template literal")
+          val desc = r.exceptionDetails.flatMap(_.exception).flatMap(_.description)
+          desc should be (None)
         }
       }
     }

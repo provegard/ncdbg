@@ -460,7 +460,8 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         val event = testIt
         event.params match {
           case Runtime.ExceptionThrownEventParams(ts, exceptionDetails) =>
-            exceptionDetails should be (ExceptionDetails(1, "oops", 0, 0, Some("http://some/where"), exception = None))
+            val exc = RemoteObject.forError("Error", "oops", Some("Error: oops"), """{"id":"o1"}""")
+            exceptionDetails should be (ExceptionDetails(1, "oops", 0, 0, Some("http://some/where"), exception = Some(exc)))
           case other => fail("Unexpected: " + other)
         }
       }

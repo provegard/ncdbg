@@ -487,7 +487,8 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
         testEvalHandling(ErrorValue(exData, isThrown = true, ObjectId("$$err"), None)) { resp =>
           // Remember, Chrome line numbers are 0-based, so 10 => 9
-          resp.exceptionDetails should be (Some(ExceptionDetails(1, "oops", 9, 1, Some("<eval>"), None, None, Runtime.StaticExecutionContextId)))
+          val exc = RemoteObject.forError("Error", "oops", Some("Error: oops"), """{"id":"$$err"}""")
+          resp.exceptionDetails should be (Some(ExceptionDetails(1, "oops", 9, 1, Some("<eval>"), None, Some(exc), Runtime.StaticExecutionContextId)))
         }
       }
 
