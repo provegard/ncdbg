@@ -1,5 +1,5 @@
-Re compileScript/runScript
-
-* runScript when script has debugger statement results in a deadlock
-* compileScript(persist=false) seems to be used only to detect partial input, i.e.
-  if DevTools should show a continuation line. With hard-coded error message testing.
+* DevToolsHandler - logga trace-level
+* compileScript - logga ej hela scripet, bara första icke-tomma raden (med ...)
+* ScriptPublisher - "adding script", ändra för anon/non-persist
+* compileScript: Preventa ej GC för non-persist
+* compileScript DOC: error checking

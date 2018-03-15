@@ -83,67 +83,6 @@ By default, NCDbg listens on port 7778 for connections from Chrome Developer Too
 
 The argument value can be a port number of an address on the form _&lt;host>:&lt;port>_.
 
-## Nashorn behavior
-
-This section lists some Nashorn behavior that may be surprising at first.
-
-### A variable is undefined right after an assignment
-
-Let's say you have a piece of Nashorn code like this:
-
-    var now = new Date();
-    debugger;
-
-When the debugger pauses on the `debugger` statement, the value of `now` may
-indeed be `undefined`. This may happen if the variable isn't used, in which case
-it is optimized away. To see its value, make sure it's used somewhere, e.g.:
-
-    var now = new Date();
-    debugger;
-    now.toString(); // dummy usage
-
-### Setting a breakpoint in a function doesn't work
-
-Consider this code:
-
-    function seldomCalled() {
-      return "testing";
-    }
-    if (unlikelyConditionIsMet) seldomCalled();
-
-You may not be able to set a breakpoint on the line inside the `seldomCalled`
-function. Functions are by default (__TODO__: figure out since which version) lazily 
-compiled by Nashorn, and if a function hasn't been called yet, its line locations
-don't exist. NCDbg tries to compensate for this case, so if you encounter it, please
-open an issue!
-
-To turn off lazy compilation (not recommended), run the debug target with
-`-Dnashorn.args=--lazy-compilation=false`.
-
 ## Troubleshooting
 
-### NCDbg doesn't work
-
-Please open an issue and _include the versions of Chrome and Java_.
-
-I've created NCDbg based on the stable
-[Chrome Debugging Protocol](https://chromedevtools.github.io/debugger-protocol-viewer/1-2/), but since
-NCDbg doesn't advertise that (becuase I don't know how), Chrome Developer Tools happily sends tip-of-tree
-commands and gets cranky when it doesn't get proper responses back.
-
-Furthermore, Oracle sometimes breaks Nashorn backwards compatibility between minor versions of Java, and
-to make things worse NCDbg uses some classes that are internal to Nashorn. In other words, a new minor version
-of Java may not play well with NCDbg.
-
-### Console evaluation doesn't work
-
-I've observed this behavior in Chrome 55 but not in Chrome 56, so if you're running Chrome 55 you
-may want to upgrade. The problem is that a debugger breakpoint may be hit before the Developer Tools console 
-"subsystem" has initialized, and in this situation console input is basically ignored. A reload usually
-helps also.
-
-### When I restart a frame, the target application crashes
-
-Due to Java bug [JDK-8179072](http://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8179072),
-`AbstractMethodError` may be thrown after the VM is resumed after stack frames have been popped. The bug entry
-comments suggest that 8u132 and later may be free from the bug.
+Please see [the separate Troubleshooting document](Troubleshooting.md).
