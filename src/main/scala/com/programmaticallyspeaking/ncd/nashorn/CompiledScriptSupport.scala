@@ -68,7 +68,8 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
 
             val actualUrl = CompiledScript(correlationId, url).toCodeUrl
 
-            runner = _scanner.withClassTracking(codeEval.compileScript(wrapper, actualUrl, Lifecycle.Session))
+            val lifecycle = if (persist) Lifecycle.Session else Lifecycle.None
+            runner = _scanner.withClassTracking(codeEval.compileScript(wrapper, actualUrl, lifecycle))
             promise.future
         }
       case None =>
