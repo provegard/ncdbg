@@ -69,7 +69,7 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
       // TODO: Test getOrElseUpdate!!
       // TODO: context.watch on the child actor and break if it fails!!
       val domainActor = domains.getOrElseUpdate(domain, {
-        log.debug(s"Creating a new domain actor for $domain")
+        log.trace(s"Creating a new domain actor for $domain")
         domainFactory.create(domain)
       })
       val domainMessageArg = DomainMethodArgumentFactory.create(msg)
@@ -151,14 +151,14 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
         stopDomainActors()
       }
     case DevToolsDisconnected =>
-      log.debug("Ignoring disconnect signal from unknown dev tools sender")
+      log.warn("Ignoring disconnect signal from unknown dev tools sender")
 
     case FromDevTools(msg) if currentDevToolsRef.contains(sender()) =>
-      log.debug(s"Incoming message from Developer Tools: $msg")
+      log.trace(s"Incoming message from Developer Tools: $msg")
       handleIncomingMessage(msg)
 
     case FromDevTools(msg) =>
-      log.debug(s"Ignoring message ($msg) from unknown dev tools sender")
+      log.warn(s"Ignoring message ($msg) from unknown dev tools sender")
 
     case response: Messages.Accepted =>
       log.trace("Got accepted-response (no response data) from domain: " + response)
@@ -176,7 +176,7 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
       handleRequestResponse(response.id)
 
     case event: Messages.Event =>
-      log.debug("Got event from domain: " + event)
+      log.trace("Got event from domain: " + event)
       sendToDevTools(Protocol.Event(event.method, event.params))
 
     case DevToolsConnected =>

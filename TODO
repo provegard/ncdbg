@@ -1,3 +1,2 @@
-* DevToolsHandler - logga trace-level
 * compileScript - logga ej hela scripet, bara första icke-tomma raden (med ...)
 * ScriptPublisher - "adding script", ändra för anon/non-persist
