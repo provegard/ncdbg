@@ -188,6 +188,17 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
     else exceptionDetails
   }
 
+  private def firstNonEmptyLine(s: String): String = {
+    val lines = s.split("\r?\n")
+    val nonEmptyTail = lines.dropWhile(_.trim == "")
+    nonEmptyTail.headOption match {
+      case Some(line) =>
+        val moreThanOne = nonEmptyTail.length > 1
+        if (moreThanOne) line + "..." else line
+      case None => ""
+    }
+  }
+
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case Runtime.getProperties(strObjectId, ownProperties, accessorPropertiesOnly, maybeGeneratePreview) =>
 
@@ -242,7 +253,8 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       }
 
     case Runtime.compileScript(expr, url, persist, _) =>
-      log.info(s"Request to compile script '$expr' with URL '$url' and persist = $persist")
+      def firstLine = firstNonEmptyLine(expr)
+      log.info(s"Request to compile script that starts '$firstLine' with URL '$url' and persist = $persist")
 
       // If persist is false, then we may get None back in which case we cannot report an ID.
       scriptHost.compileScript(expr, url, persist).map(s => CompileScriptResult(s.map(_.id).orNull, None)).recover {
