@@ -33,8 +33,12 @@
 * Make sure script-based property extraction happens on the correct thread (issue #78)
 * Cache certain functions in Runtime.callFunctionOn. DevTools in Chrome 65.0.3325.146 introduces some
   caching but prior to that autocompletion is slow.
-* Support Runtime.compileScript (and runScript) - compileScript is sometimes used for
-  console evaluation (issue #84)
+* Support Runtime.compileScript (and runScript) (issue #84)
+    * This adds support for script snippets in DevTools.
+    * It also enables code continuation in the console, since DevTools uses
+      compileScript to detect unterminated statements.
+    * Please see the documentation for limitations with compiled scripts.
+* Ignore breakpoints (including `debugger` statements) when evaluating code, to prevent deadlock.
 
 ## 0.6.0 (2017-10-22)
 
