@@ -1,0 +1,7 @@
+compileScript for Java 9 doesn't complete:
+
+00:52:10.941 [NashornDebugger] INFO  c.p.ncd.nashorn.NashornDebuggerHost - Compiling script with requested URL '' and hash ECEA29A7D13A99CD018813F1D2ECC72B and unique ID 47d9e3e59cfb4b81962a30246b293898.
+00:52:10.974 [NashornDebugger] DEBUG c.p.ncd.nashorn.ClassScanner - Scanning 2 classes to detect scripts added during code evaluation.
+00:52:10.974 [NashornDebugger] DEBUG c.p.ncd.nashorn.ScriptFactory - Found a script reference type: jdk.nashorn.internal.scripts.Script$9$NDdkOWUzZTU5Y2ZiNGI4MTk2MmEzMDI0NmIyOTM4OTh8.2034131340
+00:52:10.975 [NashornDebugger] WARN  c.p.ncd.nashorn.ScriptFactory - No line locations available for jdk.nashorn.internal.scripts.Script$9$NDdkOWUzZTU5Y2ZiNGI4MTk2MmEzMDI0NmIyOTM4OTh8.2034131340
+
