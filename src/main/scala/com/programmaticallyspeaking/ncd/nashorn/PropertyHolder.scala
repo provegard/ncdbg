@@ -190,7 +190,7 @@ object ScriptBasedPropertyHolderFactory {
       |                      null); // symbol
       |        }
       |        if (own && onlyOwn) current = null; else {
-      |          current = current.__proto__;
+      |          current = safeGetProto(current);
       |          own = false;
       |        }
       |      }
