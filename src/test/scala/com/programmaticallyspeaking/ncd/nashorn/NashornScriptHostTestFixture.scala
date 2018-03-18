@@ -5,7 +5,7 @@ import com.programmaticallyspeaking.ncd.host.{ExceptionPauseType, ScriptEvent}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
 import com.programmaticallyspeaking.ncd.testing.{SharedInstanceActorTesting, UnitTest}
 import org.scalatest.concurrent.{AbstractPatienceConfiguration, PatienceConfiguration}
-import org.scalatest.exceptions.TestFailedDueToTimeoutException
+import org.scalatest.exceptions.{TestFailedDueToTimeoutException, TestFailedException}
 import org.scalatest.time.{Millis, Seconds, Span}
 import org.slf4s.Logging
 
@@ -142,7 +142,8 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
               t2.addSuppressed(t)
               throw t2
             case Failure(t) =>
-              t.addSuppressed(new RuntimeException("Unexpected: " + reason))
+              if (!t.isInstanceOf[TestFailedException])
+                t.addSuppressed(new RuntimeException("Unexpected: " + reason))
               throw t
           }
         }
