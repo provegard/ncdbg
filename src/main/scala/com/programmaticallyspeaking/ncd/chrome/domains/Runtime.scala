@@ -173,9 +173,9 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case Runtime.getProperties(strObjectId, ownProperties, accessorPropertiesOnly, maybeGeneratePreview) =>
 
-      log.debug(s"Runtime.getProperties: objectId = $strObjectId, ownProperties = $ownProperties, accessorPropertiesOnly = $accessorPropertiesOnly")
-
       val generatePreview = maybeGeneratePreview.getOrElse(false)
+
+      log.debug(s"Runtime.getProperties: objectId = $strObjectId, ownProperties = ${ownProperties.getOrElse(false)}, accessorPropertiesOnly = ${accessorPropertiesOnly.getOrElse(false)}, generatePreview = $generatePreview")
 
       // Deserialize JSON object ID (serialized in RemoteObjectConverter)
       val objectId = ObjectId.fromString(strObjectId)
