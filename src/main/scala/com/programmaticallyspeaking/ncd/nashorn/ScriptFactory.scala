@@ -41,7 +41,7 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
               handleScriptResult(thread, triedScript, refType, locations, callback)
 
             case None =>
-              log.debug(s"Ignoring script type '${refType.name} because it has no line locations.")
+              log.debug(s"Ignoring script type ${refType.name} because it has no line locations.")
               callback(None)
           }
         case Failure(_: AbsentInformationException) =>
@@ -61,7 +61,7 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
     case Success(Right(script)) =>
       callback(Some(identifiedScript(script, locations)))
     case Success(Left(NoScriptReason.EvaluatedCode)) =>
-      log.debug(s"Ignoring script because it contains evaluated code")
+      log.debug(s"Ignoring script ${refType.name} because it contains evaluated code")
       callback(None)
     case Success(Left(NoScriptReason.NoSource)) =>
       val installPhaseType =
@@ -70,11 +70,11 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
         case Some(ciType) =>
           extractSourceLater(maybeThread, refType, ciType, callback)
         case None =>
-          log.warn(s"Cannot get source from ${refType.name()}.")
+          log.warn(s"Cannot get source from ${refType.name}.")
           callback(None)
       }
     case Failure(t) =>
-      log.error(s"Ignoring script type $refType", t)
+      log.error(s"Ignoring script type ${refType.name}", t)
       callback(None)
   }
 
