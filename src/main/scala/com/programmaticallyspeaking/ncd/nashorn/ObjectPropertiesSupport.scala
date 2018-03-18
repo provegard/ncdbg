@@ -68,10 +68,11 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
       if (!includeProto) blacklistParts +:= "__proto__"
       val propBlacklistRegex = blacklistParts.map("(" + _ + ")").mkString("^", "|", "$")
       val factory = scriptBasedPropertyHolderFactory()
-      val holder = factory.create(ref, propBlacklistRegex, isNative = true)
+      val isScopeObject = objectId.id.startsWith(localScopeObjectIdPrefix)
+      val holder = factory.create(ref, propBlacklistRegex, isNative = true, isScopeObject)
       new PropertyHolder {
         override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Seq[(String, ObjectPropertyDescriptor)] = {
-          holder.properties(onlyOwn, onlyAccessors).map(accessorToDataForLocals(objectId))
+          holder.properties(onlyOwn, onlyAccessors)
         }
       }
     }
@@ -83,12 +84,12 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
           scriptObjectHolder(ref)
         case ref: ObjectReference if marshaller.isJSObject(ref) =>
           val factory = scriptBasedPropertyHolderFactory()
-          factory.create(ref, "", isNative = false)
+          factory.create(ref, "", isNative = false, isScopeObject = false)
         case ref: ArrayReference =>
           new ArrayPropertyHolder(ref)
         case obj: ObjectReference if marshaller.isHashtable(obj) =>
           val factory = scriptBasedPropertyHolderFactory()
-          factory.create(obj, "", isNative = false)
+          factory.create(obj, "", isNative = false, isScopeObject = false)
         case obj: ObjectReference =>
           new ArbitraryObjectPropertyHolder(obj)
         case obj: LocalObject =>
@@ -121,28 +122,6 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
         maybeScriptBasedPropertyHolderFactory = Some(f)
         f
     }
-  }
-
-  private def accessorToDataForLocals(objectId: ObjectId)(prop: (String, ObjectPropertyDescriptor)): (String, ObjectPropertyDescriptor) = {
-    if (objectId.id.startsWith(localScopeObjectIdPrefix) && prop._2.descriptorType == PropertyDescriptorType.Accessor) {
-      val desc = prop._2
-      // Yeah, getting to the getter ID is ugly, but it must work since we know we have an accessor property.
-      val getterId = desc.getter.get.asInstanceOf[ComplexNode].objectId
-      evaluateOnStackFrame("$top", "fun.call(owner)", Map("fun" -> getterId, "owner" -> objectId)) match {
-        case Success(vn) =>
-          val newDescriptor = desc.copy(descriptorType = PropertyDescriptorType.Data,
-            getter = None,
-            setter = None,
-            value = Some(vn),
-            isWritable = desc.setter.isDefined
-          )
-          (prop._1, newDescriptor)
-
-        case Failure(t) =>
-          log.error(s"Failed to invoke the getter for ${prop._1} on $objectId", t)
-          prop
-      }
-    } else prop
   }
 
 }

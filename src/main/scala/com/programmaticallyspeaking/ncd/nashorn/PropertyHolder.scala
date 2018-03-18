@@ -143,11 +143,14 @@ object ScriptBasedPropertyHolderFactory {
 
   // Note 3: Nashorn in Java 9 (build 9+181) doesn't support Object.getOwnPropertyDescriptor with a Symbol,
   // which Node does, so currently we get the property value by accessing the symbol property of the object.
+
+  // Note 4: We assume that isScopeObject is true only when isNative is true, because scope objects should be
+  // native objects (as opposed to JSObject objects or Java objects).
   private val extractorFunctionSource =
     """(function () {
       |  var hasJavaTo = typeof Java !== "undefined" && typeof Java.to === "function";
       |  var hasSymbols = !!Object.getOwnPropertySymbols;
-      |  return function __getprops(target, isNative, onlyOwn, onlyAccessors, strPropertyBlacklistRegExp) {
+      |  return function __getprops(target, isNative, onlyOwn, onlyAccessors, isScopeObject, strPropertyBlacklistRegExp) {
       |    var result = [], proto, i, j;
       |    if (isNative) {
       |      var blacklistRegExp = strPropertyBlacklistRegExp ? new RegExp(strPropertyBlacklistRegExp) : null;
@@ -159,16 +162,22 @@ object ScriptBasedPropertyHolderFactory {
       |          var k = names[i];
       |          if (!includeProp(k)) continue;
       |          var desc = Object.getOwnPropertyDescriptor(current, k);
-      |          if (onlyAccessors && !desc.get && !desc.set) continue;
+      |          var getter = desc.get, setter = desc.set, value = desc.value, writable = desc.writable;
+      |          if (isScopeObject && getter) {
+      |            value = current[k];
+      |            writable = !!setter;
+      |            getter = setter = void 0;
+      |          }
+      |          if (onlyAccessors && !getter && !setter) continue;
       |          var f_c = desc.configurable ? "c" : "";
       |          var f_e = desc.enumerable ? "e" : "";
-      |          var f_w = desc.writable ? "w" : "";
+      |          var f_w = writable ? "w" : "";
       |          var f_o = own ? "o" : "";
       |          result.push(k,
       |                      (f_c + f_e + f_w + f_o).toString(), // ConsString -> String when Java.to not available
-      |                      desc.value,
-      |                      desc.get,
-      |                      desc.set,
+      |                      value,
+      |                      getter,
+      |                      setter,
       |                      null); // symbol
       |        }
       |        var symbols = hasSymbols && !onlyAccessors ? Object.getOwnPropertySymbols(current) : [];
@@ -239,7 +248,7 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
 
   private val extractorFunction = codeEval(ScriptBasedPropertyHolderFactory.extractorFunctionSourceMinified)
 
-  def create(obj: ObjectReference, propertyBlacklistRegExp: String, isNative: Boolean)(implicit marshaller: Marshaller): PropertyHolder = {
+  def create(obj: ObjectReference, propertyBlacklistRegExp: String, isNative: Boolean, isScopeObject: Boolean)(implicit marshaller: Marshaller): PropertyHolder = {
     extractorFunction match {
       case err: ThrownExceptionReference =>
         marshaller.throwError(err)
@@ -249,7 +258,7 @@ class ScriptBasedPropertyHolderFactory(codeEval: (String) => Value, executor: (V
           override def extract(target: Value, onlyOwn: Boolean, onlyAccessors: Boolean)(implicit threadReference: ThreadReference): Value = {
             // Pass strings to avoid the need for boxing
             executor(extractorFunction,
-              Seq(target, asString(isNative), asString(onlyOwn), asString(onlyAccessors), propertyBlacklistRegExp),
+              Seq(target, asString(isNative), asString(onlyOwn), asString(onlyAccessors), asString(isScopeObject), propertyBlacklistRegExp),
               threadReference)
           }
         }
@@ -275,11 +284,16 @@ class ScriptBasedPropertyHolder(obj: ObjectReference, extractor: Extractor)(impl
       case (key: StringReference) :: (flags: StringReference) :: value :: getter :: setter :: symbol :: Nil =>
         val keyStr = key.value()
         val flagsStr = flags.value()
-        var vn = toOption(marshaller.marshal(value))
         val gn = toOption(marshaller.marshal(getter))
         val sn = toOption(marshaller.marshal(setter))
-        if (vn.isEmpty && gn.isEmpty && sn.isEmpty)
-          vn = Some(SimpleValue(Undefined))
+
+        // Value can be either undefined or null and we need to differentiate between them. However, if we have
+        // a getter or a setter we don't have a value.
+        val vn = marshaller.marshal(value) match {
+          case x if gn.isDefined || sn.isDefined => None
+          case x => Some(x)
+        }
+
         val descType = if (gn.isDefined || sn.isDefined) PropertyDescriptorType.Accessor else PropertyDescriptorType.Data
         val isConfigurable = flagsStr.contains('c')
         val isEnumerable = flagsStr.contains('e')
