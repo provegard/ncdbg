@@ -7,15 +7,19 @@ import com.programmaticallyspeaking.ncd.host.{Script, ScriptAdded, ScriptEvent, 
 import com.programmaticallyspeaking.ncd.infra.{CompiledScript, Hasher}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
 
-import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 import scala.util.Try
 
 trait CompiledScriptSupport { self: NashornDebuggerHost =>
 
-  private val runnerByScriptId = new TrieMap[String, CompiledScriptRunner]() // must be thread safe
-  private val scriptPromiseByHash = mutable.Map[String, Promise[Option[Script]]]() // doesn't need to be thread safe
+  // Accessed from multiple threads. I used a TrieMap first, but observed that get after update could
+  // fail, so I switched to mutable Map + synchronization.
+  private val runnerByScriptId = mutable.Map[String, CompiledScriptRunner]()
+  private object lock
+
+  // Doesn't need to be thread safe, always accessed from the main host thread.
+  private val scriptPromiseByHash = mutable.Map[String, Promise[Option[Script]]]()
 
   //TODO: Let surviveResume control our maps + scripts in Scripts.
   override def compileScript(script: String, url: String, persist: Boolean): Future[Option[Script]] = {
@@ -52,14 +56,14 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
             // Enter the promise into the script-reuse cache
             scriptPromiseByHash += hash -> promise
 
-            // Listen to InternalScriptAdded since we may have muted ScriptAdded
+            // Listen to InternalScriptAdded since ScriptAdded is suppressed when persist==false
             var subscription: Subscription = null
             subscription = events.subscribe(Observer.from[ScriptEvent] {
               case s: NashornDebuggerHost.InternalScriptAdded if s.script.contents.contains(correlationId) =>
                 subscription.unsubscribe()
 
                 if (persist) {
-                  runnerByScriptId += s.script.id -> runner
+                  lock.synchronized(runnerByScriptId += s.script.id -> runner)
                   promise.success(Some(s.script))
                 } else {
                   promise.success(None)
@@ -80,7 +84,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
   override def runCompiledScript(scriptId: String): Try[ValueNode] = Try {
     pausedData match {
       case Some(pd) =>
-        runnerByScriptId.get(scriptId) match {
+        lock.synchronized(runnerByScriptId.get(scriptId)) match {
           case Some(runner) =>
             log.info(s"Running script with ID $scriptId")
             virtualMachine.withDisabledBreakpoints {
