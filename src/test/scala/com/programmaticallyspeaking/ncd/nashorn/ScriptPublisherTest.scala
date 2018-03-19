@@ -14,6 +14,11 @@ class ScriptPublisherTest extends UnitTest {
 
   def sut(collectTo: ListBuffer[ScriptEvent]) = new ScriptPublisher(new CollectingEmitter(collectTo))
 
+  def isScriptEvent(pf: PartialFunction[ScriptEvent, Boolean]): ScriptEvent => Boolean =
+    e => pf.applyOrElse(e, {
+      _: ScriptEvent => false
+    })
+
   "ScriptPublisher" - {
     "with a script" - {
       val script = testScript("a")
@@ -21,13 +26,21 @@ class ScriptPublisherTest extends UnitTest {
       "publishes it as ScriptAdded to the event emitter" in {
         val target = ListBuffer[ScriptEvent]()
         sut(target).publish(script)
-        target.headOption should be (Some(ScriptAdded(script)))
+        target should contain (ScriptAdded(script))
       }
 
       "publishes it as InternalScriptAdded to the event emitter" in {
         val target = ListBuffer[ScriptEvent]()
         sut(target).publish(script)
         target should contain (InternalScriptAdded(script))
+      }
+
+      "publishes InternalScriptAdded _before_ ScriptAdded to ensure internal functions run before the domain actors" in {
+        val target = ListBuffer[ScriptEvent]()
+        sut(target).publish(script)
+        val idxInternal = target.indexWhere(isScriptEvent { case InternalScriptAdded(s) if s.id == script.id => true })
+        val idxExternal = target.indexWhere(isScriptEvent { case ScriptAdded(s) if s.id == script.id => true })
+        idxInternal should be < (idxExternal)
       }
     }
 

@@ -32,10 +32,12 @@ class ScriptPublisher(eventEmitter: ScriptEventEmitter) extends Logging {
 
       val suppressScriptAdded = script.contents.contains(ScriptPublisher.PreventPublishingMarker)
 
+      // Publish the internal event first to ensure that an observer like compileScript sees
+      // the script before a dmoain actor observer.
+      eventEmitter.emit(NashornDebuggerHost.InternalScriptAdded(script))
       if (!suppressScriptAdded) {
         eventEmitter.emit(ScriptAdded(script))
       }
-      eventEmitter.emit(NashornDebuggerHost.InternalScriptAdded(script))
     }
   }
 
