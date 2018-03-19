@@ -7,6 +7,7 @@ import com.programmaticallyspeaking.ncd.chrome.net.FilePublisher
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.messaging.{Observable, SerializedSubject}
 
+import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
@@ -32,7 +33,7 @@ object FakeScriptHost extends ScriptHost {
   override def getObjectProperties(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean): Seq[(String, types.ObjectPropertyDescriptor)] = Seq.empty
   override def pauseOnExceptions(pauseType: ExceptionPauseType): Unit = notImpl
   
-  private def notImpl[R]: R = throw new UnsupportedOperationException("FakeScriptHost is not complete")
+  private def notImpl: Nothing = throw new UnsupportedOperationException("FakeScriptHost is not complete")
 
   override def restartStackFrame(stackFrameId: String): Seq[StackFrame] = notImpl
 
@@ -42,4 +43,8 @@ object FakeScriptHost extends ScriptHost {
   override def pauseAtNextStatement(): Unit = notImpl
 
   override def setSkipAllPauses(skip: Boolean): Unit = notImpl
+
+  override def compileScript(script: String, url: String, persist: Boolean): Future[Option[Script]] = Future.failed(notImpl)
+
+  override def runCompiledScript(scriptId: String): Try[ValueNode] = notImpl
 }

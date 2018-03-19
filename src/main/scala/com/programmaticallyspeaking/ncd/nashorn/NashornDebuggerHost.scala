@@ -7,7 +7,6 @@ import com.sun.jdi.event._
 import com.sun.jdi.{StackFrame => _, _}
 import org.slf4s.Logging
 
-import scala.collection.mutable.ListBuffer
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 import scala.util.control.NonFatal
@@ -34,7 +33,8 @@ object NashornDebuggerHost {
     JL_Long -> true,
     JL_Double -> true,
     NIO_Global -> true,
-    NIR_JSType -> false // don't stop init
+    NIR_Source -> false, // don't stop init
+    NIR_JSType -> false  // don't stop init
   )
 
   type CodeEvaluator = (String, Map[String, AnyRef]) => ValueNode
@@ -115,10 +115,14 @@ object NashornDebuggerHost {
   sealed trait InternalState
   case object Pause extends InternalState
   case object Unpause extends InternalState
+
+  // Internal version of ScriptAdded which we need since we may suppress ScriptAdded
+  private[nashorn] case class InternalScriptAdded(script: Script) extends ScriptEvent
 }
 
 class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
-    extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport with BreakpointSupport with PauseSupport with PrintSupport {
+    extends NashornScriptHost with Logging with ProfilingSupport with ObjectPropertiesSupport with StepSupport with BreakpointSupport with PauseSupport with PrintSupport
+                              with CompiledScriptSupport {
   import Breakpoints._
   import JDIExtensions._
   import NashornDebuggerHost._
@@ -157,8 +161,8 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     NIO_Global -> enablePrintCapture _
   )
 
-  private val _scriptPublisher = new ScriptPublisher(emitEvent)
-  private val _scanner = new ClassScanner(virtualMachine, _scripts, _scriptFactory, _scriptPublisher, _breakableLocations, _breakpoints, actionPerWantedType)
+  protected val _scriptPublisher = new ScriptPublisher(emitEvent)
+  protected val _scanner = new ClassScanner(virtualMachine, _scripts, _scriptFactory, _scriptPublisher, _breakableLocations, _breakpoints, actionPerWantedType)
 
   protected val typeLookup = new TypeLookup {
     override def apply(name: String): Option[ClassType] = _scanner.typeByName(name)
@@ -457,7 +461,11 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   override def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode] = Try {
     pausedData match {
       case Some(pd) =>
-        _scanner.withClassTracking(_stackFramEval.evaluateOnStackFrame(pd, stackFrameId, expression, namedObjects))
+        _scanner.withClassTracking {
+          virtualMachine.withDisabledBreakpoints {
+            _stackFramEval.evaluateOnStackFrame(pd, stackFrameId, expression, namedObjects)
+          }
+        }
       case None =>
         log.warn(s"Evaluation of '$expression' for stack frame $stackFrameId cannot be done in a non-paused state.")
         throw new IllegalStateException("Code evaluation can only be done in a paused state.")

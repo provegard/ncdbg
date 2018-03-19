@@ -20,6 +20,8 @@ class XVirtualMachine(virtualMachine: VirtualMachine) {
 
   def allClasses(): Seq[ReferenceType] = virtualMachine.allClasses().asScala
 
+  def classByName(name: String): Option[ReferenceType] = virtualMachine.classesByName(name).asScala.headOption
+
   def suspend(): Unit = virtualMachine.suspend()
 
   def resume(): Unit = virtualMachine.resume()
@@ -47,5 +49,13 @@ class XVirtualMachine(virtualMachine: VirtualMachine) {
       if (entireSession) objectReferencesWithDisabledGCForTheEntireSession +:= objRef
       else objectReferencesWithDisabledGC +:= objRef
     case _ =>
+  }
+
+  def withDisabledBreakpoints[R](f: => R): R = {
+    val enabledRequests = eventRequestManager().breakpointRequests().asScala.filter(_.isEnabled)
+    enabledRequests.foreach(_.disable())
+    try f finally {
+      enabledRequests.foreach(_.enable())
+    }
   }
 }

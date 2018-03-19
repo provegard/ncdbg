@@ -3,13 +3,16 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime._
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor, PropertyDescriptorType}
+import com.programmaticallyspeaking.ncd.infra.ScriptURL
+import com.programmaticallyspeaking.ncd.nashorn.ScriptImpl
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 
-import scala.util.{Success, Try}
+import scala.concurrent.Future
+import scala.util.{Failure, Success, Try}
 
 class RuntimeTest extends UnitTest with DomainActorTesting {
 
@@ -50,11 +53,104 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
     }
 
     "compileScript" - {
-      "should return something" in {
+
+      lazy val testCompileScript = {
+        val script = new ScriptImpl(ScriptURL.create(""), Array.empty, "xx")
+        when(currentScriptHost.compileScript(any[String], any[String], any[Boolean])).thenReturn(Future.successful(Some(script)))
+
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
-        val response = requestAndReceiveResponse(runtime, "2", Runtime.compileScript("1+1", "file:///test", false, None))
-        response shouldBe a[Runtime.CompileScriptResult]
+        requestAndReceiveResponse(runtime, "2", Runtime.compileScript("1+1", "file:///test", true, None))
+      }
+
+      lazy val testCompileScriptFail = {
+        val script = new ScriptImpl(ScriptURL.create(""), Array.empty, "xx")
+        when(currentScriptHost.compileScript(any[String], any[String], any[Boolean])).thenReturn(Future.failed(new Exception("oops")))
+
+        val runtime = newActorInstance[Runtime]
+        requestAndReceive(runtime, "1", Domain.enable)
+        requestAndReceiveResponse(runtime, "2", Runtime.compileScript("1+1", "file:///test", true, None))
+      }
+
+      "invokes the corresponding ScriptHost operation" in {
+        testCompileScript
+
+        verify(currentScriptHost).compileScript("1+1", "file:///test", true)
+      }
+
+      "returns the script ID" in {
+        val response = testCompileScript
+
+        response should be (Runtime.CompileScriptResult("xx", None))
+      }
+
+      "reports an error" in {
+        val response = testCompileScriptFail
+
+        response match {
+          case r: Runtime.CompileScriptResult =>
+            r.exceptionDetails.map(_.text) should be (Some("oops"))
+          case other => fail("" + other)
+        }
+      }
+    }
+
+    "runScript" - {
+
+      lazy val testRunScript = {
+        when(currentScriptHost.runCompiledScript(any[String])).thenReturn(Success(SimpleValue("ok")))
+
+        val runtime = newActorInstance[Runtime]
+        requestAndReceive(runtime, "1", Domain.enable)
+        requestAndReceiveResponse(runtime, "2", Runtime.runScript("xx", None, false, false, true))
+      }
+
+      def testRunScriptFails(silent: Boolean) = {
+        when(currentScriptHost.runCompiledScript(any[String])).thenReturn(Failure(new Exception("oops")))
+
+        val runtime = newActorInstance[Runtime]
+        requestAndReceive(runtime, "1", Domain.enable)
+        requestAndReceiveResponse(runtime, "2", Runtime.runScript("xx", None, silent, false, true))
+      }
+
+      lazy val testRunScriptFailsNotSilent = testRunScriptFails(false)
+      lazy val testRunScriptFailsSilent = testRunScriptFails(true)
+
+      "invokes the corresponding ScriptHost operation" in {
+        testRunScript
+
+        verify(currentScriptHost).runCompiledScript("xx")
+      }
+
+      "returns the run result" in {
+        val response = testRunScript
+
+        response should be (Runtime.RunScriptResult(RemoteObject.forString("ok"), None))
+      }
+
+      "returns undefined value in case of error" in {
+        val response = testRunScriptFailsNotSilent
+
+        response match {
+          case r: Runtime.RunScriptResult => r.result should be (RemoteObject.undefinedValue)
+          case other => fail("" + other)
+        }
+      }
+
+      "reports an error" in {
+        val response = testRunScriptFailsNotSilent
+
+        response match {
+          case r: Runtime.RunScriptResult =>
+            r.exceptionDetails.map(_.text) should be (Some("oops"))
+          case other => fail("" + other)
+        }
+      }
+
+      "doesn't report an error in silent mode" in {
+        val response = testRunScriptFailsSilent
+
+        response should be (Runtime.RunScriptResult(RemoteObject.undefinedValue, None))
       }
     }
 
@@ -156,7 +252,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         testGet(Left(new Exception("oops")), arbitraryObjectIdStr, None, None) { response =>
           // Note: Unsure if property descriptors should be empty sequence here or null. The protocol spec doesn't say.
           response should be (GetPropertiesResult(Seq.empty,
-            Some(ExceptionDetails(1, s"""Error: 'oops' for object '$arbitraryObjectIdStr'""", 0, 1, None, None, Runtime.StaticExecutionContextId)),
+            Some(ExceptionDetails(1, s"""Error: 'oops' for object '$arbitraryObjectIdStr'""", 0, 1, None, None, None, Runtime.StaticExecutionContextId)),
             Seq.empty))
         }
       }
@@ -364,7 +460,8 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         val event = testIt
         event.params match {
           case Runtime.ExceptionThrownEventParams(ts, exceptionDetails) =>
-            exceptionDetails should be (ExceptionDetails(1, "oops", 0, 0, Some("http://some/where")))
+            val exc = RemoteObject.forError("Error", "oops", Some("Error: oops"), """{"id":"o1"}""")
+            exceptionDetails should be (ExceptionDetails(1, "oops", 0, 0, Some("http://some/where"), exception = Some(exc)))
           case other => fail("Unexpected: " + other)
         }
       }

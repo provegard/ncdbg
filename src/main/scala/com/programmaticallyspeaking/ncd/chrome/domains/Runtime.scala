@@ -47,7 +47,8 @@ object Runtime {
 
   case class compileScript(expression: String, sourceURL: String, persistScript: Boolean, executionContextId: Option[ExecutionContextId])
 
-  case class runScript(scriptId: ScriptId, executionContextId: Option[ExecutionContextId])
+  case class runScript(scriptId: ScriptId, executionContextId: Option[ExecutionContextId],
+                       silent: Boolean, returnByValue: Boolean, generatePreview: Boolean)
 
   /**
     * Represents a value that from the perspective of Chrome Dev Tools is remote, i.e. resides in the host.
@@ -96,18 +97,21 @@ object Runtime {
   case class ExecutionContextDescription(id: ExecutionContextId, origin: String, name: String, auxData: AnyRef)
 
   case class EvaluateResult(result: RemoteObject, exceptionDetails: Option[ExceptionDetails])
-  case class RunScriptResult(result: RemoteObject)
+  case class RunScriptResult(result: RemoteObject, exceptionDetails: Option[ExceptionDetails])
   case class CallFunctionOnResult(result: RemoteObject, exceptionDetails: Option[ExceptionDetails])
 
-  case class CompileScriptResult(scriptId: ScriptId)
+  case class CompileScriptResult(scriptId: ScriptId, exceptionDetails: Option[ExceptionDetails])
 
-  case class ExceptionDetails(exceptionId: Int, text: String, lineNumber: Int, columnNumber: Int, url: Option[String], scriptId: Option[ScriptId] = None, executionContextId: ExecutionContextId = StaticExecutionContextId)
+  case class ExceptionDetails(exceptionId: Int, text: String, lineNumber: Int, columnNumber: Int, url: Option[String], scriptId: Option[ScriptId] = None,
+                              exception: Option[RemoteObject],
+                              executionContextId: ExecutionContextId = StaticExecutionContextId)
 
   object ExceptionDetails {
-    def fromErrorValue(err: ErrorValue, exceptionId: Int): ExceptionDetails = {
+    def fromErrorValue(err: ErrorValue, exceptionId: Int)(implicit remoteObjectConverter: RemoteObjectConverter): ExceptionDetails = {
       val data = err.data
+      val exception = remoteObjectConverter.toRemoteObject(err)
       // Note that Chrome wants line numbers to be 0-based
-      ExceptionDetails(exceptionId, data.message, data.lineNumberBase1 - 1, data.columnNumberBase0, Some(data.url))
+      ExceptionDetails(exceptionId, data.message, data.lineNumberBase1 - 1, data.columnNumberBase0, Some(data.url), exception = Some(exception))
     }
   }
 
@@ -133,7 +137,6 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
 
   import Runtime._
 
-  private val compiledScriptIdGenerator = new IdGenerator("compscr")
   private implicit val host = scriptHost
 
   private val callFunctionOnCache = mutable.Map[String, Runtime.RemoteObject]()
@@ -170,6 +173,32 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       functionDeclaration.contains("getCompletions")
   }
 
+  // Translate certain Nashorn errors into Chrome errors that DevTools understands.
+  // "Expected ... but found eof" => "SyntaxError: Unexpected end of input"
+  // "Missing close quote"        => "SyntaxError: Unterminated template literal"
+  private def withFakedExceptionMessage(expr: String, exceptionDetails: ExceptionDetails): ExceptionDetails = {
+    def errorObject(name: String, msg: String) =
+      RemoteObject.forError(name, msg, Some(s"$name: $msg"), "fake")
+    if (exceptionDetails.text.contains("but found eof")) {
+      exceptionDetails.copy(exception = Some(errorObject("SyntaxError", "Unexpected end of input")))
+    } else if (exceptionDetails.text.contains("Missing close quote") && expr.contains('`')) {
+      // Java 9, not foolproof though (false positive for e.g. "`foo`+'bar")
+      exceptionDetails.copy(exception = Some(errorObject("SyntaxError", "Unterminated template literal")))
+    }
+    else exceptionDetails
+  }
+
+  private def firstNonEmptyLine(s: String): String = {
+    val lines = s.split("\r?\n")
+    val nonEmptyTail = lines.dropWhile(_.trim == "")
+    nonEmptyTail.headOption match {
+      case Some(line) =>
+        val moreThanOne = nonEmptyTail.length > 1
+        if (moreThanOne) line + "..." else line
+      case None => ""
+    }
+  }
+
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case Runtime.getProperties(strObjectId, ownProperties, accessorPropertiesOnly, maybeGeneratePreview) =>
 
@@ -188,7 +217,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
           GetPropertiesResult(mapProperties(external, generatePreview), None, mapInternalProperties(internal))
 
         case Failure(t) =>
-          val exceptionDetails = ExceptionDetails(1, s"Error: '${t.getMessage}' for object '$strObjectId'", 0, 1, None)
+          val exceptionDetails = ExceptionDetails(1, s"Error: '${t.getMessage}' for object '$strObjectId'", 0, 1, None, exception = None)
           GetPropertiesResult(Seq.empty, Some(exceptionDetails), Seq.empty)
       }
 
@@ -224,14 +253,30 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       }
 
     case Runtime.compileScript(expr, url, persist, _) =>
-      log.debug(s"Request to compile script '$expr' with URL $url and persist = $persist")
-      // In my testing, this method must be implemented for console evaluation to work properly, but Chrome never
-      // calls runScript to evaluate the script. So for now we just return a dummy script ID.
-      CompileScriptResult(compiledScriptIdGenerator.next)
+      def firstLine = firstNonEmptyLine(expr)
+      log.info(s"Request to compile script that starts '$firstLine' with URL '$url' and persist = $persist")
 
-    case Runtime.runScript(scriptId, _) =>
-      log.debug(s"Request to run script with ID $scriptId")
-      RunScriptResult(RemoteObject.forString("TODO: Implement Runtime.runScript"))
+      // If persist is false, then we may get None back in which case we cannot report an ID.
+      scriptHost.compileScript(expr, url, persist).map(s => CompileScriptResult(s.map(_.id).orNull, None)).recover {
+        case t =>
+          val exceptionDetails = exceptionDetailsFromError(t, 1)
+          val returnedDetails = if (persist) exceptionDetails else withFakedExceptionMessage(expr, exceptionDetails)
+          CompileScriptResult(null, Some(returnedDetails))
+      }
+
+    case Runtime.runScript(scriptId, _, silent, returnByValue, generatePreview) =>
+      //TODO: silent "Overrides setPauseOnException state."
+      log.info(s"Request to run script with ID $scriptId")
+      scriptHost.runCompiledScript(scriptId) match {
+        case Success(v) =>
+          val remoteObjectConverter = createRemoteObjectConverter(generatePreview, returnByValue)
+          val ro = remoteObjectConverter.toRemoteObject(v)
+          RunScriptResult(ro, None)
+
+        case Failure(t) =>
+          val exceptionDetails = if (silent) None else Some(exceptionDetailsFromError(t, 1))
+          RunScriptResult(RemoteObject.undefinedValue, exceptionDetails)
+      }
 
     case Runtime.callFunctionOn(strObjectId, functionDeclaration, arguments, maybeSilent, maybeReturnByValue, maybeGeneratePreview) =>
       // TODO: See Debugger.evaluateOnCallFrame - need to have a common impl
@@ -289,6 +334,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
     case UncaughtError(ev) =>
       // TODO: What do use for exceptionId?
+      implicit val remoteObjectConverter = createRemoteObjectConverter(false, false)
       emitEvent("Runtime.exceptionThrown", ExceptionThrownEventParams(Timestamp.now, ExceptionDetails.fromErrorValue(ev, 1)))
 
     case PrintMessage(msg) =>

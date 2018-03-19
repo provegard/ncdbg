@@ -4,6 +4,7 @@ import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
 import com.programmaticallyspeaking.ncd.infra.ScriptURL
 import com.programmaticallyspeaking.ncd.messaging.Observable
 
+import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.util.Try
 
@@ -167,6 +168,27 @@ trait ScriptHost {
     * @return profiling data
     */
   def stopProfiling(): ProfilingData
+
+  /**
+    * Compiles a script with a predefined URL and returns the [[Script]] instance.
+    * The script is NOT evaluated.
+    *
+    * @param script the script code
+    * @param url the URL to use for the script; may be empty
+    * @param persist if false, the resulting script is not emitted as [[ScriptAdded]] and the result can only be
+    *                used for error checking.
+    * @return a [[Future]] resolved with the created [[Script]] instance, or `None` if persist is false and the
+    *         script is error-free
+    */
+  def compileScript(script: String, url: String, persist: Boolean): Future[Option[Script]]
+
+  /**
+    * Runs a script compiled with [[compileScript]].
+    *
+    * @param scriptId the ID of the compiled script to run
+    * @return the result of running the script
+    */
+  def runCompiledScript(scriptId: String): Try[ValueNode]
 }
 
 /**

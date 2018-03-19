@@ -15,4 +15,9 @@ object Lifecycle {
     * Lifecycle is for the entire debugging session.
     */
   case object Session extends EnumVal
+
+  /**
+    * No requested lifecycle, i.e. the target VM can garbage collect at its discretion.
+    */
+  case object None extends EnumVal
 }

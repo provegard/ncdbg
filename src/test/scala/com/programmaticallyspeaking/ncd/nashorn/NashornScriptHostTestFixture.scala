@@ -107,7 +107,9 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
     // If the handle throws, we won't even send the script. The handler returns a Future, and it ought to be safe to
     // invoke it before we pass the script, because it cannot rely on the exact order of things so it must react to
     // events.
-    val f = handler(host)
+    // Flatmap on a started Future to handle an immediate exception from the handler in the same was as a
+    // future failure.
+    val f = Future.successful(()).flatMap(_ => handler(host))
     val inbox = Inbox.create(system)
 
     // To get a much faster failure response, we react on Future failure and stop everything.

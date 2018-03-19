@@ -6,12 +6,13 @@ import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{EvaluatedCo
 import com.sun.jdi.{AbsentInformationException, Location, ReferenceType, ThreadReference}
 import org.slf4s.Logging
 
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 
 case class IdentifiedScript(script: Script)
 
 object ScriptFactory {
-  type IdentifiedScriptCallback = Option[IdentifiedScript] => Unit
+  type IdentifiedScriptCallback = (Option[IdentifiedScript], Seq[Location]) => Unit
 }
 
 class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
@@ -29,29 +30,32 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
       // This is a compiled Nashorn script class.
       log.debug(s"Found a script reference type: ${refType.name}")
 
-      Try(refType.allLineLocations().asScala) match {
-        case Success(locations) =>
-          locations.headOption match {
-            case Some(firstLocation) =>
-              // Note that we no longer try to use the script path for reading the source. If the script contains a
-              // sourceURL annotation, Nashorn will use that at script path, so we might end up reading CoffeeScript
-              // source instead of the real source.
-              val scriptURL = firstLocation.scriptURL
-              val triedScript = Try(scriptFromEval(refType, scriptURL))
-              handleScriptResult(thread, triedScript, refType, locations, callback)
+      scriptUrlAndLocations(refType) match {
+        case Success((scriptURL, locations)) =>
+          // Note that we no longer try to use the script path for reading the source. If the script contains a
+          // sourceURL annotation, Nashorn will use that at script path, so we might end up reading CoffeeScript
+          // source instead of the real source.
+          val triedScript = Try(scriptFromEval(refType, scriptURL))
+          handleScriptResult(thread, triedScript, refType, locations, callback)
 
-            case None =>
-              log.debug(s"Ignoring script type ${refType.name} because it has no line locations.")
-              callback(None)
-          }
-        case Failure(_: AbsentInformationException) =>
-          // Less intimidating log message here compared to below.
-          log.warn(s"No line locations available for ${refType.name}")
-          callback(None)
         case Failure(t) =>
           log.warn(s"Failed to get line locations for ${refType.name}", t)
-          callback(None)
+          callback(None, Seq.empty)
       }
+    }
+  }
+
+  private def scriptUrlAndLocations(referenceType: ReferenceType): Try[(ScriptURL, Seq[Location])] = {
+    Try(referenceType.allLineLocations().asScala).map { locations =>
+      locations.headOption match {
+        case Some(firstLocation) =>
+          (firstLocation.scriptURL, locations.toSeq)
+        case None =>
+          (referenceType.scriptURL, locations)
+      }
+    }.recover {
+      case ex: AbsentInformationException =>
+        (referenceType.scriptURL, Seq.empty[Location])
     }
   }
 
@@ -59,10 +63,10 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
                                  refType: ReferenceType, locations: Seq[Location],
                                  callback: IdentifiedScriptCallback): Unit = result match {
     case Success(Right(script)) =>
-      callback(Some(identifiedScript(script, locations)))
+      callback(Some(identifiedScript(script, locations)), locations)
     case Success(Left(NoScriptReason.EvaluatedCode)) =>
       log.debug(s"Ignoring script ${refType.name} because it contains evaluated code")
-      callback(None)
+      callback(None, Seq.empty)
     case Success(Left(NoScriptReason.NoSource)) =>
       val installPhaseType =
         maybeThread.flatMap(t => t.frames.asScala.view.map(f => f.location().method().declaringType()).find(_.name().endsWith("$InstallPhase")))
@@ -71,11 +75,11 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
           extractSourceLater(maybeThread, refType, ciType, callback)
         case None =>
           log.warn(s"Cannot get source from ${refType.name}.")
-          callback(None)
+          callback(None, Seq.empty)
       }
     case Failure(t) =>
       log.error(s"Ignoring script type ${refType.name}", t)
-      callback(None)
+      callback(None, Seq.empty)
   }
 
   private def extractSourceLater(maybeThread: Option[ThreadReference], refType: ReferenceType, ciType: ReferenceType,
