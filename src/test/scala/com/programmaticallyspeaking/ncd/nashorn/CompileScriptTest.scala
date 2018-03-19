@@ -13,35 +13,6 @@ import scala.util.Try
 
 class CompileScriptTest extends CompileScriptTestFixture {
 
-  def compileAndRun(code: String, url: String): ValueNode = {
-    var result: Try[ValueNode] = null
-    runTest() { host =>
-      host.compileScript(code, url, persist = true).map { s =>
-        result = host.runCompiledScript(s.map(_.id).orNull)
-      }
-    }
-    result.get
-  }
-
-  def compileAndCollectScripts(codesAndUrls: Seq[(String, String)], persist: Boolean = true, collectEmitted: ScriptAdded => Unit = _ => {}): Seq[Script] = {
-    import scala.collection.JavaConverters._
-    val scripts = new LinkedBlockingQueue[Script]()
-    runTest(collectEmitted) { host =>
-      var f = Future.successful(())
-      codesAndUrls.foreach { tup =>
-        val (code, url) = tup
-        f = f.flatMap { _ =>
-          host.compileScript(code, url, persist).map {
-            case Some(s) => scripts.put(s)
-            case None =>
-          }
-        }
-      }
-      f
-    }
-    scripts.asScala.toSeq
-  }
-
   "Compiling a script with a requested URL" - {
     val emitted = ListBuffer[ScriptAdded]()
     lazy val compiledScript = compileAndCollectScripts(Seq(("1+2+3", "file://url")), true, emitted.+=).head
@@ -70,6 +41,13 @@ class CompileScriptTest extends CompileScriptTestFixture {
 
     "doesn't emit the script as ScriptAdded" in {
       emitted.map(_.script.contents).filter(_.contains("1+2+5")) should be ('empty)
+    }
+  }
+
+  "Compiling a script with an error" - {
+    "results in an error" in {
+      val ex = intercept[InvocationFailedException](compileAndCollectScripts(Seq(("'foo", "")), false))
+      ex.getMessage should include ("Missing close quote")
     }
   }
 
@@ -170,4 +148,34 @@ class CompileScriptTestFixture extends UnitTest with NashornScriptHostTestFixtur
     }
     observeAndRunScriptAsync("debugger;", observer)(_ => donePromise.future)
   }
+
+  def compileAndRun(code: String, url: String): ValueNode = {
+    var result: Try[ValueNode] = null
+    runTest() { host =>
+      host.compileScript(code, url, persist = true).map { s =>
+        result = host.runCompiledScript(s.map(_.id).orNull)
+      }
+    }
+    result.get
+  }
+
+  def compileAndCollectScripts(codesAndUrls: Seq[(String, String)], persist: Boolean = true, collectEmitted: ScriptAdded => Unit = _ => {}): Seq[Script] = {
+    import scala.collection.JavaConverters._
+    val scripts = new LinkedBlockingQueue[Script]()
+    runTest(collectEmitted) { host =>
+      var f = Future.successful(())
+      codesAndUrls.foreach { tup =>
+        val (code, url) = tup
+        f = f.flatMap { _ =>
+          host.compileScript(code, url, persist).map {
+            case Some(s) => scripts.put(s)
+            case None =>
+          }
+        }
+      }
+      f
+    }
+    scripts.asScala.toSeq
+  }
+
 }

@@ -5,7 +5,7 @@ import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject}
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{ScriptClassNamePrefix, wantedTypes}
 import com.sun.jdi.event.ClassPrepareEvent
 import com.sun.jdi.request.EventRequest
-import com.sun.jdi.{ClassType, ReferenceType, ThreadReference, VirtualMachine}
+import com.sun.jdi._
 import org.slf4s.Logging
 
 import scala.collection.concurrent.TrieMap
@@ -111,11 +111,11 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
           log.warn(s"Found the $className type but it's a ${other.getClass.getName} rather than a ClassType")
       }
     } else {
-      def callback(maybeIdentifiedScript: Option[IdentifiedScript]) = maybeIdentifiedScript match {
+      def callback(maybeIdentifiedScript: Option[IdentifiedScript], lineLocations: Seq[Location]) = maybeIdentifiedScript match {
         case Some(identifiedScript) =>
           try {
             val script = scripts.suggest(identifiedScript.script)
-            val bls = breakableLocations.add(script, refType.allLineLocations().asScala)
+            val bls = breakableLocations.add(script, lineLocations)
             activeBreakpoints.addBreakableLocations(script, bls)
             scriptPublisher.publish(script)
           } catch {

@@ -63,18 +63,20 @@ object JDIExtensions {
       // package-qualified file name in path form, whereas name is the unqualified file name (e.g.:
       // java\lang\Thread.java vs Thread.java).
       val sourceName = location.sourceName()
-      sourceName match {
-        case "<eval>" =>
-          // For evaluated scripts, convert the type name into something that resembles a file URI.
-          val typeName = location.declaringType().name()
-          "eval:/" + typeNameToUrl(typeName)
-        case CompiledScript(cs) =>
-          cs.url
-        case _ =>
-          sourceName // keep it simple
-      }
+      sourceNameToUrl(location.declaringType(), sourceName)
     }
 
+  }
+
+  private def sourceNameToUrl(refType: ReferenceType, sourceName: String): String = sourceName match {
+    case "<eval>" =>
+      // For evaluated scripts, convert the type name into something that resembles a file URI.
+      val typeName = refType.name()
+      "eval:/" + typeNameToUrl(typeName)
+    case CompiledScript(cs) =>
+      cs.url
+    case _ =>
+      sourceName // keep it simple
   }
 
   private def typeNameToUrl(typeName: String): String = {
@@ -105,6 +107,12 @@ object JDIExtensions {
       // Generated script classes has a field named 'source'
       Option(refType.fieldByName("source"))
         .getOrElse(throw new Exception("Found no 'source' field in " + refType.name()))
+    }
+
+    def scriptURL: ScriptURL = ScriptURL.create(scriptPath)
+    private lazy val scriptPath: String = {
+      val sourceName = referenceType.sourceName()
+      sourceNameToUrl(referenceType, sourceName)
     }
 
     /**
