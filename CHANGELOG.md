@@ -40,6 +40,7 @@
       compileScript to detect unterminated statements.
     * Please see the documentation for limitations with compiled scripts.
 * Ignore breakpoints (including `debugger` statements) when evaluating code, to prevent deadlock.
+* Faster property extraction for scope objects (issues #89)
 
 ## 0.6.0 (2017-10-22)
 
