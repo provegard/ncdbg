@@ -508,6 +508,13 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
         throw new IllegalStateException("Frame restart can only be done in a paused state.")
     }
   }
+
+  override def warnings: Seq[String] = {
+    def bugUrl(id: String) = s"https://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-$id"
+    virtualMachine.version.knownBugs.map { bug =>
+      s"Warning! ${bug.description} (please see ${bugUrl(bug.bugId)})"
+    }
+  }
 }
 
 

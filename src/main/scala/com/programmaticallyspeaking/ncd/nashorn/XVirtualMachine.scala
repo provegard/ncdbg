@@ -58,4 +58,67 @@ class XVirtualMachine(virtualMachine: VirtualMachine) {
       enabledRequests.foreach(_.enable())
     }
   }
+
+  lazy val version: VMVersion = VMVersion.parse(virtualMachine.version())
+}
+
+case class VMVersion(major: Int, minor: Option[Int], patch: Option[Int], build: Option[Int]) {
+  def knownBugs: Seq[KnownBug.EnumVal] = KnownBug.all.filter(_.appearsIn(this))
+}
+
+object VMVersion {
+  /**
+    * Parses a version string obtained from `VirtualMachine.version()`.
+    *
+    * @param version the version string
+    * @return a version structure
+    */
+  def parse(version: String): VMVersion = {
+    val parts = version.split(Array('.', '_'))
+    if (parts.length > 4) throw new IllegalArgumentException("Unexpected version format: " + version)
+    VMVersion(parts.head.toInt,
+      parts.lift(1).map(_.toInt),
+      parts.lift(2).map(_.toInt),
+      parts.lift(3).map(_.toInt))
+  }
+}
+
+object KnownBug {
+  sealed trait EnumVal {
+    def appearsIn(v: VMVersion): Boolean
+    def bugId: String
+    def description: String
+  }
+
+  def all: Seq[EnumVal] = Seq(JDK_8187143_Frame_Restart_Crash, JDK_8179072_Abstract_Method_Error)
+
+  /**
+    * https://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8187143
+    * Bug happens after 1.8.0_144
+    * Doesn't seem to be fixed in Java 9 or 10
+    */
+  case object JDK_8187143_Frame_Restart_Crash extends EnumVal {
+    override def appearsIn(v: VMVersion): Boolean = {
+      v.major >= 9 ||
+        v.major == 1 && v.minor.contains(8) && (v.patch.exists(_ > 0) || v.build.exists(_ > 144))
+    }
+
+    override def bugId: String = "8187143"
+
+    override def description: String = "Remote VM may terminate on frame restart."
+  }
+
+  /**
+    * https://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8179072
+    * Should be fixed in 1.8.0_132
+    */
+  case object JDK_8179072_Abstract_Method_Error extends EnumVal {
+    override def appearsIn(v: VMVersion): Boolean = {
+      v.major == 1 && v.minor.contains(8) && v.patch.contains(0) && v.build.exists(_ < 132)
+    }
+
+    override def bugId: String = "8179072"
+
+    override def description: String = "Remote VM thread may crash on resume after frame restart."
+  }
 }

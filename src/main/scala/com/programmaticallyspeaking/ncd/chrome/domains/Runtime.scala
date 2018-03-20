@@ -226,6 +226,8 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
         ExecutionContextCreatedEventParams(ExecutionContextDescription(StaticExecutionContextId, "top", "top", null)))
 
       consoleLog(s"Greetings from NCDbg version ${BuildProperties.version}!")
+      val warnings = scriptHost.warnings
+      warnings.foreach(consoleWarn)
 
     case Runtime.releaseObjectGroup(grp) =>
       log.debug(s"Request to release object group '$grp'")
@@ -348,5 +350,9 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
   private def consoleLog(msg: String) = {
     emitEvent("Runtime.consoleAPICalled",
       ConsoleAPICalledEventParams("log", Seq(RemoteObject.forString(msg)), StaticExecutionContextId, Timestamp.now))
+  }
+  private def consoleWarn(msg: String) = {
+    emitEvent("Runtime.consoleAPICalled",
+      ConsoleAPICalledEventParams("warning", Seq(RemoteObject.forString(msg)), StaticExecutionContextId, Timestamp.now))
   }
 }

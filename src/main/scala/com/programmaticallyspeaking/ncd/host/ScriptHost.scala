@@ -189,6 +189,13 @@ trait ScriptHost {
     * @return the result of running the script
     */
   def runCompiledScript(scriptId: String): Try[ValueNode]
+
+  /**
+    * Returns a list of warnings to be shown to a new connected DevTools client.
+    *
+//    * @return warning messages
+    */
+  def warnings: Seq[String]
 }
 
 /**
