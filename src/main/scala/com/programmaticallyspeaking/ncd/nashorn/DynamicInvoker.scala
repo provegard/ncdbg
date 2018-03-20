@@ -1,5 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import java.lang.reflect.UndeclaredThrowableException
+
 import com.programmaticallyspeaking.ncd.host.{ComplexNode, ErrorValue, ObjectId, ValueNode}
 import com.sun.jdi._
 

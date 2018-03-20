@@ -11,6 +11,7 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
   val maxStringLength = 10
   val maxProperties = 2
   val maxIndices = 3
+  val maxEntries = 2
 
   def objectIdString(id: String) = ObjectId(id).toString
 

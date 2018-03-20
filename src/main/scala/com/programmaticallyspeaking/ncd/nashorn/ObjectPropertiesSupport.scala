@@ -1,7 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
-import com.programmaticallyspeaking.ncd.host.{ComplexNode, ObjectId, ObjectNode}
+import com.programmaticallyspeaking.ncd.host.{ComplexNode, MapSetEntryNode, ObjectId, ObjectNode}
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost._
 import com.sun.jdi.{ArrayReference, ObjectReference, ThreadReference, Value}
 import org.slf4s.Logging
@@ -29,11 +29,11 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
       // the scope-own properties. Perhaps scopes aren't prototypically related in Chrome?
       val actualOnlyOwn = onlyOwn || isScopeObject
 
-      // We're not interested in the __proto__ property for scope objects.
-      val includeProto = !isScopeObject
-
       mappingRegistry.byId(objectId) match {
         case Some(desc: ObjectDescriptor) =>
+          // Skip proto for Map/Set entry objects and for scope objects.
+          val includeProto = !isScopeObject && !desc.marshalled.isInstanceOf[MapSetEntryNode]
+
           // Get object properties, via a cache.
           val cacheKey = ObjectPropertiesKey(objectId, actualOnlyOwn, onlyAccessors)
           def getProperties = createPropertyHolder(objectId, desc, includeProto).map(_.properties(actualOnlyOwn, onlyAccessors)).getOrElse(Seq.empty)

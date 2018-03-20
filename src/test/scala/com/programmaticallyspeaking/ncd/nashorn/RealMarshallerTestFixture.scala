@@ -1,5 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import java.lang.reflect.UndeclaredThrowableException
+
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.UnitTest
@@ -11,6 +13,11 @@ import scala.util.control.NonFatal
 trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
+
+  private def unpack(t: Throwable): Throwable = t match {
+    case x: UndeclaredThrowableException => unpack(x.getCause)
+    case x => x
+  }
 
   protected def evaluateExpression(expr: String)(tester: (ScriptHost, ValueNode) => Unit): Unit = {
     val wrapped =
@@ -31,7 +38,7 @@ trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixtu
                       getHost.getObjectProperties(obj.objectId, true, false).find(_._1 == "result").flatMap(_._2.value)
                     } catch {
                       case NonFatal(t) =>
-                        resultPromise.tryFailure(t)
+                        resultPromise.tryFailure(unpack(t))
                         None
                     }
 

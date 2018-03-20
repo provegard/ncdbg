@@ -1,16 +1,16 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
 import com.programmaticallyspeaking.ncd.chrome.domains.PreviewGenerator.{Options, PropertyFetcher}
-import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ObjectPreview, PropertyPreview, RemoteObject}
+import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{EntryPreview, ObjectPreview, PropertyPreview, RemoteObject}
 import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
 import com.programmaticallyspeaking.ncd.host._
 
 object PreviewGenerator {
   type PropertyFetcher = (ObjectId) => Seq[(String, ObjectPropertyDescriptor)]
 
-  case class Options(maxStringLength: Int, maxProperties: Int, maxIndices: Int)
+  case class Options(maxStringLength: Int, maxProperties: Int, maxIndices: Int, maxEntries: Int)
 
-  val DefaultOptions = Options(100, 5, 100)
+  val DefaultOptions = Options(100, 5, 100, 5)
 
   private[PreviewGenerator] def abbreviateString(string: String, maxLength: Int, middle: Boolean): String = {
     if (string.length <= maxLength)
@@ -53,14 +53,16 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
   private def generatePreview(obj: RemoteObject): RemoteObject = {
     val preview = obj.emptyPreview
 
-    val objectId = obj.objectId match {
-      case Some(id) => ObjectId.fromString(id)
-      case None => throw new IllegalArgumentException("Missing object ID for " + obj)
+    obj.objectId match {
+      case Some(id) =>
+        val objectId = ObjectId.fromString(id)
+        val props = propertyFetcher(objectId)
+        if (props == null) throw new IllegalStateException(s"No properties returned for object $objectId")
+        obj.copy(preview = Some(appendPropertyDescriptors(obj, preview, props)))
+      case None =>
+        //throw new IllegalArgumentException("Missing object ID for " + obj)
+        obj.copy(preview = Some(preview))
     }
-    val props = propertyFetcher(objectId)
-    if (props == null) throw new IllegalStateException(s"No properties returned for object $objectId")
-    obj.copy(preview = Some(appendPropertyDescriptors(obj, preview, props)))
-    // Internal and map/set/iterator entries not supported
   }
 
   private def generateScopePreview(remoteObject: RemoteObject): RemoteObject = {
@@ -91,8 +93,31 @@ class PreviewGenerator(propertyFetcher: PropertyFetcher, options: Options) {
     preview.properties.size == max
   }
 
+  private def appendEntries(remoteObject: RemoteObject, preview: ObjectPreview, descriptor: ObjectPropertyDescriptor): ObjectPreview = {
+    descriptor.value match {
+      case Some(an: ArrayNode) =>
+        val entryNodes = propertyFetcher(an.objectId).map(_._2.value).collect { case Some(e: MapSetEntryNode) => e }
+        // Preserve existing overflow flag. Pure speculation - I don't know if it matters.
+        val isOverflow = preview.overflow || entryNodes.size > options.maxEntries
+
+        val entryPreview = entryNodes.take(options.maxEntries).map { e =>
+          val keyPreview = e.key.map(converter.toRemoteObject).map(generatePreview).flatMap(_.preview)
+          val valuePreview = generatePreview(converter.toRemoteObject(e.value)).preview.get
+          EntryPreview(keyPreview, valuePreview)
+        }
+
+        preview.copy(entries = entryPreview, overflow = isOverflow)
+
+      case other => throw new IllegalStateException("Unexpected entries value: " + other)
+    }
+  }
+
   private def appendPropertyDescriptor(obj: RemoteObject, preview: ObjectPreview, name: String, descriptor: ObjectPropertyDescriptor): ObjectPreview = {
     if (preview.overflow || !shouldUse(obj, name, descriptor)) return preview
+
+    if (name == "[[Entries]]") {
+      return appendEntries(obj, preview, descriptor)
+    }
 
     // If adding this property would return in overflow, mark the preview and return it otherwise unchanged.
     if (reachedMax(preview, name)) {
