@@ -128,8 +128,9 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   import NashornDebuggerHost._
   import TypeConstants._
 
-  import ExecutionContext.Implicits._
   import scala.collection.JavaConverters._
+
+  implicit protected val executionContext = ExecutionContext.global
 
   protected val stackframeIdGenerator = new IdGenerator("ndsf")
 

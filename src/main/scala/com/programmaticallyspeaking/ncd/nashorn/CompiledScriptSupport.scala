@@ -3,7 +3,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-import com.programmaticallyspeaking.ncd.host.{Script, ScriptAdded, ScriptEvent, ValueNode}
+import com.programmaticallyspeaking.ncd.host.{Script, ScriptEvent, ValueNode}
 import com.programmaticallyspeaking.ncd.infra.{CompiledScript, Hasher}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
 
@@ -51,10 +51,10 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
                """.stripMargin
 
             var runner: CompiledScriptRunner = null
-            val promise = Promise[Option[Script]]
+            val scriptPromise = Promise[Option[Script]]
 
             // Enter the promise into the script-reuse cache
-            scriptPromiseByHash += hash -> promise
+            scriptPromiseByHash += hash -> scriptPromise
 
             // Listen to InternalScriptAdded since ScriptAdded is suppressed when persist==false
             var subscription: Subscription = null
@@ -63,10 +63,9 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
                 subscription.unsubscribe()
 
                 if (persist) {
-                  lock.synchronized(runnerByScriptId += s.script.id -> runner)
-                  promise.success(Some(s.script))
+                  scriptPromise.success(Some(s.script))
                 } else {
-                  promise.success(None)
+                  scriptPromise.success(None)
                 }
             })
 
@@ -74,7 +73,17 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
 
             val lifecycle = if (persist) Lifecycle.Session else Lifecycle.None
             runner = _scanner.withClassTracking(codeEval.compileScript(wrapper, actualUrl, lifecycle))
-            promise.future
+
+            // We may observe InternalScriptAdded before the _scanner.withClassTracking call returns, so
+            // connect runner with script here rather than in the InternalScriptAdded observer.
+            Future.successful(runner).flatMap { theRunner =>
+              scriptPromise.future.map { maybeScript =>
+                maybeScript.foreach { theScript =>
+                  lock.synchronized(runnerByScriptId += theScript.id -> theRunner)
+                }
+                maybeScript
+              }
+            }
         }
       case None =>
         throw new IllegalStateException("Script compilation can only be done in a paused state.")
