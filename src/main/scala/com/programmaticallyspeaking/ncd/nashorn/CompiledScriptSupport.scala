@@ -7,16 +7,15 @@ import com.programmaticallyspeaking.ncd.host.{Script, ScriptEvent, ValueNode}
 import com.programmaticallyspeaking.ncd.infra.{CompiledScript, Hasher}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
 
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 import scala.util.Try
 
 trait CompiledScriptSupport { self: NashornDebuggerHost =>
 
-  // Accessed from multiple threads. I used a TrieMap first, but observed that get after update could
-  // fail, so I switched to mutable Map + synchronization.
-  private val runnerByScriptId = mutable.Map[String, CompiledScriptRunner]()
-  private object lock
+  // Accessed from multiple threads.
+  private val runnerByScriptId = new TrieMap[String, CompiledScriptRunner]()
 
   // Doesn't need to be thread safe, always accessed from the main host thread.
   private val scriptPromiseByHash = mutable.Map[String, Promise[Option[Script]]]()
@@ -79,7 +78,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
             Future.successful(runner).flatMap { theRunner =>
               scriptPromise.future.map { maybeScript =>
                 maybeScript.foreach { theScript =>
-                  lock.synchronized(runnerByScriptId += theScript.id -> theRunner)
+                  runnerByScriptId += theScript.id -> theRunner
                 }
                 maybeScript
               }
@@ -93,7 +92,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
   override def runCompiledScript(scriptId: String): Try[ValueNode] = Try {
     pausedData match {
       case Some(pd) =>
-        lock.synchronized(runnerByScriptId.get(scriptId)) match {
+        runnerByScriptId.get(scriptId) match {
           case Some(runner) =>
             log.info(s"Running script with ID $scriptId")
             virtualMachine.withDisabledBreakpoints {

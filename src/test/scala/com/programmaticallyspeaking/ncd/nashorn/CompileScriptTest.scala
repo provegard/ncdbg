@@ -99,6 +99,12 @@ class CompileScriptTest extends CompileScriptTestFixture {
     "gives the correct result" in {
       result should be (SimpleValue(6))
     }
+
+    "works many times" ignore {
+      for (i <- 1 to 20) {
+        compileAndRun("1+2+3", "") should be (SimpleValue(6))
+      }
+    }
   }
 
   "Running a compiled script with a function" - {
