@@ -124,7 +124,7 @@ abstract class Invoker(referenceTypeData: ReferenceTypeData) {
     override def register(value: Value, valueNode: ComplexNode, extraProperties: Map[String, ValueNode]): Unit = valueNode match {
       case ErrorValue(data, _, _, _) =>
         val exceptionRef = value.asInstanceOf[ObjectReference]
-        extraProperties.get("javaStack") match {
+        extraProperties.get("JavaStack") match {
           case Some(stackWithMessage) =>
             throw new InvocationFailedException("Invocation failed: " + stackWithMessage.asString, exceptionRef)
           case None =>
