@@ -47,16 +47,16 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
   )
 
   def previewWithProperties(propertyPreview: PropertyPreview*) =
-    ObjectPreview("object", "Object", false, None, Seq(propertyPreview: _*))
+    ObjectPreview("object", "Object", false, None, Seq(propertyPreview: _*), Seq.empty)
 
   def arrayPreviewWithProperties(propertyPreview: PropertyPreview*) = {
     val length = propertyPreview.size
-    ObjectPreview("object", s"Array[$length]", false, Some("array"), Seq(propertyPreview: _*))
+    ObjectPreview("object", s"Array[$length]", false, Some("array"), Seq(propertyPreview: _*), Seq.empty)
   }
 
   def typedarrayPreviewWithProperties(arrayType: String, propertyPreview: PropertyPreview*) = {
     val length = propertyPreview.size
-    ObjectPreview("object", s"$arrayType[$length]", false, Some("typedarray"), Seq(propertyPreview: _*))
+    ObjectPreview("object", s"$arrayType[$length]", false, Some("typedarray"), Seq(propertyPreview: _*), Seq.empty)
   }
 
   def getPreview(obj: RemoteObject, props: Seq[(String, ObjectPropertyDescriptor)]): Option[ObjectPreview] = {

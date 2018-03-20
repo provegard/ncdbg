@@ -74,13 +74,16 @@ object Runtime {
         case None if `type` == "undefined" => "undefined"
         case None => ""
       })
-      ObjectPreview(`type`, desc, overflow = false, subtype, Seq.empty)
+      ObjectPreview(`type`, desc, overflow = false, subtype, Seq.empty, Seq.empty)
     }
   }
 
-  case class ObjectPreview(`type`: String, description: String, overflow: Boolean, subtype: Option[String], properties: Seq[PropertyPreview])
+  case class ObjectPreview(`type`: String, description: String, overflow: Boolean, subtype: Option[String], properties: Seq[PropertyPreview], entries: Seq[EntryPreview])
 
   case class PropertyPreview(name: String, `type`: String, value: String, subtype: Option[String]) // subPreview
+
+  // For a Map, both key and value are used. For a Set, only value is used.
+  case class EntryPreview(key: Option[ObjectPreview], value: ObjectPreview)
 
   case class GetPropertiesResult(result: Seq[PropertyDescriptor], exceptionDetails: Option[ExceptionDetails], internalProperties: Seq[InternalPropertyDescriptor])
 
