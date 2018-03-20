@@ -20,7 +20,6 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
   // Doesn't need to be thread safe, always accessed from the main host thread.
   private val scriptPromiseByHash = mutable.Map[String, Promise[Option[Script]]]()
 
-  //TODO: Let surviveResume control our maps + scripts in Scripts.
   override def compileScript(script: String, url: String, persist: Boolean): Future[Option[Script]] = {
     pausedData match {
       case Some(pd) =>
@@ -61,11 +60,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
               case s: NashornDebuggerHost.InternalScriptAdded if s.script.contents.contains(correlationId) =>
                 subscription.unsubscribe()
 
-                if (persist) {
-                  scriptPromise.success(Some(s.script))
-                } else {
-                  scriptPromise.success(None)
-                }
+                scriptPromise.success(if (persist) Some(s.script) else None)
             })
 
             val actualUrl = CompiledScript(correlationId, url).toCodeUrl
