@@ -8,10 +8,17 @@ object ScriptIdentity {
   def fromURLRegex(urlRegex: String): ScriptIdentity = URLRegexBasedScriptIdentity(urlRegex)
   def fromURL(url: ScriptURL): ScriptIdentity = URLBasedScriptIdentity(url.toString)
   def fromId(id: String): ScriptIdentity = IdBasedScriptIdentity(id)
+  def fromHash(hash: String): ScriptIdentity = HashBasedScriptIdentity(hash)
 }
 
 sealed trait ScriptIdentity {
   def matchesScript(s: Script): Boolean
+}
+
+case class HashBasedScriptIdentity(hash: String) extends ScriptIdentity {
+  override def matchesScript(s: Script): Boolean = s.contentsHash() == hash
+
+  override def toString: String = s"script with contents hash $hash"
 }
 
 case class IdBasedScriptIdentity(id: String) extends ScriptIdentity {

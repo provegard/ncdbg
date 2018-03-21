@@ -3,7 +3,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-import com.programmaticallyspeaking.ncd.host.{Script, ScriptEvent, ValueNode}
+import com.programmaticallyspeaking.ncd.host.{Script, ScriptEvent, ScriptIdentity, ValueNode}
 import com.programmaticallyspeaking.ncd.infra.{CompiledScript, Hasher}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
 
@@ -26,7 +26,18 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
         implicit val marshaller = pd.marshaller
 
         // Create a hash that includes both the contents and the URL.
-        val hash = Hasher.md5(s"$script:$url".getBytes(StandardCharsets.UTF_8))
+        val scriptHash = Hasher.md5(script.getBytes(StandardCharsets.UTF_8))
+        val hash = Hasher.md5(s"$scriptHash:$url".getBytes(StandardCharsets.UTF_8))
+
+        findScript(ScriptIdentity.fromHash(scriptHash)) match {
+          case Some(ss) if !persist =>
+            // Syntax check of a script that we already have. Since it's not possible for us to have a script
+            // with a syntax error (Nashorn doesn't allow it as far as I can tell), we simply return None as if
+            // we did the syntax check and it turned out good.
+            log.debug(s"Ignoring syntax check of script ${ss.id}, assuming it's good.")
+            return Future.successful(None)
+          case None =>
+        }
 
         // Did we compile the script already?
         scriptPromiseByHash.get(hash) match {
@@ -48,7 +59,6 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
                  |/*$correlationId$marker*/
                """.stripMargin
 
-            var runner: CompiledScriptRunner = null
             val scriptPromise = Promise[Option[Script]]
 
             // Enter the promise into the script-reuse cache
@@ -66,11 +76,11 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
             val actualUrl = CompiledScript(correlationId, url).toCodeUrl
 
             val lifecycle = if (persist) Lifecycle.Session else Lifecycle.None
-            runner = _scanner.withClassTracking(codeEval.compileScript(wrapper, actualUrl, lifecycle))
+            val tRunner = Try(_scanner.withClassTracking(codeEval.compileScript(wrapper, actualUrl, lifecycle)))
 
             // We may observe InternalScriptAdded before the _scanner.withClassTracking call returns, so
             // connect runner with script here rather than in the InternalScriptAdded observer.
-            Future.successful(runner).flatMap { theRunner =>
+            Future.fromTry(tRunner).flatMap { theRunner =>
               scriptPromise.future.map { maybeScript =>
                 maybeScript.foreach { theScript =>
                   runnerByScriptId += theScript.id -> theRunner
