@@ -129,7 +129,10 @@ class CodeEval(typeLookup: TypeLookup, preventGC: (Value, Lifecycle.EnumVal) => 
         val contextInvoker = Invokers.shared.getDynamic(context.asInstanceOf[ObjectReference])
 
         try {
-          val codeWithMarker = s"""'$EvaluatedCodeMarker';$code"""
+          val codeWithMarker =
+            s"""$code
+               |/*$EvaluatedCodeMarker*/
+             """.stripMargin
           contextInvoker.eval(initialScope, codeWithMarker, callThis, null)
         } catch {
           case ex: InvocationFailedException =>
