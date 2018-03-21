@@ -4,7 +4,8 @@ import java.io.File
 
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
 import com.programmaticallyspeaking.ncd.host.{ErrorValue, ObjectId, ScriptHost}
-import com.programmaticallyspeaking.ncd.infra.ObjectMapping
+import com.programmaticallyspeaking.ncd.infra.{IdGenerator, ObjectMapping}
+import com.programmaticallyspeaking.ncd.nashorn.InvocationFailedException
 import org.slf4s.Logging
 
 import scala.util.{Failure, Success}
@@ -56,18 +57,34 @@ trait ScriptEvaluateSupport { self: Logging =>
   }
 
   protected def exceptionDetailsFromError(t: Throwable, exceptionId: Int): ExceptionDetails = {
+    val exception = exceptionFromMessage(t.getMessage)
     t.getStackTrace.headOption.flatMap { stackTraceElement =>
       try {
         val lineNumberBase1 = stackTraceElement.getLineNumber
         val url = new File(stackTraceElement.getFileName).toURI.toString
-        Some(Runtime.ExceptionDetails(exceptionId, t.getMessage, lineNumberBase1 - 1, 0, Some(url), exception = None))
+        Some(Runtime.ExceptionDetails(exceptionId, t.getMessage, lineNumberBase1 - 1, 0, Some(url), exception = Some(exception)))
       } catch {
         case e: Exception =>
           log.error(s"Error when trying to construct ExceptionDetails from $stackTraceElement", e)
           None
       }
-    }.getOrElse(Runtime.ExceptionDetails(exceptionId, t.getMessage, 0, 0, None, exception = None))
+    }.getOrElse(Runtime.ExceptionDetails(exceptionId, t.getMessage, 0, 0, None, exception = Some(exception)))
   }
+
+  private def exceptionFromMessage(msg: String): RemoteObject = {
+    val colonIdx = msg.indexOf(':')
+    val typeAndMsg = if (colonIdx >= 0) {
+      val parts = msg.splitAt(colonIdx)
+      (parts._1, parts._2.substring(1).trim)
+    } else {
+      ("Error", msg)
+    }
+    errorObject(typeAndMsg._1, typeAndMsg._2)
+  }
+
+  private val errorObjectIdGen = new IdGenerator("_errobj")
+  protected def errorObject(name: String, msg: String): RemoteObject =
+    RemoteObject.forError(name, msg, Some(s"$name: $msg"), errorObjectIdGen.next)
 
   case class EvaluationResult(result: RemoteObject, exceptionDetails: Option[ExceptionDetails] = None)
 }

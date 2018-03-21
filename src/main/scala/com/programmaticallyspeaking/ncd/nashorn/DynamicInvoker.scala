@@ -126,9 +126,9 @@ abstract class Invoker(referenceTypeData: ReferenceTypeData) {
         val exceptionRef = value.asInstanceOf[ObjectReference]
         extraProperties.get("JavaStack") match {
           case Some(stackWithMessage) =>
-            throw new InvocationFailedException("Invocation failed: " + stackWithMessage.asString, exceptionRef)
+            throw new InvocationFailedException(stackWithMessage.asString, exceptionRef)
           case None =>
-            throw new InvocationFailedException(s"Invocation failed: ${data.name}: ${data.message}", exceptionRef)
+            throw new InvocationFailedException(s"${data.name}: ${data.message}", exceptionRef)
         }
       case _ => // noop
     }

@@ -179,16 +179,15 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
   // Translate certain Nashorn errors into Chrome errors that DevTools understands.
   // "Expected ... but found eof" => "SyntaxError: Unexpected end of input"
   // "Missing close quote"        => "SyntaxError: Unterminated template literal"
-  private def withFakedExceptionMessage(expr: String, exceptionDetails: ExceptionDetails): ExceptionDetails = {
-    def errorObject(name: String, msg: String) =
-      RemoteObject.forError(name, msg, Some(s"$name: $msg"), "fake")
+  private def translateExceptionForDevTools(expr: String, exceptionDetails: ExceptionDetails): ExceptionDetails = {
     if (exceptionDetails.text.contains("but found eof")) {
       exceptionDetails.copy(exception = Some(errorObject("SyntaxError", "Unexpected end of input")))
     } else if (exceptionDetails.text.contains("Missing close quote") && expr.contains('`')) {
       // Java 9, not foolproof though (false positive for e.g. "`foo`+'bar")
       exceptionDetails.copy(exception = Some(errorObject("SyntaxError", "Unterminated template literal")))
+    } else {
+      exceptionDetails
     }
-    else exceptionDetails
   }
 
   private def firstNonEmptyLine(s: String): String = {
@@ -265,7 +264,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       scriptHost.compileScript(expr, url, persist).map(s => CompileScriptResult(s.map(_.id).orNull, None)).recover {
         case t =>
           val exceptionDetails = exceptionDetailsFromError(t, 1)
-          val returnedDetails = if (persist) exceptionDetails else withFakedExceptionMessage(expr, exceptionDetails)
+          val returnedDetails = translateExceptionForDevTools(expr, exceptionDetails)
           CompileScriptResult(null, Some(returnedDetails))
       }
 

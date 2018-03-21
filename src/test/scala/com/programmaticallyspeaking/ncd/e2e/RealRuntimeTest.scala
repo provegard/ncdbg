@@ -99,6 +99,20 @@ class RealRuntimeTest extends RealRuntimeTestFixture with TableDrivenPropertyChe
           }
         })
       }
+
+      Seq(false, true).foreach { persist =>
+        s"has exceptionDetails with 'exception' for any error (with persist=$persist)" in {
+          waitForDebugger(_ => {
+            val result = sendRequest(RuntimeD.compileScript(".set", "", persist, None))
+            result match {
+              case r: RuntimeD.CompileScriptResult =>
+                val Some(desc) = r.exceptionDetails.flatMap(_.exception).flatMap(_.description)
+                desc should include("Expected an operand")
+              case other => fail("unexpected: " + other)
+            }
+          })
+        }
+      }
     }
   }
 }
