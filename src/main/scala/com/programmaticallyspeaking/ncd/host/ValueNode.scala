@@ -107,6 +107,15 @@ case class ScopeObject(scopeType: ScopeType, name: String, objectId: ObjectId) e
 
 case class ObjectNode(className: String, objectId: ObjectId) extends ComplexNode
 
+/**
+  * Represents an entry for a Map or a Set. In the case of a Set, there is no key.
+  *
+  * @param key the key for a Map, `None` for a Set
+  * @param value the entry value
+  * @param objectId entry object ID
+  */
+case class MapSetEntryNode(key: Option[ValueNode], value: ValueNode, objectId: ObjectId) extends ComplexNode
+
 case class DateNode(stringRepresentation: String, objectId: ObjectId) extends ComplexNode
 
 /**

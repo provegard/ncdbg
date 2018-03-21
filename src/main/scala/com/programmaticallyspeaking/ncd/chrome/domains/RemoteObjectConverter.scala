@@ -38,8 +38,14 @@ class ByReferenceRemoteObjectConverter extends RemoteObjectConverter {
     case SimpleValue(n: Number) => RemoteObject.forNumber(n.doubleValue())
     case SimpleValue(Undefined) => RemoteObject.undefinedValue
     case SimpleValue(x) => throw new IllegalArgumentException("Unknown simple value: " + x)
+    case MapSetEntryNode(Some(key), entryValue, objectId) =>
+      val keyDesc = describe(toRemoteObject(key))
+      val valueDesc = describe(toRemoteObject(entryValue))
+      RemoteObject.forMapEntry(keyDesc, valueDesc, objectId.toString)
     case other => throw new IllegalArgumentException("Unhandled value: " + other)
   }
+
+  private def describe(ro: RemoteObject) = ro.value.map(_.toString).orElse(ro.description).getOrElse("")
 }
 
 class ByValueRemoteObjectConverter(objectInteraction: ObjectInteraction) extends ByReferenceRemoteObjectConverter {

@@ -30,6 +30,9 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
   def put(key: AnyRef, value: AnyRef, isStrict: Boolean): Unit =
     invoker.applyDynamic(putObjectObjectBoolSignature)(key, value, isStrict)
 
+  def get(key: AnyRef): ValueNode =
+    invoker.applyDynamic(getObjectSignature)(key)
+
   def getString(key: AnyRef): String = invoker.applyDynamic(getObjectSignature)(key).asString
   def getInt(key: AnyRef, defaultValue: Int): Int = invoker.applyDynamic(getObjectSignature)(key).asNumber(defaultValue).intValue()
 

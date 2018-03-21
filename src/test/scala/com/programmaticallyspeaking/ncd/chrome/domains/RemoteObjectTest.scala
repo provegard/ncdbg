@@ -1,5 +1,6 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
+import com.programmaticallyspeaking.ncd.host.{MapSetEntryNode, SimpleValue}
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 
 class RemoteObjectTest extends UnitTest {
@@ -246,6 +247,13 @@ class RemoteObjectTest extends UnitTest {
         val stringRep = "/.*/"
         val ro = RemoteObject.forRegExp(stringRep, "an-id")
         ro should be (RemoteObject("object", Some("regexp"), Some("RegExp"), Some(stringRep), None, None, Some("an-id")))
+      }
+    }
+
+    "forMapEntry" - {
+      "creates an object when there is a key" in {
+        val ro = RemoteObject.forMapEntry("a", "b", "an-id")
+        ro should be (RemoteObject("object", Some("internal#entry"), Some("Object"), Some("a => b"), None, None, Some("an-id")))
       }
     }
   }

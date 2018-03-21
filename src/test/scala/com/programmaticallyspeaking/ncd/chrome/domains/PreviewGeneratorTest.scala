@@ -11,15 +11,22 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
   val maxStringLength = 10
   val maxProperties = 2
   val maxIndices = 3
+  val maxEntries = 2
 
   def objectIdString(id: String) = ObjectId(id).toString
 
+  def toValueNode(value: Any) = value match {
+    case node: ValueNode => node
+    case other if other == null => EmptyNode
+    case other => SimpleValue(other)
+  }
+
   def valueDescriptor(value: Any, isOwn: Boolean = true) =
-    ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, true, isOwn = isOwn, Some(value match {
-      case node: ValueNode => node
-      case other if other == null => EmptyNode
-      case other => SimpleValue(other)
-    }), None, None)
+    ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, true, isOwn = isOwn, Some(toValueNode(value)), None, None)
+
+  def entryDescriptor(key: Option[Any], value: Any, objectId: ObjectId) =
+    ObjectPropertyDescriptor(PropertyDescriptorType.Data, false, true, true, true,
+      Some(MapSetEntryNode(key.map(toValueNode), toValueNode(value), objectId)), None, None)
 
   val aFunction = FunctionNode("fun", "function fun() {}", ObjectId("fun"))
 
@@ -43,7 +50,13 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
     objectIdString("objwithfunctionvalue") -> Map("foo" -> valueDescriptor(aFunction)),
     objectIdString("withcomputedprop") -> Map("foo" -> accessorDescriptor),
     objectIdString("objwithdate") -> Map("foo" -> valueDescriptor(DateNode("Sat Jan 28 2017 13:25:02 GMT+0100 (W. Europe Standard Time)", ObjectId("date")))),
-    objectIdString("objwithregexp") -> Map("foo" -> valueDescriptor(RegExpNode("/[a-z0-9A-Z_]{3,5}.*[a-z]$/", ObjectId("regexp"))))
+    objectIdString("objwithregexp") -> Map("foo" -> valueDescriptor(RegExpNode("/[a-z0-9A-Z_]{3,5}.*[a-z]$/", ObjectId("regexp")))),
+    objectIdString("objwithentries") -> Map("[[Entries]]" -> valueDescriptor(ArrayNode(3, None, ObjectId("hasentries")))),
+    objectIdString("hasentries") -> Map("length" -> valueDescriptor(3),
+      "0" -> entryDescriptor(Some("a"), "b", ObjectId("entry1")),
+      "1" -> entryDescriptor(Some("b"), "c", ObjectId("entry2")),
+      "2" -> entryDescriptor(Some("c"), "d", ObjectId("entry3"))
+    )
   )
 
   def previewWithProperties(propertyPreview: PropertyPreview*) =
@@ -60,7 +73,13 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
   }
 
   def getPreview(obj: RemoteObject, props: Seq[(String, ObjectPropertyDescriptor)]): Option[ObjectPreview] = {
-    val generator = new PreviewGenerator(_ => props, PreviewGenerator.Options(maxStringLength, maxProperties, maxIndices))
+    def propertyFetcher(o: ObjectId): Seq[(String, ObjectPropertyDescriptor)] = {
+      if (obj.objectId.contains(o.toString)) props
+      else {
+        propertyMaps.getOrElse(o.toString, throw new IllegalArgumentException("Unknown object: " + o)).toSeq
+      }
+    }
+    val generator = new PreviewGenerator(propertyFetcher, PreviewGenerator.Options(maxStringLength, maxProperties, maxIndices, maxEntries))
     generator.withPreviewForObject(obj).preview
   }
 
@@ -145,6 +164,37 @@ class PreviewGeneratorTest extends UnitTest with TableDrivenPropertyChecks {
       desc in {
         val props = obj.objectId.flatMap(propertyMaps.get).map(_.toSeq).getOrElse(Seq.empty)
         getPreview(obj, props) should be (expected)
+      }
+    }
+
+    "for an object with entries" - {
+      lazy val preview = {
+        val objId = objectIdString("objwithentries")
+        val obj = forObject(objId)
+        val props = propertyMaps.getOrElse(objId, Map.empty).toSeq
+        getPreview(obj, props)
+      }
+
+      "adds entries with limit" in {
+        val p = preview
+        p.map(_.entries.size) should be (Some(2))
+      }
+
+      "indicates overflow" in {
+        val p = preview
+        p.map(_.overflow) should be (Some(true))
+      }
+
+      "has an entry key preview" in {
+        val p = preview
+        val keyPreview = p.flatMap(_.entries.headOption).flatMap(_.key)
+        keyPreview should be (Some(ObjectPreview("string", "a", false, None, Seq.empty, Seq.empty)))
+      }
+
+      "has an entry value preview" in {
+        val p = preview
+        val keyPreview = p.flatMap(_.entries.headOption).map(_.value)
+        keyPreview should be (Some(ObjectPreview("string", "b", false, None, Seq.empty, Seq.empty)))
       }
     }
 

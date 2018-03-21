@@ -134,6 +134,8 @@ trait Extractor {
 }
 
 object ScriptBasedPropertyHolderFactory {
+  val MapSetEntryClassName = "d55664934043422fbce34ab05d32edaa"
+
   // Note 1: Java.to doesn't wrap a ScriptObject in a ScriptObjectMirror when the target type is an array type. This is
   // good, since we don't want the __proto__ value to be mirrored, since that has negative consequences:
   // - a new mirror is created each time, which breaks the object properties cache
@@ -147,14 +149,18 @@ object ScriptBasedPropertyHolderFactory {
   // Note 4: We assume that isScopeObject is true only when isNative is true, because scope objects should be
   // native objects (as opposed to JSObject objects or Java objects).
   private val extractorFunctionSource =
-    """(function () {
+   s"""function $MapSetEntryClassName() {}
+      |(function () {
       |  var hasJavaTo = typeof Java !== "undefined" && typeof Java.to === "function";
       |  var hasSymbols = !!Object.getOwnPropertySymbols;
+      |  var hasMap = typeof Map === "function";
+      |  var HIDDEN_PROP_PREFIX = "${NashornDebuggerHost.hiddenPrefix}";
+      |  var MapSetEntryClass = hasMap ? new $MapSetEntryClassName() : null;
       |  return function __getprops(target, isNative, onlyOwn, onlyAccessors, isScopeObject, strPropertyBlacklistRegExp) {
       |    var result = [], proto, i, j;
       |    if (isNative) {
       |      var blacklistRegExp = strPropertyBlacklistRegExp ? new RegExp(strPropertyBlacklistRegExp) : null;
-      |      var includeProp = function (prop) { return (blacklistRegExp ? !prop.match(blacklistRegExp) : true) };
+      |      var includeProp = function (prop, obj) { return (blacklistRegExp ? !prop.match(blacklistRegExp) : true); };
       |      var current = target, own = true;
       |      while (current) {
       |        var names = Object.getOwnPropertyNames(current);
@@ -190,13 +196,34 @@ object ScriptBasedPropertyHolderFactory {
       |                      null,
       |                      sym);
       |        }
-      |        if (own && !onlyAccessors && includeProp("__proto__") && (proto = safeGetProto(current))) {
-      |          result.push("__proto__",
-      |                      "wo",  // writable + own (not sure about configurable and enumerable)
-      |                      proto,
-      |                      null,
-      |                      null,
-      |                      null); // symbol
+      |        if (own && !onlyAccessors) {
+      |          if (includeProp("__proto__", current) && (proto = safeGetProto(current))) {
+      |            result.push("__proto__",
+      |                        "wo",  // writable + own (not sure about configurable and enumerable)
+      |                        proto,
+      |                        null,
+      |                        null,
+      |                        null); // symbol
+      |          }
+      |          if (hasMap && current instanceof Map) {
+      |            // No Array.from in Nashorn, so get entries manually
+      |            var iterator = current.entries(), it, entries = [];
+      |            while (!(it = iterator.next()).done) {
+      |              var entry = { key: it.value[0], value: it.value[1] };
+      |              entry.__proto__ = MapSetEntryClass;
+      |              entries.push(entry);
+      |            }
+      |
+      |            // Attach the entries array to the current object to prevent it from being GCed.
+      |            current[HIDDEN_PROP_PREFIX + "entries"] = entries;
+      |
+      |            result.push("[[Entries]]",
+      |                        "o",
+      |                        entries,
+      |                        null,
+      |                        null,
+      |                        null);
+      |          }
       |        }
       |        if (own && onlyOwn) current = null; else {
       |          current = safeGetProto(current);

@@ -187,7 +187,15 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
         case "WeakMap" => toMap(mirror, weak = true)
         case "Set" => toSet(mirror, weak = false)
         case "WeakSet" => toSet(mirror, weak = true)
-        case _ => toObject(mirror)
+        case _ =>
+          mirror.typeOfObject() match {
+            case ScriptBasedPropertyHolderFactory.MapSetEntryClassName =>
+              val key = mirror.get("key")
+              val entryValue = mirror.get("value")
+              MapSetEntryNode(Some(key), entryValue, objectId(value))
+            case _ =>
+              toObject(mirror)
+          }
       }
     }
   }

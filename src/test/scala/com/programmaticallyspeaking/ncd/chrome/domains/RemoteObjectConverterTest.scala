@@ -133,6 +133,12 @@ class RemoteObjectConverterTest extends UnitTest with Inside {
       val set = SetNode(-1, weak = true, ObjectId("set-1"))
       converter.toRemoteObject(set).subtype should be (Some("weakset"))
     }
+
+    "convert MapSetEntryNode for a Map to an entry object" in {
+      val vn = MapSetEntryNode(Some(SimpleValue("a")), SimpleValue("b"), ObjectId("e-1"))
+      val ro = converter.toRemoteObject(vn)
+      ro should be (RemoteObject("object", Some("internal#entry"), Some("Object"), Some("a => b"), None, None, Some("""{"id":"e-1"}""")))
+    }
   }
 
   def valueConverter[A <: ValueNode](objectId: ObjectId, data: Map[String, A]) = RemoteObjectConverter.byValue(new MapBasedObjectInteraction(Map(objectId -> data)))
