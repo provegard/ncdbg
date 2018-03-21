@@ -42,6 +42,10 @@
 * Ignore breakpoints (including `debugger` statements) when evaluating code, to prevent deadlock.
 * Faster property extraction for scope objects (issues #89)
 * List known bugs as console warnings when DevTools connects.
+* Fix evaluation of erroneous code in `Runtime.compileScript` - always include an exception value
+  (issue #90)
+* Show entries for `Map` and `Set` as an internal [[Entries]] property (issue #75)
+* Show proper preview for `Map` and `Set` (issue #74)
 
 ## 0.6.0 (2017-10-22)
 
