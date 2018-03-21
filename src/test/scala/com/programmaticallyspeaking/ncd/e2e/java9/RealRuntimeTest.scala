@@ -32,10 +32,10 @@ class RealRuntimeTest extends RealRuntimeTestFixture with TableDrivenPropertyChe
         }
       }
 
-      "doesn't translate a non-template literal related quite error" in {
+      "doesn't translate a non-template literal related quote error" in {
         compileWithError("'foo") { r =>
-          val desc = r.exceptionDetails.flatMap(_.exception).flatMap(_.description)
-          desc should be (None)
+          val desc = r.exceptionDetails.flatMap(_.exception).flatMap(_.description).getOrElse("")
+          desc should not include ("Unterminated template literal")
         }
       }
     }
