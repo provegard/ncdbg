@@ -113,6 +113,9 @@ trait RemoteObjectBuilder {
 
   def forMapEntry(keyRepresentation: String, valueRepresentation: String, objectId: String) =
     RemoteObject("object", Some("internal#entry"), Some("Object"), Some(s"$keyRepresentation => $valueRepresentation"), None, None, Some(objectId))
+
+  def forSetEntry(valueRepresentation: String, objectId: String) =
+    RemoteObject("object", Some("internal#entry"), Some("Object"), Some(valueRepresentation), None, None, Some(objectId))
   //        { type: 'object',
   //                subtype: 'regexp',
   //                className: 'RegExp',

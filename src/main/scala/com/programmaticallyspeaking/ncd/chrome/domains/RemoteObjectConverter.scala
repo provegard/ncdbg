@@ -39,9 +39,14 @@ class ByReferenceRemoteObjectConverter extends RemoteObjectConverter {
     case SimpleValue(Undefined) => RemoteObject.undefinedValue
     case SimpleValue(x) => throw new IllegalArgumentException("Unknown simple value: " + x)
     case MapSetEntryNode(Some(key), entryValue, objectId) =>
+      // Map case
       val keyDesc = describe(toRemoteObject(key))
       val valueDesc = describe(toRemoteObject(entryValue))
       RemoteObject.forMapEntry(keyDesc, valueDesc, objectId.toString)
+    case MapSetEntryNode(None, entryValue, objectId) =>
+      // Set case
+      val valueDesc = describe(toRemoteObject(entryValue))
+      RemoteObject.forSetEntry(valueDesc, objectId.toString)
     case other => throw new IllegalArgumentException("Unhandled value: " + other)
   }
 

@@ -256,5 +256,12 @@ class RemoteObjectTest extends UnitTest {
         ro should be (RemoteObject("object", Some("internal#entry"), Some("Object"), Some("a => b"), None, None, Some("an-id")))
       }
     }
+
+    "forSetEntry" - {
+      "creates an object when there is a key" in {
+        val ro = RemoteObject.forSetEntry("a", "an-id")
+        ro should be (RemoteObject("object", Some("internal#entry"), Some("Object"), Some("a"), None, None, Some("an-id")))
+      }
+    }
   }
 }

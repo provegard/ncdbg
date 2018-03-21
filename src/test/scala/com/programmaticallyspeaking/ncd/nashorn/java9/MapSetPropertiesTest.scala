@@ -35,6 +35,29 @@ class MapSetPropertiesTest extends RealMarshallerTestFixture with RunningJava9 w
     }
   }
 
+  "A Set" - {
+    val expr = "new Set(['a', 'b'])"
+    lazy val propsOfSet = ownPropsOf(expr)
+
+    "should have an internal property for the entries" in {
+      val propNames = propsOfSet.toMap.keys
+      propNames should contain ("[[Entries]]")
+    }
+
+    "has entries marshalled as a special MapSetEntryNode type" in {
+      testEntries(expr) { entriesProps =>
+        val item0VN = entriesProps.find(_._1 == "0").flatMap(_._2.value)
+        item0VN match {
+          case Some(obj: MapSetEntryNode) =>
+            obj.key should be (None)
+            obj.value should be (SimpleValue("a"))
+
+          case other => fail("Unexpected [[Entries]] item type: " + other)
+        }
+      }
+    }
+  }
+
   "A Map" - {
     val expr = "new Map([[1,2], [2,3]])"
     lazy val propsOfMap = ownPropsOf(expr)

@@ -134,7 +134,7 @@ trait Extractor {
 }
 
 object ScriptBasedPropertyHolderFactory {
-  val MapSetEntryClassName = "d55664934043422fbce34ab05d32edaa"
+  val mapSetEntryMarker = NashornDebuggerHost.hiddenPrefix + "d55664934043422fbce34ab05d32edaa"
 
   // Note 1: Java.to doesn't wrap a ScriptObject in a ScriptObjectMirror when the target type is an array type. This is
   // good, since we don't want the __proto__ value to be mirrored, since that has negative consequences:
@@ -149,13 +149,12 @@ object ScriptBasedPropertyHolderFactory {
   // Note 4: We assume that isScopeObject is true only when isNative is true, because scope objects should be
   // native objects (as opposed to JSObject objects or Java objects).
   private val extractorFunctionSource =
-   s"""function $MapSetEntryClassName() {}
-      |(function () {
+   s"""(function () {
       |  var hasJavaTo = typeof Java !== "undefined" && typeof Java.to === "function";
       |  var hasSymbols = !!Object.getOwnPropertySymbols;
       |  var hasMap = typeof Map === "function";
+      |  var hasSet = typeof Set === "function";
       |  var HIDDEN_PROP_PREFIX = "${NashornDebuggerHost.hiddenPrefix}";
-      |  var MapSetEntryClass = hasMap ? new $MapSetEntryClassName() : null;
       |  return function __getprops(target, isNative, onlyOwn, onlyAccessors, isScopeObject, strPropertyBlacklistRegExp) {
       |    var result = [], proto, i, j;
       |    if (isNative) {
@@ -205,12 +204,11 @@ object ScriptBasedPropertyHolderFactory {
       |                        null,
       |                        null); // symbol
       |          }
-      |          if (hasMap && current instanceof Map) {
+      |          if ((hasMap && current instanceof Map) || (hasSet && current instanceof Set)) {
       |            // No Array.from in Nashorn, so get entries manually
       |            var iterator = current.entries(), it, entries = [];
       |            while (!(it = iterator.next()).done) {
-      |              var entry = { key: it.value[0], value: it.value[1] };
-      |              entry.__proto__ = MapSetEntryClass;
+      |              var entry = { key: it.value[0], value: it.value[1], "$mapSetEntryMarker": current.constructor.name };
       |              entries.push(entry);
       |            }
       |
