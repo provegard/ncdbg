@@ -1,16 +1,19 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
 import java.lang.reflect.UndeclaredThrowableException
+import java.util.concurrent.TimeoutException
 
 import akka.actor.{Actor, ActorRef}
 import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
+import com.programmaticallyspeaking.ncd.infra.DelayedFuture
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
 import org.slf4s.Logging
 
 import scala.collection.mutable.ListBuffer
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
+import scala.concurrent.duration._
 
 object DomainActor {
   private[DomainActor] case class ProcessingResult(req: Messages.Request, result: Any)
@@ -28,6 +31,8 @@ abstract class DomainActor(scriptHost: ScriptHost) extends Actor with Logging {
   private var isProcessingRequest = false
   private val eventsToEmit = ListBuffer[EmittableEvent]()
   private var lastRequestor: ActorRef = _
+
+  protected val futureWaitTimeout = 15.seconds
 
   val name = getClass.getSimpleName // assume the implementing class is named after the domain
 
@@ -134,7 +139,15 @@ abstract class DomainActor(scriptHost: ScriptHost) extends Actor with Logging {
 
 
   private def handleProcessingResult(req: Messages.Request, theSender: ActorRef, t: Try[Any]): Unit = t match {
-    case Success(f: Future[_]) => f.onComplete(handleProcessingResult(req, theSender, _: Try[Any]))
+    case Success(f: Future[_]) =>
+      val handlePromise = Promise[Any]()
+      handlePromise.future.onComplete(handleProcessingResult(req, theSender, _: Try[Any]))
+
+      // Complete the handle promise with our Future, but start a timer that fails the promise if we
+      // don't get a result soon enough.
+      f.onComplete(handlePromise.tryComplete)
+      DelayedFuture(futureWaitTimeout)(handlePromise.tryFailure(new TimeoutException(s"Timed out waiting for a response to request ${req.id}")))
+
     case Success(result) => self.tell(ProcessingResult(req, result), theSender)
     case Failure(ex: UndeclaredThrowableException) => self.tell(ProcessingError(req, ex.getUndeclaredThrowable), theSender)
     case Failure(ex) => self.tell(ProcessingError(req, ex), theSender)
