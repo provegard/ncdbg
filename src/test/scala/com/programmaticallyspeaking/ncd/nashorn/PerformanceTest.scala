@@ -3,14 +3,12 @@ package com.programmaticallyspeaking.ncd.nashorn
 import java.util.concurrent.TimeUnit
 
 import com.programmaticallyspeaking.ncd.host._
-import jdk.nashorn.api.scripting.AbstractJSObject
-import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 // Manual perf tests
-class PerformanceTest extends BreakpointTestFixture with TableDrivenPropertyChecks {
+class PerformanceTest extends PerformanceTestFixture {
 
   "extracting properties from a scope object" - {
 
@@ -53,9 +51,11 @@ class PerformanceTest extends BreakpointTestFixture with TableDrivenPropertyChec
       measureNamedObject(s"createInstance('${classOf[BigObjectLikeJSObject].getName}')")
     }
   }
+}
 
+trait PerformanceTestFixture extends BreakpointTestFixture {
 
-  private def measureNamedObject(expr: String): Unit = {
+  def measureNamedObject(expr: String): Unit = {
     val name = "obj"
     val script =
       s"""
@@ -85,14 +85,14 @@ class PerformanceTest extends BreakpointTestFixture with TableDrivenPropertyChec
 
   }
 
-  private def measure(count: Int)(op: => Unit): Unit = {
+  def measure(count: Int)(op: => Unit): Unit = {
     val before = System.nanoTime()
     for (i <- 1 to count) { op }
     val elapsed = (System.nanoTime() - before).nanos
     println("ops per second = " + (count / elapsed.toUnit(TimeUnit.SECONDS)))
   }
 
-  private def objectId(vn: ValueNode): ObjectId = vn match {
+  def objectId(vn: ValueNode): ObjectId = vn match {
     case c: ComplexNode => c.objectId
     case _ => throw new IllegalArgumentException(s"$vn doesn't have an object ID")
   }
