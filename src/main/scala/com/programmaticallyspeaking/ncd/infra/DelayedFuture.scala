@@ -30,7 +30,7 @@ object DelayedFuture {
           resultPromise.completeWith(Future(fun))
       }
     }, delay.toMillis, TimeUnit.MILLISECONDS)
-    def cancel() = isCancelled = true
-    new CancellableFuture[R](resultPromise.future, cancel)
+    def cancel(): Unit = isCancelled = true
+    new CancellableFuture[R](resultPromise.future, () => cancel())
   }
 }

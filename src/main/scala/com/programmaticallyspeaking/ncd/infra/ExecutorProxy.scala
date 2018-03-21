@@ -40,7 +40,7 @@ class ExecutorProxy(executor: Executor) {
 
       executor.execute(() => {
         Try(method.invoke(instance, args: _*)) match {
-          case Success(f: Future[AnyRef]) => resultPromise.completeWith(f)
+          case Success(f: Future[_]) => resultPromise.completeWith(f.asInstanceOf[Future[AnyRef]])
           case Success(result) => resultPromise.success(result)
           case Failure(t: InvocationTargetException) => resultPromise.failure(t.getCause)
           case Failure(t) => resultPromise.failure(t)

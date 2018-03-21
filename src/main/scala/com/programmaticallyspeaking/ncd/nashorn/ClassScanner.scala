@@ -175,7 +175,7 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
       if (elapsed >= SCAN_CLASSES_BATCH_LEN) {
         // Yield to other operations, to prevent blocking so long that a timeout occurs in ExecutorProxy.
         log.debug(s"Scanned $count classes in ${elapsed.toMillis} ms, temporarily yielding to other operations.")
-        subject.onNext(ScanMoreLater(scanOutstandingClasses))
+        subject.onNext(ScanMoreLater(() => scanOutstandingClasses()))
         done = true
       }
     }
