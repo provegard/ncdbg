@@ -4,7 +4,7 @@ import java.io.File
 
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
 import com.programmaticallyspeaking.ncd.host.{ErrorValue, ObjectId, ScriptHost}
-import com.programmaticallyspeaking.ncd.infra.{IdGenerator, ObjectMapping}
+import com.programmaticallyspeaking.ncd.infra.{ErrorUtils, IdGenerator, ObjectMapping}
 import com.programmaticallyspeaking.ncd.nashorn.InvocationFailedException
 import org.slf4s.Logging
 
@@ -56,7 +56,8 @@ trait ScriptEvaluateSupport { self: Logging =>
 
   protected def exceptionDetailsFromError(t: Throwable, exceptionId: Int): ExceptionDetails = {
     val exception = exceptionFromMessage(t.getMessage)
-    val details = Runtime.ExceptionDetails(exceptionId, t.getMessage, 0, 0, None, exception = Some(exception))
+    // text=Uncaught to mimic Chrome
+    val details = Runtime.ExceptionDetails(exceptionId, "Uncaught", 0, 0, None, exception = Some(exception))
 
     t.getStackTrace.headOption.flatMap { stackTraceElement =>
       try {
@@ -73,14 +74,8 @@ trait ScriptEvaluateSupport { self: Logging =>
   }
 
   private def exceptionFromMessage(msg: String): RemoteObject = {
-    val colonIdx = msg.indexOf(':')
-    val typeAndMsg = if (colonIdx >= 0) {
-      val parts = msg.splitAt(colonIdx)
-      (parts._1, parts._2.substring(1).trim)
-    } else {
-      ("Error", msg)
-    }
-    errorObject(typeAndMsg._1, typeAndMsg._2)
+    val typeAndMessage = ErrorUtils.parseMessage(msg)
+    errorObject(typeAndMessage.typ, typeAndMessage.message)
   }
 
   private val errorObjectIdGen = new IdGenerator("_errobj")

@@ -488,35 +488,40 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         testEvalHandling(ErrorValue(exData, isThrown = true, ObjectId("$$err"), None)) { resp =>
           // Remember, Chrome line numbers are 0-based, so 10 => 9
           val exc = RemoteObject.forError("Error", "oops", Some("Error: oops"), """{"id":"$$err"}""")
-          resp.exceptionDetails should be (Some(ExceptionDetails(1, "oops", 9, 1, Some("<eval>"), None, Some(exc), Runtime.StaticExecutionContextId)))
+          resp.exceptionDetails should be (Some(ExceptionDetails(1, "Uncaught", 9, 1, Some("<eval>"), None, Some(exc), Runtime.StaticExecutionContextId)))
         }
+      }
+
+      lazy val failException = {
+        var ret: EvaluateOnCallFrameResult = null
+        testEvalHandling(DebuggerTestHelper.fail("fail")) { resp =>
+          ret = resp
+        }
+        ret
       }
 
       "should return a response with value 'undefined' when ScriptHost evaluation actually throws" in {
-        testEvalHandling(throw new Exception("fail")) { resp =>
-          resp.result should be (RemoteObject.undefinedValue)
-        }
+        failException.result should be (RemoteObject.undefinedValue)
       }
 
-      "should convert an actual exception into exception details with message" in {
-        testEvalHandling(throw new Exception("fail")) { resp =>
-          resp.exceptionDetails.map(_.text) should be (Some("fail"))
-        }
+      "should convert an actual exception into exception details with text 'Uncaught' to mimic Chrome" in {
+        failException.exceptionDetails.map(_.text) should be (Some("Uncaught"))
+      }
+
+      "should convert an actual exception into exception details with description" in {
+        val desc = failException.exceptionDetails.flatMap(_.exception.flatMap(_.description)).getOrElse("")
+        desc should include ("fail")
       }
 
       "should convert an actual exception into exception details with line number" in {
-        testEvalHandling(DebuggerTestHelper.fail("fail")) { resp =>
-          // DebuggerTestHelper throws at line 6, which converted to base 0 becomes 5
-          resp.exceptionDetails.map(_.lineNumber) should be (Some(5))
-        }
+        // DebuggerTestHelper throws at line 6, which converted to base 0 becomes 5
+        failException.exceptionDetails.map(_.lineNumber) should be (Some(5))
       }
 
       "should convert an actual exception into exception details with URL" in {
-        testEvalHandling(DebuggerTestHelper.fail("fail")) { resp =>
-          inside(resp.exceptionDetails.flatMap(_.url)) {
-            case Some(url) =>
-              url should fullyMatch regex ("file:/.*DebuggerTestHelper\\.scala".r)
-          }
+        inside(failException.exceptionDetails.flatMap(_.url)) {
+          case Some(url) =>
+            url should fullyMatch regex ("file:/.*DebuggerTestHelper\\.scala".r)
         }
       }
 

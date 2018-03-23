@@ -114,7 +114,8 @@ object Runtime {
       val data = err.data
       val exception = remoteObjectConverter.toRemoteObject(err)
       // Note that Chrome wants line numbers to be 0-based
-      ExceptionDetails(exceptionId, data.message, data.lineNumberBase1 - 1, data.columnNumberBase0, Some(data.url), exception = Some(exception))
+      // text=Uncaught mimics Chrome
+      ExceptionDetails(exceptionId, "Uncaught", data.lineNumberBase1 - 1, data.columnNumberBase0, Some(data.url), exception = Some(exception))
     }
   }
 
@@ -180,9 +181,10 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
   // "Expected ... but found eof" => "SyntaxError: Unexpected end of input"
   // "Missing close quote"        => "SyntaxError: Unterminated template literal"
   private def translateExceptionForDevTools(expr: String, exceptionDetails: ExceptionDetails): ExceptionDetails = {
-    if (exceptionDetails.text.contains("but found eof")) {
+    val desc = exceptionDetails.exception.flatMap(_.description).getOrElse("")
+    if (desc.contains("but found eof")) {
       exceptionDetails.copy(exception = Some(errorObject("SyntaxError", "Unexpected end of input")))
-    } else if (exceptionDetails.text.contains("Missing close quote") && expr.contains('`')) {
+    } else if (desc.contains("Missing close quote") && expr.contains('`')) {
       // Java 9, not foolproof though (false positive for e.g. "`foo`+'bar")
       exceptionDetails.copy(exception = Some(errorObject("SyntaxError", "Unterminated template literal")))
     } else {

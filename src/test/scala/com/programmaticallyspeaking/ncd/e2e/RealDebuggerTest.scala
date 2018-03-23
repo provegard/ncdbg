@@ -587,5 +587,44 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
         }
       })
     }
+
+    "evaluation that leads to reference error" - {
+      lazy val result = {
+        var res: EvaluateOnCallFrameResult = null
+        val script = "debugger;"
+        runScript(script)(callFrames => {
+          withHead(callFrames) { cf =>
+            val ret = sendRequest(Debugger evaluateOnCallFrame(cf.callFrameId, "foobar", None, None))
+            ret match {
+              case e: EvaluateOnCallFrameResult => res = e
+              case other => fail("Unexpected: " + other)
+            }
+          }
+        })
+        res
+      }
+      def resultException: RemoteObject = {
+        val opt = for {
+          details <- result.exceptionDetails
+          exception <- details.exception
+        } yield exception
+        opt match {
+          case Some(ex) => ex
+          case None => fail("No exception data")
+        }
+      }
+
+      "has text 'Uncaught' to mimic Chrome" in {
+        result.exceptionDetails.map(_.text) should be (Some("Uncaught"))
+      }
+
+      "has class name 'ReferenceError'" in {
+        resultException.className should be (Some("ReferenceError"))
+      }
+
+      "has description which is name + message" in {
+        resultException.description.getOrElse("") should startWith ("ReferenceError: \"foobar\" is not defined")
+      }
+    }
   }
 }

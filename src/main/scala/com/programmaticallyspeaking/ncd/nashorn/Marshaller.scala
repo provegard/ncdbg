@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, Undefined}
-import com.programmaticallyspeaking.ncd.infra.IdGenerator
+import com.programmaticallyspeaking.ncd.infra.{ErrorUtils, IdGenerator}
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.ObjectDescriptor
 import com.programmaticallyspeaking.ncd.nashorn.mirrors._
 import com.sun.jdi._
@@ -437,8 +437,18 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
       }
 
       // Use full Exception type name, e.g. java.lang.IllegalArgumentException
-      val name = objRef.referenceType().name()
-      val message = mirror.message
+      var name = objRef.referenceType().name()
+      var message = mirror.message
+
+      // Special handling of ECMAException as we want to get to the actual JS error type.
+      if (name == TypeConstants.NIR_ECMAException) {
+        // Message is on the form Type: Message
+        // Let name be the first part and message the second
+        val typeAndMessage = ErrorUtils.parseMessage(message)
+        name = typeAndMessage.typ
+        message = typeAndMessage.message
+      }
+
       val fullStack = s"$name: $message" + Option(data._2).map(st => "\n" + st).getOrElse("")
 
       // Note the slight implementation inconsistency wrt `fullStack`: we don't prefix with name and message outside

@@ -89,11 +89,12 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
 
         response match {
           case r: Runtime.CompileScriptResult =>
-            r.exceptionDetails.map(_.text) should be (Some("oops"))
+            exceptionDetailsDescription(r.exceptionDetails) should include ("oops")
           case other => fail("" + other)
         }
       }
     }
+
 
     "runScript" - {
 
@@ -141,7 +142,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
 
         response match {
           case r: Runtime.RunScriptResult =>
-            r.exceptionDetails.map(_.text) should be (Some("oops"))
+            exceptionDetailsDescription(r.exceptionDetails) should include ("oops")
           case other => fail("" + other)
         }
       }
@@ -446,7 +447,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         event.params match {
           case Runtime.ExceptionThrownEventParams(ts, exceptionDetails) =>
             val exc = RemoteObject.forError("Error", "oops", Some("Error: oops"), """{"id":"o1"}""")
-            exceptionDetails should be (ExceptionDetails(1, "oops", 0, 0, Some("http://some/where"), exception = Some(exc)))
+            exceptionDetails should be (ExceptionDetails(1, "Uncaught", 0, 0, Some("http://some/where"), exception = Some(exc)))
           case other => fail("Unexpected: " + other)
         }
       }
@@ -479,6 +480,9 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
 
     }
   }
+
+  private def exceptionDetailsDescription(ed: Option[ExceptionDetails]): String =
+    ed.flatMap(_.exception.flatMap(_.description)).getOrElse("")
 
   private def withConsoleEventParams(event: Messages.Event)(f: ConsoleAPICalledEventParams => Unit): Unit = {
     event.params match {
