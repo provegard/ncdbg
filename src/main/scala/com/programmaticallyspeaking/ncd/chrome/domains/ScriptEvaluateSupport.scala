@@ -56,17 +56,20 @@ trait ScriptEvaluateSupport { self: Logging =>
 
   protected def exceptionDetailsFromError(t: Throwable, exceptionId: Int): ExceptionDetails = {
     val exception = exceptionFromMessage(t.getMessage)
+    val details = Runtime.ExceptionDetails(exceptionId, t.getMessage, 0, 0, None, exception = Some(exception))
+
     t.getStackTrace.headOption.flatMap { stackTraceElement =>
       try {
         val lineNumberBase1 = stackTraceElement.getLineNumber
         val url = new File(stackTraceElement.getFileName).toURI.toString
-        Some(Runtime.ExceptionDetails(exceptionId, t.getMessage, lineNumberBase1 - 1, 0, Some(url), exception = Some(exception)))
+
+        Some(details.copy(lineNumber = lineNumberBase1 - 1, url = Some(url)))
       } catch {
         case e: Exception =>
           log.error(s"Error when trying to construct ExceptionDetails from $stackTraceElement", e)
           None
       }
-    }.getOrElse(Runtime.ExceptionDetails(exceptionId, t.getMessage, 0, 0, None, exception = Some(exception)))
+    }.getOrElse(details)
   }
 
   private def exceptionFromMessage(msg: String): RemoteObject = {
