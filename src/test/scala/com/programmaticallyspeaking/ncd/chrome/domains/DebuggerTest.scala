@@ -492,13 +492,6 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         }
       }
 
-      "should return a response with _only_ value 'undefined' when ScriptHost evaluation returns a Throwable-based error value but silent mode is requested" in {
-        val exData = ExceptionData("Error", "oops", 10, 1, "<eval>", None)
-        testEvalHandling(ErrorValue(exData, isThrown = true, ObjectId("$$err"), None), Some(true)) { resp =>
-          resp should be (Debugger.EvaluateOnCallFrameResult(RemoteObject.undefinedValue, None))
-        }
-      }
-
       "should return a response with value 'undefined' when ScriptHost evaluation actually throws" in {
         testEvalHandling(throw new Exception("fail")) { resp =>
           resp.result should be (RemoteObject.undefinedValue)
