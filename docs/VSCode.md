@@ -47,10 +47,27 @@ that reads something like "Configure or Fix 'launch.json'". After clicking, in t
 dropdown that appears, select Chrome. The _launch.json_ file should now open and you can modify
 the added Chrome entry to look like the entry above.
 
+## Activate the node-debug extension
+
+The node-debug extension isn't activated by default, which means that the _Loaded Scripts_ pane
+will be empty. As a workaround, before starting debugging, activate the extension manually. One
+way to do this is to press Ctrl-Shift-P (Shift-&#x2318;-P on a Mac) to open the Command Palette.
+Type "Debug" and select "Debug: Open Loaded Script". The result ought to be a message saying
+something like "No loaded scripts available," but the extension should now be active.
+
+Please see [this issue](https://github.com/Microsoft/vscode-node-debug/issues/175) for more
+information.
+
 ## Start debugging
 
 Finally switch to the Debug view, select "Attach to NCDbg" in the configurations dropdown and
 click the green run arrow. If the configuration in _launch.json_ is correct, you should now be
 connected.
 
-All loaded scripts should appear under the "Loaded Scripts" pane.
+All loaded scripts should appear under the _Loaded Scripts_ pane. If they don't, please
+disconnect and retry extension activation as outlined in the previous section.
+
+## Notes
+
+File URIs (file:///...) are not rendered properly in the _Loaded Scripts_ pane. This appears
+to be a bug in the node-debug extension, please see [this issue](https://github.com/Microsoft/vscode-node-debug/issues/159).
