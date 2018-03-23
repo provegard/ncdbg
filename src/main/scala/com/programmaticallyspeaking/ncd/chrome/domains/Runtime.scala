@@ -135,6 +135,12 @@ object Runtime {
   case class CallFrame(functionName: String, scriptId: ScriptId, url: String, lineNumber: Int, columnNumber: Option[Int])
 
   case class ExceptionThrownEventParams(timestamp: Timestamp, exceptionDetails: ExceptionDetails)
+
+  /**
+    * Console message sent if we detect Visual Studio Code. The Loaded Scripts pane may be empty, and it seems
+    * like a good idea to inform the user that there is a workaround.
+    */
+  val LoadedScriptsInfo = "It looks like you are using Visual Studio Code. If the Loaded Scripts pane is empty, please read: https://github.com/provegard/ncdbg/blob/master/docs/VSCode.md#activate-the-node-debug-extension"
 }
 
 class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport with TranspileSupport {
@@ -239,6 +245,10 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
     case Runtime.evaluate(expr, _, _, maybeReturnByValue, maybeGeneratePreview) =>
       if (expr == "navigator.userAgent") {
         // VS Code (Debugger for Chrome) wants to know
+
+        // Inform about the Loaded scripts problem
+        consoleLog(LoadedScriptsInfo)
+
         EvaluateResult(RemoteObject.forString(s"NCDbg version ${BuildProperties.version}"), None)
       } else {
         // Arbitrary script execution may affect objects involved in the callFunctionOn cache, so clear.
