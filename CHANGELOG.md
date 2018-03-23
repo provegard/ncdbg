@@ -46,6 +46,8 @@
   (issue #90)
 * Show entries for `Map` and `Set` as an internal [[Entries]] property (issue #75)
 * Show proper preview for `Map` and `Set` (issue #74)
+* Ignore the silent flag passed to many methods, since we ignore exceptions anyway while in
+  paused mode. Always return exception details back to the caller (issue #87)
 
 ## 0.6.0 (2017-10-22)
 
