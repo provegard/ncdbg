@@ -34,7 +34,7 @@ object Debugger extends Logging {
     */
   case class setSkipAllPauses(skip: Boolean)
 
-  case class evaluateOnCallFrame(callFrameId: CallFrameId, expression: String, silent: Option[Boolean], returnByValue: Option[Boolean], generatePreview: Option[Boolean])
+  case class evaluateOnCallFrame(callFrameId: CallFrameId, expression: String, returnByValue: Option[Boolean], generatePreview: Option[Boolean])
 
   case class EvaluateOnCallFrameResult(result: Runtime.RemoteObject, exceptionDetails: Option[Runtime.ExceptionDetails] = None)
 
@@ -255,18 +255,14 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
       }
       scriptHost.pauseOnExceptions(pauseType)
 
-    case Debugger.evaluateOnCallFrame(callFrameId, expression, maybeSilent, maybeReturnByValue, maybeGeneratePreview) =>
-      // TODO: "In silent mode exceptions thrown during evaluation are not reported and do not pause execution. Overrides setPauseOnException state."
-      // TODO: -- Obey setPauseOnException - and what about pausing??
-
+    case Debugger.evaluateOnCallFrame(callFrameId, expression, maybeReturnByValue, maybeGeneratePreview) =>
       // The protocol says this is optional, but doesn't specify the default value. False is just a guess.
       val actualReturnByValue = maybeReturnByValue.getOrElse(false)
-      val reportException = !maybeSilent.getOrElse(false)
       val generatePreview = maybeGeneratePreview.getOrElse(false)
 
       implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
 
-      val evalResult = evaluate(scriptHost, callFrameId, expression, Map.empty, reportException)
+      val evalResult = evaluate(scriptHost, callFrameId, expression, Map.empty)
       EvaluateOnCallFrameResult(evalResult.result, evalResult.exceptionDetails)
 
     case Debugger.setBreakpointsActive(active) =>
@@ -300,7 +296,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
 
           val expression = s"$scopeName['$varName']=$newValueName;"
 
-          evaluate(scriptHost, callFrameId, expression, namedObjects.result, reportException = true).exceptionDetails match {
+          evaluate(scriptHost, callFrameId, expression, namedObjects.result).exceptionDetails match {
             case Some(details) =>
               val location = details.url.map(u => " (at " + Seq(u, details.lineNumber.toString, details.columnNumber.toString).mkString(":") + ")").getOrElse("")
               throw new IllegalArgumentException(details.text + location)

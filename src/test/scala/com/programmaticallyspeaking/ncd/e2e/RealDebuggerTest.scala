@@ -181,7 +181,7 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
       }, callFrames => {
         withHead(callFrames) { cf =>
           // In function f2, y should have value 42
-          val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "y", None, None, None))
+          val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "y", None, None))
           r2 should be(EvaluateOnCallFrameResult(RemoteObject.forNumber(42)))
         }
       })
@@ -227,7 +227,7 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
           // if changed in stack frame 1/3: 100 = 4
           // if changed in stack frame 2/3: 010 = 2
           // if changed in stack frame 3/3: 001 = 1
-          sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "result", None, None, None)) match {
+          sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "result", None, None)) match {
             case EvaluateOnCallFrameResult(RemoteObject("number", _, _, _, Some(numValue), _, _, _), _) =>
               // Java 9 returns an int, Java 9 a double
               numValue.toString.toDouble should be (1.0d)
@@ -268,7 +268,7 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
           }
         }, callFrames => {
           withHead(callFrames) { cf =>
-            val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "this.result", None, None, None))
+            val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "this.result", None, None))
             r2 should be(EvaluateOnCallFrameResult(expected))
           }
         })
@@ -291,7 +291,7 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
         }
       }, callFrames => {
         withHead(callFrames) { cf =>
-          val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "i", None, None, None))
+          val r2 = sendRequest(Debugger.evaluateOnCallFrame(cf.callFrameId, "i", None, None))
           // We may/will get i==1.0, so the assert becomes somewhat complicated.
           r2 match {
             case EvaluateOnCallFrameResult(ro, None) =>

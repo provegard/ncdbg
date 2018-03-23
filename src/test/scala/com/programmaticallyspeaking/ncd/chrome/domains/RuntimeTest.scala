@@ -102,19 +102,18 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
 
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
-        requestAndReceiveResponse(runtime, "2", Runtime.runScript("xx", None, false, false, true))
+        requestAndReceiveResponse(runtime, "2", Runtime.runScript("xx", None, false, true))
       }
 
-      def testRunScriptFails(silent: Boolean) = {
+      def testRunScriptFails() = {
         when(currentScriptHost.runCompiledScript(any[String])).thenReturn(Failure(new Exception("oops")))
 
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
-        requestAndReceiveResponse(runtime, "2", Runtime.runScript("xx", None, silent, false, true))
+        requestAndReceiveResponse(runtime, "2", Runtime.runScript("xx", None, false, true))
       }
 
-      lazy val testRunScriptFailsNotSilent = testRunScriptFails(false)
-      lazy val testRunScriptFailsSilent = testRunScriptFails(true)
+      lazy val testRunScriptFailsResult = testRunScriptFails()
 
       "invokes the corresponding ScriptHost operation" in {
         testRunScript
@@ -129,7 +128,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       }
 
       "returns undefined value in case of error" in {
-        val response = testRunScriptFailsNotSilent
+        val response = testRunScriptFailsResult
 
         response match {
           case r: Runtime.RunScriptResult => r.result should be (RemoteObject.undefinedValue)
@@ -138,19 +137,13 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       }
 
       "reports an error" in {
-        val response = testRunScriptFailsNotSilent
+        val response = testRunScriptFailsResult
 
         response match {
           case r: Runtime.RunScriptResult =>
             r.exceptionDetails.map(_.text) should be (Some("oops"))
           case other => fail("" + other)
         }
-      }
-
-      "doesn't report an error in silent mode" in {
-        val response = testRunScriptFailsSilent
-
-        response should be (Runtime.RunScriptResult(RemoteObject.undefinedValue, None))
       }
     }
 
@@ -269,7 +262,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
     }
 
     "callFunctionOn" - {
-      def testCall(obj: ComplexNode, targetId: String, args: Seq[CallArgument], retVal: Option[Try[ValueNode]] = None, silent: Option[Boolean] = None,
+      def testCall(obj: ComplexNode, targetId: String, args: Seq[CallArgument], retVal: Option[Try[ValueNode]] = None,
                    returnByValue: Option[Boolean] = None, generatePreview: Option[Boolean] = None, functionDecl: Option[String] = None)(fun: (Any) => Unit) = {
 
         val actualRetVal = retVal.getOrElse(Success(SimpleValue("ok")))
@@ -278,7 +271,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
         val functionDeclaration = functionDecl.getOrElse("function(){}")
-        val response = requestAndReceiveResponse(runtime, "2", Runtime.callFunctionOn(targetId, functionDeclaration, args, silent,
+        val response = requestAndReceiveResponse(runtime, "2", Runtime.callFunctionOn(targetId, functionDeclaration, args,
           returnByValue, generatePreview))
         fun(response)
       }
@@ -387,7 +380,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
     }
 
     "evaluate" - {
-      def testEvaluate(expr: String, retVal: Option[Try[ValueNode]] = None, silent: Option[Boolean] = None,
+      def testEvaluate(expr: String, retVal: Option[Try[ValueNode]] = None,
                    returnByValue: Option[Boolean] = None, generatePreview: Option[Boolean] = None)(fun: (Any) => Unit) = {
 
         val actualRetVal = retVal.getOrElse(Success(SimpleValue("ok")))
@@ -395,7 +388,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
 
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
-        val response = requestAndReceiveResponse(runtime, "2", Runtime.evaluate(expr, None, None, silent, returnByValue,
+        val response = requestAndReceiveResponse(runtime, "2", Runtime.evaluate(expr, None, None, returnByValue,
           generatePreview))
         fun(response)
       }
@@ -431,14 +424,6 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         testEvaluate("42", retVal = Some(Success(errorValue("oops")))) {
           case Runtime.EvaluateResult(_, exceptionDetails) =>
             exceptionDetails should be ('defined)
-          case other => fail("Unexpected response: " + other)
-        }
-      }
-
-      "should not report an exception in silent mode" in {
-        testEvaluate("42", retVal = Some(Success(errorValue("oops"))), silent = Some(true)) {
-          case Runtime.EvaluateResult(result, None) =>
-            result should be (RemoteObject.undefinedValue)
           case other => fail("Unexpected response: " + other)
         }
       }

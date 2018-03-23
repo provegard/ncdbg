@@ -35,19 +35,17 @@ object ScriptEvaluateSupport {
 
 trait ScriptEvaluateSupport { self: Logging =>
 
-  def evaluate(scriptHost: ScriptHost, callFrameId: String, expression: String, namedObjects: Map[String, ObjectId],
-               reportException: Boolean)(implicit remoteObjectConverter: RemoteObjectConverter): EvaluationResult = {
+  def evaluate(scriptHost: ScriptHost, callFrameId: String, expression: String, namedObjects: Map[String, ObjectId])
+              (implicit remoteObjectConverter: RemoteObjectConverter): EvaluationResult = {
     // TODO: What is the exception ID for?
     val exceptionId = 1
 
     scriptHost.evaluateOnStackFrame(callFrameId, expression, namedObjects) match {
-      case Success(err: ErrorValue) if reportException && err.isThrown =>
+      case Success(err: ErrorValue) if err.isThrown =>
         val details = Runtime.ExceptionDetails.fromErrorValue(err, exceptionId)
+        log.debug("Responding with evaluation error: " + details.text)
         // Apparently we need to pass an actual value with the exception details
         EvaluationResult(RemoteObject.undefinedValue, Some(details))
-      case Success(err: ErrorValue) if err.isThrown =>
-        log.warn(s"Suppressed error for Runtime.evaluate at line ${err.data.lineNumberBase1}: ${err.fullStack}.\n\nOffending code:\n$expression")
-        EvaluationResult(RemoteObject.undefinedValue)
       case Success(result) => EvaluationResult(remoteObjectConverter.toRemoteObject(result))
       case Failure(t) =>
         val exceptionDetails = exceptionDetailsFromError(t, exceptionId)

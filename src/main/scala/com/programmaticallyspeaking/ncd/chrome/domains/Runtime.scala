@@ -35,20 +35,20 @@ object Runtime {
   /**
     * Used when the user interacts with an object in the DevTools console, to list possible completions.
     */
-  case class callFunctionOn(objectId: RemoteObjectId, functionDeclaration: String, arguments: Seq[CallArgument], silent: Option[Boolean],
+  case class callFunctionOn(objectId: RemoteObjectId, functionDeclaration: String, arguments: Seq[CallArgument],
                             returnByValue: Option[Boolean], generatePreview: Option[Boolean])
 
   case class getProperties(objectId: String, ownProperties: Option[Boolean], accessorPropertiesOnly: Option[Boolean], generatePreview: Option[Boolean])
 
   case class releaseObjectGroup(objectGroup: String)
 
-  case class evaluate(expression: String, objectGroup: Option[String], contextId: Option[ExecutionContextId], silent: Option[Boolean],
+  case class evaluate(expression: String, objectGroup: Option[String], contextId: Option[ExecutionContextId],
                       returnByValue: Option[Boolean], generatePreview: Option[Boolean])
 
   case class compileScript(expression: String, sourceURL: String, persistScript: Boolean, executionContextId: Option[ExecutionContextId])
 
   case class runScript(scriptId: ScriptId, executionContextId: Option[ExecutionContextId],
-                       silent: Boolean, returnByValue: Boolean, generatePreview: Boolean)
+                       returnByValue: Boolean, generatePreview: Boolean)
 
   /**
     * Represents a value that from the perspective of Chrome Dev Tools is remote, i.e. resides in the host.
@@ -234,7 +234,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
     case Runtime.releaseObjectGroup(grp) =>
       log.debug(s"Request to release object group '$grp'")
 
-    case Runtime.evaluate(expr, _, _, maybeSilent, maybeReturnByValue, maybeGeneratePreview) =>
+    case Runtime.evaluate(expr, _, _, maybeReturnByValue, maybeGeneratePreview) =>
       if (expr == "navigator.userAgent") {
         // VS Code (Debugger for Chrome) wants to know
         EvaluateResult(RemoteObject.forString(s"NCDbg version ${BuildProperties.version}"), None)
@@ -247,12 +247,11 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
 
         // TODO: Debugger.evaluateOnCallFrame + Runtime.callFunctionOn, duplicate code
         val actualReturnByValue = maybeReturnByValue.getOrElse(false)
-        val reportException = !maybeSilent.getOrElse(false)
         val generatePreview = maybeGeneratePreview.getOrElse(false)
 
         implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
 
-        val evalResult = evaluate(scriptHost, "$top", script, Map.empty, reportException)
+        val evalResult = evaluate(scriptHost, "$top", script, Map.empty)
         EvaluateResult(evalResult.result, evalResult.exceptionDetails)
       }
 
@@ -268,7 +267,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
           CompileScriptResult(null, Some(returnedDetails))
       }
 
-    case Runtime.runScript(scriptId, _, silent, returnByValue, generatePreview) =>
+    case Runtime.runScript(scriptId, _, returnByValue, generatePreview) =>
       //TODO: silent "Overrides setPauseOnException state."
       log.info(s"Request to run script with ID $scriptId")
       scriptHost.runCompiledScript(scriptId) match {
@@ -278,14 +277,14 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
           RunScriptResult(ro, None)
 
         case Failure(t) =>
-          val exceptionDetails = if (silent) None else Some(exceptionDetailsFromError(t, 1))
-          RunScriptResult(RemoteObject.undefinedValue, exceptionDetails)
+          val exceptionDetails = exceptionDetailsFromError(t, 1)
+          log.debug("Responding with run-script error: " + exceptionDetails.text)
+          RunScriptResult(RemoteObject.undefinedValue, Some(exceptionDetails))
       }
 
-    case Runtime.callFunctionOn(strObjectId, functionDeclaration, arguments, maybeSilent, maybeReturnByValue, maybeGeneratePreview) =>
+    case Runtime.callFunctionOn(strObjectId, functionDeclaration, arguments, maybeReturnByValue, maybeGeneratePreview) =>
       // TODO: See Debugger.evaluateOnCallFrame - need to have a common impl
       val actualReturnByValue = maybeReturnByValue.getOrElse(false)
-      val reportException = !maybeSilent.getOrElse(false)
       val generatePreview = maybeGeneratePreview.getOrElse(false)
 
       val cacheKey = callFunctionOnCacheKey(strObjectId, functionDeclaration, arguments, actualReturnByValue, generatePreview)
@@ -318,7 +317,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
           val expression = s"($maybeTranspiled).apply($targetName,$argsArrayString)"
 
           // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
-          val evalResult = evaluate(scriptHost, "$top", expression, namedObjects.result, reportException)
+          val evalResult = evaluate(scriptHost, "$top", expression, namedObjects.result)
 
           if (evalResult.exceptionDetails.isEmpty && isCacheableFunction) {
             // Store in cache
