@@ -34,7 +34,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
             // Syntax check of a script that we already have. Since it's not possible for us to have a script
             // with a syntax error (Nashorn doesn't allow it as far as I can tell), we simply return None as if
             // we did the syntax check and it turned out good.
-            log.debug(s"Ignoring syntax check of script ${ss.id}, assuming it's good.")
+            log.debug(s"Ignoring syntax check of code identical to script ${ss.id}, assuming it's good.")
             return Future.successful(None)
           case None =>
         }
