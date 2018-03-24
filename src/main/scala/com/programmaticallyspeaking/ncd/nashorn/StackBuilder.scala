@@ -188,13 +188,7 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
 
                 try {
                   val ret = codeEval.eval(Some(originalThis), Some(scopeToUse), code, Lifecycle.Paused)
-                  marshaller.marshal(ret) match {
-                    case SimpleValue(str: String) if str == EvaluatedCodeMarker =>
-                      // A non-expression statements such as "var x = 42" causes the evaluation marker to leak as an
-                      // expression result. We suppress it here!
-                      SimpleValue(Undefined)
-                    case other => other
-                  }
+                  marshaller.marshal(ret)
                 } catch {
                   case ex: ObjectCollectedException =>
                     log.error("Object was garbage collected", ex)
