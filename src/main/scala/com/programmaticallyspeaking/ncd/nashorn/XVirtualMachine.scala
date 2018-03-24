@@ -7,8 +7,8 @@ import com.sun.jdi.event.EventQueue
 class XVirtualMachine(virtualMachine: VirtualMachine) {
   import scala.collection.JavaConverters._
 
-  private var objectReferencesWithDisabledGC = Seq.empty[ObjectReference]
-  private var objectReferencesWithDisabledGCForTheEntireSession = Seq.empty[ObjectReference]
+  private var objectReferencesWithDisabledGC = Set.empty[ObjectReference]
+  private var objectReferencesWithDisabledGCForTheEntireSession = Set.empty[ObjectReference]
 
   def inner: VirtualMachine = virtualMachine
 
@@ -28,26 +28,44 @@ class XVirtualMachine(virtualMachine: VirtualMachine) {
 
   def eventRequestManager(): EventRequestManager = virtualMachine.eventRequestManager()
 
+  /**
+    * Enable GC for all object references, including those that should be kept alive during the entire
+    * session.
+    */
   def enableGarbageCollectionForAllReferences(): Unit = {
     enableGarbageCollectionWhereDisabled()
     val refs = objectReferencesWithDisabledGCForTheEntireSession
-    objectReferencesWithDisabledGCForTheEntireSession = Seq.empty
-    objectReferencesWithDisabledGC = Seq.empty
+    objectReferencesWithDisabledGCForTheEntireSession = Set.empty
     refs.foreach(_.enableCollection())
   }
 
+  /**
+    * Enable GC for object reference for which GC is disabled while the debugger is paused.
+    * GC is not enabled for references that should be kept alive during the entire session.
+    */
   def enableGarbageCollectionWhereDisabled(): Unit = {
     val refs = objectReferencesWithDisabledGC
-    objectReferencesWithDisabledGC = Seq.empty
+    objectReferencesWithDisabledGC = Set.empty
     refs.foreach(_.enableCollection())
   }
 
   def disableGarbageCollectionFor(value: Value, entireSession: Boolean = false): Unit = value match {
-    case objRef: ObjectReference =>
-      // Disable and track the reference so we can enable when we resume
-      objRef.disableCollection()
-      if (entireSession) objectReferencesWithDisabledGCForTheEntireSession +:= objRef
-      else objectReferencesWithDisabledGC +:= objRef
+    case objRef: ObjectReference if !objectReferencesWithDisabledGCForTheEntireSession.contains(objRef) =>
+      val gcAlreadyDisabled = objectReferencesWithDisabledGC.contains(objRef)
+      val shouldPromoteToSessionList = gcAlreadyDisabled && entireSession
+
+      if (!gcAlreadyDisabled) {
+        // Disable and track the reference so we can enable when we resume
+        objRef.disableCollection()
+      }
+
+      if (shouldPromoteToSessionList) {
+        // The reference exists in the paused list. Move it to the session list so that it survives longer.
+        objectReferencesWithDisabledGC -= objRef
+      }
+
+      if (entireSession) objectReferencesWithDisabledGCForTheEntireSession += objRef
+      else objectReferencesWithDisabledGC += objRef
     case _ =>
   }
 
