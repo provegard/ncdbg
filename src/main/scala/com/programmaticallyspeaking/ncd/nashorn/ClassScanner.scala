@@ -45,6 +45,7 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
     * Populated/updated during a class scan to track the classes left to scan.
     */
   private var classesToScan = List.empty[ReferenceType]
+  private var totalScanCount: Int = 0
 
   def handleEvent(ev: ClassPrepareEvent): Unit = consider(ev.referenceType(), Some(ev.thread()))
 
@@ -151,9 +152,10 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
   private def scanClasses(): Unit = {
     val referenceTypes = virtualMachine.allClasses()
 
-    hasInitiatedClassScanning = true
-
     classesToScan = referenceTypes.toList
+
+    hasInitiatedClassScanning = true
+    totalScanCount = classesToScan.size
 
     scanOutstandingClasses()
   }
@@ -181,7 +183,7 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
     }
 
     if (classesToScan.isEmpty) {
-      log.info("Class scanning complete!")
+      log.info(s"Class scanning complete! Scanned $totalScanCount classes in total.")
     }
   }
 
