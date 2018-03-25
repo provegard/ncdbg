@@ -67,7 +67,16 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
       s"""var obj = createInstance('${classOf[ClassWithJavaBeans].getName}');
          |debugger;
          |obj.toString();
-       """.stripMargin, "obj['fooBar']='qux'; obj['fooBar']", SimpleValue("qux"))
+       """.stripMargin, "obj['fooBar']='qux'; obj['fooBar']", SimpleValue("qux")),
+    ("variable from 'with' statement",
+      """(function () {
+        |  var obj = { value: 99 };
+        |  with (obj) {
+        |    debugger;
+        |    value.toString(); // capture value
+        |  }
+        |})();
+      """.stripMargin, "value", SimpleValue(99))
   )
 
   val varRemember = Table(
