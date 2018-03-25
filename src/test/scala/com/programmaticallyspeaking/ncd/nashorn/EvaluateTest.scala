@@ -99,6 +99,24 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
       }
     }
 
+    // https://github.com/provegard/ncdbg/issues/93
+    "works for variable from 'with' statement" ignore {
+      val script =
+        """(function () {
+          |  var obj = { value: 99 };
+          |  with (obj) {
+          |    debugger;
+          |    value.toString(); // capture value
+          |  }
+          |})();
+        """.stripMargin
+      val expression = "value"
+      val result = SimpleValue(99)
+      evaluate(script, expression) { value =>
+        value should be(result)
+      }
+    }
+
     // Failing test for #20
     forAll(varRemember) { (desc, script) =>
       s"remembers a var-defined variable $desc" in {
