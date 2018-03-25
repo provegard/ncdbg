@@ -8,6 +8,7 @@ import com.programmaticallyspeaking.ncd.chrome.domains.Messages
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject}
 import com.programmaticallyspeaking.ncd.nashorn.NashornScriptHostTestFixture
 import com.programmaticallyspeaking.ncd.testing.UnitTest
+import org.scalatest.exceptions.TestFailedException
 
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
@@ -65,6 +66,8 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
           }
 
         } catch {
+          case t: TestFailedException =>
+            donePromise.tryFailure(t)
           case NonFatal(t) =>
             val ids = callFrameIdLists.map(_.mkString("[ ", ", ", " ]")).mkString("[ ", ", ", " ]")
             val errMsg = s"ERROR '${t.getMessage}' (call frame IDs: $ids), progress = \n${summarizeProgress()}"

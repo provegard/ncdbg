@@ -13,7 +13,7 @@ import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.concurrent.duration._
-import scala.util.Success
+import scala.util.{Failure, Success}
 
 trait RealDebuggerTestFixture extends E2ETestFixture with SharedInstanceActorTesting with ScalaFutures with IntegrationPatience {
 
@@ -97,7 +97,9 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
         getHost.evaluateOnStackFrame(callFrame.callFrameId, objName, Map.empty) match {
           case Success(c: ComplexNode) =>
             getHost.getObjectProperties(c.objectId, true, false).map(_._1)
-          case other => fail("" + other)
+          case Success(other) => fail(s"Unexpected: '$objName' evaluated to: " + other)
+          case Failure(t) => fail(s"Evaluation of '$objName' failed", t)
+
         }
       }
 
