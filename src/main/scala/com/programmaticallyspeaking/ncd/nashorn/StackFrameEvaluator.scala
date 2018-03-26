@@ -148,6 +148,7 @@ class StackFrameEvaluator(mappingRegistry: MappingRegistry, boxer: Boxer) extend
   }
 
   private def resetChangeTracking(sf: StackFrameImpl, namedValues: Map[String, AnyRef]): Unit = {
+    if (namedValues.isEmpty) return
     val objectNames = namedValues.keys.mkString(",")
     val js =
       s"""[$objectNames].forEach(function (obj) {
