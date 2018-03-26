@@ -61,7 +61,6 @@ class StackFrameEvaluator(mappingRegistry: MappingRegistry, boxer: Boxer) extend
         updateChangedLocals(sf,
           namedValues ++ localScopeValue.map(localScopeName -> _),
           namedObjects ++ localScopeId.map(localScopeName -> _))
-
         result
       case _ =>
         log.warn(s"Cannot evaluate '$expression', because no stack frame found with ID $stackFrameId. Available IDs: " + pd.stackFrames.map(_.id).mkString(", "))
@@ -84,47 +83,50 @@ class StackFrameEvaluator(mappingRegistry: MappingRegistry, boxer: Boxer) extend
   }
 
   private def updateChangedLocals(sf: StackFrameImpl, namedValues: Map[String, AnyRef], namedObjects: Map[String, ObjectId])(implicit marshaller: Marshaller): Unit = {
-    def jdiStackFrameForObject(id: ObjectId) =
-      mappingRegistry.byId(id).flatMap(_.extras.get(stackFrameIndexExtraProp)).flatMap(_.as[Number]).map(n => marshaller.thread.frame(n.intValue()))
+    def stackFrameIndexForObject(id: ObjectId): Option[Int] =
+      mappingRegistry.byId(id).flatMap(_.extras.get(stackFrameIndexExtraProp)).flatMap(_.as[Number].map(_.intValue()))
+
+    def jdiStackFrameFromIndex(index: Int) = marshaller.thread.frame(index)
 
     // Note: namedValues is created from namedObjects, so we access namedObjects directly (not via get)
-    namedValues.map(e => (e._1, e._2, namedObjects(e._1))).foreach {
-      case (key, value, objectId) =>
+    namedValues.map(e => {
+      val objectId = namedObjects(e._1)
+      // Get the stack frame index before evaluating any code, so that we can avoid evaluation for
+      // non-scope objects.
+      (e._1, e._2, objectId, stackFrameIndexForObject(objectId))
+    }).foreach {
+      case (key, value, objectId, Some(stackFrameIdx)) =>
         // Read the changes tracked by the property setters, if any.
         val changes = sf.eval(s"$key['${hiddenPrefix}changes']", Map(key -> value))
         arrayValuesFrom(changes) match {
           case Right(values) if values.nonEmpty =>
 
             // Get the stack frame. We cannot do that earlier due to marshalling, which causes the thread to resume.
-            jdiStackFrameForObject(objectId) match {
-              case Some(jdiStackFrame) =>
-
-                values.grouped(2).collect { case (str: StringReference) :: v :: Nil => str.value() -> v }.foreach {
-                  case (name, newValue) =>
-                    // We have almost everything we need. Find the LocalVariable and set its value.
-                    Try(Option(jdiStackFrame.visibleVariableByName(name))).map(_.foreach(localVar => {
-                      // Unbox if necessary
-                      val valueToSet = newValue match {
-                        case objRef: ObjectReference if typeNameLooksPrimitive(localVar.typeName()) => boxer.unboxed(objRef)
-                        case other => other
-                      }
-                      jdiStackFrame.setValue(localVar, valueToSet)
-                    })) match {
-                      case Success(_) =>
-                        log.debug(s"Updated the value of $name for $objectId to $newValue in ${jdiStackFrame.location()}")
-                      case Failure(t) =>
-                        log.error(s"Failed to update the value of $name for $objectId to $newValue", t)
-                    }
-
+            val jdiStackFrame = jdiStackFrameFromIndex(stackFrameIdx)
+            values.grouped(2).collect { case (str: StringReference) :: v :: Nil => str.value() -> v }.foreach {
+              case (name, newValue) =>
+                // We have almost everything we need. Find the LocalVariable and set its value.
+                Try(Option(jdiStackFrame.visibleVariableByName(name))).map(_.foreach(localVar => {
+                  // Unbox if necessary
+                  val valueToSet = newValue match {
+                    case objRef: ObjectReference if typeNameLooksPrimitive(localVar.typeName()) => boxer.unboxed(objRef)
+                    case other => other
+                  }
+                  jdiStackFrame.setValue(localVar, valueToSet)
+                })) match {
+                  case Success(_) =>
+                    log.debug(s"Updated the value of $name for $objectId to $newValue in ${jdiStackFrame.location()}")
+                  case Failure(t) =>
+                    log.error(s"Failed to update the value of $name for $objectId to $newValue", t)
                 }
 
-              case None =>
-                log.warn(s"Failed to find the stack frame hosting $objectId")
             }
           case Right(_) => // empty changes, noop
           case Left(reason) =>
             log.warn(s"Failed to read changes from $key: $reason")
         }
+      case _ =>
+        // We didn't find a stack frame index, so not a scope object
     }
   }
 
