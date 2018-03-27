@@ -3,7 +3,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-import com.programmaticallyspeaking.ncd.host.{Script, ScriptEvent, ScriptIdentity, ValueNode}
+import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.infra.{CompiledScript, Hasher}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
 
@@ -12,13 +12,35 @@ import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 import scala.util.Try
 
+case class RunnerForStackFrame(runner: CompiledScriptRunner, stackFrameId: String)
+
 trait CompiledScriptSupport { self: NashornDebuggerHost =>
 
   // Accessed from multiple threads.
   private val runnerByScriptId = new TrieMap[String, CompiledScriptRunner]()
 
+  private val nonPersistRunnerByScriptHash = new TrieMap[String, RunnerForStackFrame]()
+
   // Doesn't need to be thread safe, always accessed from the main host thread.
   private val scriptPromiseByHash = mutable.Map[String, Promise[Option[Script]]]()
+
+  protected def clearNonPersistedScripts(): Unit = {
+    nonPersistRunnerByScriptHash.clear()
+  }
+
+  protected def runCompiledScriptWithHash(scriptHash: String, stackFrameId: String): Option[ValueNode] = {
+    pausedData match {
+      case Some(pd) if pd.stackFrames.head.id == stackFrameId =>
+
+        nonPersistRunnerByScriptHash.get(scriptHash).map { rr =>
+          virtualMachine.withDisabledBreakpoints {
+            rr.runner.run()(pd.marshaller)
+          }
+        }
+
+      case _ => None
+    }
+  }
 
   override def compileScript(script: String, url: String, persist: Boolean): Future[Option[Script]] = {
     pausedData match {
@@ -42,7 +64,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
         // Did we compile the script already?
         scriptPromiseByHash.get(hash) match {
           case Some(promise) =>
-            log.debug(s"Reusing compiled script with hash $hash.")
+            log.debug(s"No need to compile, reusing compiled script with hash $hash.")
             promise.future
 
           case None =>
@@ -75,12 +97,25 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
 
             val actualUrl = CompiledScript(correlationId, url).toCodeUrl
 
-            val lifecycle = if (persist) Lifecycle.Session else Lifecycle.None
-            val tRunner = Try(_scanner.withClassTracking(codeEval.compileScript(wrapper, actualUrl, lifecycle)))
+            // For a non-persisted script, find the scope object so that we can reuse the script for evaluation.
+            val stackFrame = pd.stackFrames.head
+            val scopeObjectRef = if (persist) None else {
+              stackFrame.scopeChain.headOption.map(_.value).flatMap {
+                case cn: ComplexNode =>
+                  mappingRegistry.byId(cn.objectId).flatMap(_.native)
+                case _ => None
+              }
+            }
+
+            val lifecycle = if (persist) Lifecycle.Session else Lifecycle.Paused
+            val tRunner = Try(_scanner.withClassTracking(codeEval.compileScript(wrapper, actualUrl, scopeObjectRef.orNull, lifecycle)))
 
             // We may observe InternalScriptAdded before the _scanner.withClassTracking call returns, so
             // connect runner with script here rather than in the InternalScriptAdded observer.
             Future.fromTry(tRunner).flatMap { theRunner =>
+              // Save the runner for reuse during evaluation
+              nonPersistRunnerByScriptHash += scriptHash -> RunnerForStackFrame(theRunner, stackFrame.id)
+
               scriptPromise.future.map { maybeScript =>
                 maybeScript.foreach { theScript =>
                   runnerByScriptId += theScript.id -> theRunner

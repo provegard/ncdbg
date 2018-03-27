@@ -42,10 +42,10 @@ class CodeEval(typeLookup: TypeLookup, gCContext: GCContext) {
     marshaller.marshal(value)
   }
 
-  def compileScript(script: String, url: String, lifecycle: Lifecycle.EnumVal)(implicit marshaller: Marshaller): CompiledScriptRunner = {
+  def compileScript(script: String, url: String, scopeObject: AnyRef, lifecycle: Lifecycle.EnumVal)(implicit marshaller: Marshaller): CompiledScriptRunner = {
     val fun = gCContext.pin(lifecycle) {
       implicit val thread = marshaller.thread
-      NashornScriptEngine_asCompiledScript(script, url)
+      NashornScriptEngine_asCompiledScript(script, url, scopeObject)
     }
     new CompiledScriptRunner {
       override def run()(implicit marshaller: Marshaller): ValueNode =
@@ -53,7 +53,7 @@ class CodeEval(typeLookup: TypeLookup, gCContext: GCContext) {
     }
   }
 
-  private def NashornScriptEngine_asCompiledScript(script: String, url: String)(implicit threadReference: ThreadReference): ObjectReference = {
+  private def NashornScriptEngine_asCompiledScript(script: String, url: String, scopeObject: AnyRef)(implicit threadReference: ThreadReference): ObjectReference = {
     // NashornScriptEngine.asCompiledScript:
     //  1. src       = Source.sourceFor("<compiled>", script, true)
     //  2. ctx       = Context.getContext()
@@ -75,12 +75,17 @@ class CodeEval(typeLookup: TypeLookup, gCContext: GCContext) {
 
         // 3
         val contextDynInvoker = Invokers.shared.getDynamic(context)
-        val mgcs = contextDynInvoker.compileScript(source).asInstanceOf[ObjectReference]
+        if (scopeObject != null) {
+          // Returns ScriptFunction directly
+          contextDynInvoker.compileScript(source, scopeObject).asInstanceOf[ObjectReference]
+        } else {
+          val multiGlobalCompiledScript = contextDynInvoker.compileScript(source).asInstanceOf[ObjectReference]
 
-        // 4
-        val global = contextClassInvoker.getGlobal()
-        val mgcsInvoker = Invokers.shared.getDynamic(mgcs)
-        mgcsInvoker.getFunction(global).asInstanceOf[ObjectReference]
+          // 4
+          val global = contextClassInvoker.getGlobal()
+          val mgcsInvoker = Invokers.shared.getDynamic(multiGlobalCompiledScript)
+          mgcsInvoker.getFunction(global).asInstanceOf[ObjectReference]
+        }
       case _ =>
         throw new IllegalStateException("The Context and/or Source type wasn't found, cannot compile a script.")
     }

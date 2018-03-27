@@ -1,7 +1,9 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import java.nio.charset.StandardCharsets
+
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.infra.IdGenerator
+import com.programmaticallyspeaking.ncd.infra.{Hasher, IdGenerator}
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject, Subscription}
 import com.sun.jdi.event._
 import com.sun.jdi.{StackFrame => _, _}
@@ -270,6 +272,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
 
   private def cleanupPausing(): Unit = {
     pausedData = None
+    clearNonPersistedScripts()
     mappingRegistry.clear() // only valid when paused
 
     internalStateSubject.onNext(Unpause)
@@ -475,10 +478,28 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   override def evaluateOnStackFrame(stackFrameId: String, expression: String): Try[ValueNode] = Try {
     pausedData match {
       case Some(pd) =>
-        _scanner.withClassTracking {
-          virtualMachine.withDisabledBreakpoints {
-            _stackFramEval.evaluateOnStackFrame(pd, stackFrameId, expression, None)
-          }
+        // Note: StackFrameEvaluator does this also. Move to helper?
+        val sfid = if (stackFrameId == "$top") {
+          pd.stackFrames.head.id
+        } else stackFrameId
+
+        // As an optimization, evaluate using a previously compiled non-persisted script. The idea is that since
+        // DevTools syntax-checks code first by calling compileScript, we can skip subsequent evaluation of the
+        // same code and instead just reuse the script we compiled for the syntax check.
+        val hash = Hasher.md5(expression.getBytes(StandardCharsets.UTF_8))
+        val runResult = runCompiledScriptWithHash(hash, sfid)
+
+        runResult match {
+          case Some(vn) =>
+            log.debug("Skipped expression evaluation, reused compiled script instead.")
+            vn
+
+          case None =>
+            _scanner.withClassTracking {
+              virtualMachine.withDisabledBreakpoints {
+                _stackFramEval.evaluateOnStackFrame(pd, stackFrameId, expression, None)
+              }
+            }
         }
       case None =>
         log.warn(s"Evaluation of '$expression' for stack frame $stackFrameId cannot be done in a non-paused state.")

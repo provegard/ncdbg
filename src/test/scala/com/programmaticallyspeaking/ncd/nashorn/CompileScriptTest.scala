@@ -9,7 +9,7 @@ import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.util.Try
+import scala.util.{Success, Try}
 
 class CompileScriptTest extends CompileScriptTestFixture {
 
@@ -133,6 +133,59 @@ class CompileScriptTest extends CompileScriptTestFixture {
       result should be (SimpleValue(11))
     }
   }
+
+  "Evaluating code after syntax-checking the same code" - {
+    "inside a local scope" - {
+      val runner =
+        """(function (value) {
+          |  debugger;
+          |})(42);
+        """.stripMargin
+      val code = "value * 2"
+      lazy val result = syntaxCheckThenEval(runner, code)
+
+      "gives the expected result" in {
+        result should be (Success(SimpleValue(84)))
+      }
+    }
+//    //TODO: No reuse across stack frames
+//    "inside a 'with' scope" - {
+//      val runner =
+//        """(function () {
+//          |  var obj = { value: 43 };
+//          |  with (obj) {
+//          |    debugger;
+//          |    return value;
+//          |  }
+//          |})();
+//        """.stripMargin
+//      val code = "value - 1"
+//      lazy val result = syntaxCheckThenEval(runner, code)
+//
+//      "gives the expected result" in {
+//        result should be (Success(SimpleValue(42)))
+//      }
+//    }
+
+    "inside a closure scope" - {
+      val runner =
+        """(function () {
+          |  var value = 44;
+          |  function f() {
+          |    debugger;
+          |    return value;
+          |  }
+          |  f();
+          |})();
+        """.stripMargin
+      val code = "value + 1"
+      lazy val result = syntaxCheckThenEval(runner, code)
+
+      "gives the expected result" in {
+        result should be (Success(SimpleValue(45)))
+      }
+    }
+  }
 }
 
 class CompileScriptTestFixture extends UnitTest with NashornScriptHostTestFixture with ScalaFutures with IntegrationPatience {
@@ -141,7 +194,7 @@ class CompileScriptTestFixture extends UnitTest with NashornScriptHostTestFixtur
 
   type Tester = ScriptHost => Future[Unit]
 
-  protected def runTest(collectScriptAdded: ScriptAdded => Unit = _ => {})(tester: Tester): Unit = {
+  protected def runTest(collectScriptAdded: ScriptAdded => Unit = _ => {}, runnerCode: String = "debugger;")(tester: Tester): Unit = {
     val donePromise = Promise[Unit]()
     val observer = Observer.from[ScriptEvent] {
       case _: HitBreakpoint =>
@@ -152,7 +205,7 @@ class CompileScriptTestFixture extends UnitTest with NashornScriptHostTestFixtur
         collectScriptAdded(s)
       case _ => // ignore
     }
-    observeAndRunScriptAsync("debugger;", observer)(_ => donePromise.future)
+    observeAndRunScriptAsync(runnerCode, observer)(_ => donePromise.future)
   }
 
   def compileAndRun(code: String, url: String): ValueNode = {
@@ -163,6 +216,16 @@ class CompileScriptTestFixture extends UnitTest with NashornScriptHostTestFixtur
       }
     }
     result.get
+  }
+
+  def syntaxCheckThenEval(runner: String, code: String): Try[ValueNode] = {
+    var result: Try[ValueNode] = null
+    runTest(_ => (), runner) { host =>
+      host.compileScript(code, "", persist = false).map { _ =>
+        result = host.evaluateOnStackFrame("$top", code, Map.empty)
+      }
+    }
+    result
   }
 
   def compileAndCollectScripts(codesAndUrls: Seq[(String, String)], persist: Boolean = true, collectEmitted: ScriptAdded => Unit = _ => {}): Seq[Script] = {
