@@ -113,7 +113,9 @@ object NashornDebuggerHost {
   case object Unpause extends InternalState
 
   // Internal version of ScriptAdded which we need since we may suppress ScriptAdded
-  private[nashorn] case class InternalScriptAdded(script: Script) extends ScriptEvent
+  private[nashorn] case class InternalScriptAdded(script: Script) extends ScriptEvent {
+    override def toStringParams(): Map[String, Any] = Map("scriptId" -> script.id)
+  }
 }
 
 class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asyncInvokeOnThis: ((NashornScriptHost) => Any) => Future[Any])
@@ -209,7 +211,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
 
   protected def emitEvent(event: ScriptEvent): Unit = {
     // Emit asynchronously so that code that observes the event can interact with the host without deadlocking it.
-    log.debug(s"Emitting event of type ${event.getClass.getSimpleName}")
+    log.debug(s"Emitting event $event")
     Future(eventSubject.onNext(event))
   }
 

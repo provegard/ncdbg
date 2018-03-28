@@ -1,6 +1,16 @@
 package com.programmaticallyspeaking.ncd.host
 
-trait ScriptEvent
+trait ScriptEvent {
+  override def toString: String = {
+    var name = getClass.getSimpleName
+    // Remove trailing $ for objects
+    if (name.endsWith("$")) name = name.substring(0, name.length - 1)
+    val paramStr = toStringParams().map(e => e._1 + "=" + e._2).mkString(", ")
+    s"$name($paramStr)"
+  }
+
+  protected def toStringParams(): Map[String, Any] = Map.empty
+}
 
 sealed trait BreakpointReason
 object BreakpointReason {
@@ -19,7 +29,9 @@ object BreakpointReason {
   * @param reason reason for the breakpoint
   */
 //TODO: A better name is needed, since it's not necessarily a breakpoint
-case class HitBreakpoint(stackFrames: Seq[StackFrame], breakpointId: Option[String], reason: BreakpointReason) extends ScriptEvent
+case class HitBreakpoint(stackFrames: Seq[StackFrame], breakpointId: Option[String], reason: BreakpointReason) extends ScriptEvent {
+  override protected def toStringParams(): Map[String, Any] = Map("breakpointId" -> breakpointId)
+}
 
 /**
   * Emitted when the remote VM resumes execution.
@@ -31,7 +43,9 @@ case object Resumed extends ScriptEvent
   *
   * @param script the script
   */
-case class ScriptAdded(script: Script) extends ScriptEvent
+case class ScriptAdded(script: Script) extends ScriptEvent {
+  override def toStringParams(): Map[String, Any] = Map("scriptId" -> script.id)
+}
 
 /**
   * Emitted when an uncaught error is detected, regardless of whether exception pausing is enabled or not.
@@ -59,4 +73,6 @@ case class PrintMessage(message: String) extends ScriptEvent
   * @param breakpointId the ID of the breakpoint
   * @param location the matched location
   */
-case class BreakpointResolved(breakpointId: String, location: LocationInScript) extends ScriptEvent
+case class BreakpointResolved(breakpointId: String, location: LocationInScript) extends ScriptEvent {
+  override def toStringParams(): Map[String, Any] = Map("breakpointId" -> breakpointId)
+}
