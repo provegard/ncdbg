@@ -9,6 +9,10 @@ trait CompiledScriptRunner {
   def run()(implicit marshaller: Marshaller): ValueNode
 }
 
+object CodeEval {
+  val EvalSourceName = "<ncdbg_eval>"
+}
+
 class CodeEval(typeLookup: TypeLookup, preventGC: (Value, Lifecycle.EnumVal) => Unit) {
   import TypeConstants._
 
@@ -129,11 +133,7 @@ class CodeEval(typeLookup: TypeLookup, preventGC: (Value, Lifecycle.EnumVal) => 
         val contextInvoker = Invokers.shared.getDynamic(context.asInstanceOf[ObjectReference])
 
         try {
-          val codeWithMarker =
-            s"""$code
-               |/*$EvaluatedCodeMarker*/
-             """.stripMargin
-          contextInvoker.eval(initialScope, codeWithMarker, callThis, null)
+          contextInvoker.eval(initialScope, code, callThis, CodeEval.EvalSourceName)
         } catch {
           case ex: InvocationFailedException =>
             new ThrownExceptionReference(thread.virtualMachine(), ex.exceptionReference)

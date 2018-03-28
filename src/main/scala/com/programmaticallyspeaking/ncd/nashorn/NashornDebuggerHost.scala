@@ -43,13 +43,6 @@ object NashornDebuggerHost {
 
   private[nashorn] case class ObjectPropertiesKey(objectId: ObjectId, onlyOwn: Boolean, onlyAccessors: Boolean)
 
-  /** This marker is embedded in all scripts evaluated by NashornDebuggerHost on behalf of Chrome DevTools. The problem
-    * this solves is that such evaluated scripts are detected on startup (i.e. when reconnecting to a running target)
-    * but they are not interesting to show in DevTools. Thus NashornDebuggerHost will not consider scripts that contain
-    * this marker.
-    */
-  val EvaluatedCodeMarker = "__af4caa215e04411083cfde689d88b8e6__"
-
   // Prefix for synthetic properties added to artificial scope JS objects. The prefix is chosen so that it can never
   // clash with the name of a real local variable.
   val hiddenPrefix = "||"

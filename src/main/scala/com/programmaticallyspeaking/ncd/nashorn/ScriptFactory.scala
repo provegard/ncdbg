@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.Script
 import com.programmaticallyspeaking.ncd.infra.{IdGenerator, ScriptURL}
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{EvaluatedCodeMarker, NoScriptReason, ScriptClassNamePrefix}
+import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{NoScriptReason, ScriptClassNamePrefix}
 import com.sun.jdi.{AbsentInformationException, Location, ReferenceType, ThreadReference}
 import org.slf4s.Logging
 
@@ -28,19 +28,26 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
 
     if (className.startsWith(ScriptClassNamePrefix)) {
       // This is a compiled Nashorn script class.
-      log.debug(s"Found a script reference type: ${refType.name}")
 
-      scriptUrlAndLocations(refType) match {
-        case Success((scriptURL, locations)) =>
-          // Note that we no longer try to use the script path for reading the source. If the script contains a
-          // sourceURL annotation, Nashorn will use that at script path, so we might end up reading CoffeeScript
-          // source instead of the real source.
-          val triedScript = Try(scriptFromEval(refType, scriptURL))
-          handleScriptResult(thread, triedScript, refType, locations, callback)
+      //
+      if (refType.sourceName() == CodeEval.EvalSourceName) {
+        log.trace(s"Found a script evaluated by NCDbg: ${refType.name()} (based on source name ${CodeEval.EvalSourceName})")
+        callback(None, Seq.empty)
+      } else {
+        log.debug(s"Found a script reference type: ${refType.name}")
 
-        case Failure(t) =>
-          log.warn(s"Failed to get line locations for ${refType.name}", t)
-          callback(None, Seq.empty)
+        scriptUrlAndLocations(refType) match {
+          case Success((scriptURL, locations)) =>
+            // Note that we no longer try to use the script path for reading the source. If the script contains a
+            // sourceURL annotation, Nashorn will use that at script path, so we might end up reading CoffeeScript
+            // source instead of the real source.
+            val triedScript = Try(scriptFromEval(refType, scriptURL))
+            handleScriptResult(thread, triedScript, refType, locations, callback)
+
+          case Failure(t) =>
+            log.warn(s"Failed to get line locations for ${refType.name}", t)
+            callback(None, Seq.empty)
+        }
       }
     }
   }
@@ -112,8 +119,7 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
 
   private def scriptFromEval(refType: ReferenceType, scriptURL: ScriptURL): Either[NoScriptReason.EnumVal, Script] = {
     refType.shamelesslyExtractEvalSourceFromPrivatePlaces().map { src =>
-      if (src.contains(EvaluatedCodeMarker)) Left(NoScriptReason.EvaluatedCode)
-      else Right(newScript(scriptURL, src))
+      Right(newScript(scriptURL, src))
     }.getOrElse(Left(NoScriptReason.NoSource))
   }
 

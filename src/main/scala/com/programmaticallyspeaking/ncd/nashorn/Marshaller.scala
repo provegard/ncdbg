@@ -350,7 +350,7 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
     val colNumberValue = mirror.getInt("columnNumber", -1)
     val fileNameValue = mirror.getString("fileName")
 
-    val exData = ExceptionData(nameValue, msgValue, lineNumberValue, colNumberValue,
+    val exData = createExceptionData(nameValue, msgValue, lineNumberValue, colNumberValue,
       Option(fileNameValue).getOrElse("<unknown>"), //TODO: To URL?
       Option(stackValue)
     )
@@ -374,6 +374,13 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
       case _ => None
     }
   }
+
+  private def pretendToBeEvalIfNecessary(fileName: String): String =
+    if (fileName == CodeEval.EvalSourceName) "<eval>" else fileName
+
+  // Creates ExceptionData but makes sure that file URL shows as <eval> for an NCDbg-evaled script.
+  private def createExceptionData(name: String, message: String, lineNumberBase1: Int, columnNumberBase0: Int, url: String, stackIncludingMessage: Option[String]): ExceptionData =
+    ExceptionData(name, message, lineNumberBase1, columnNumberBase0, pretendToBeEvalIfNecessary(url), stackIncludingMessage)
 
   object ExceptionValue {
     /** Unpack an [[ErrorValue]] instance and an optional Java stack string from an exception value. The Java stack
@@ -456,10 +463,11 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
       // (we get None if there are no stack frames at all, which would be odd).
       val fullJavaStack = javaExceptionInfo.map(info => s"$name: $message\n${info.stack}")
 
-      ExceptionDataWithJavaStack(ExceptionData(name, message, data._1.lineNumberBase1, data._1.columnNumberBase0, data._1.url, Option(fullStack)),
+      ExceptionDataWithJavaStack(createExceptionData(name, message, data._1.lineNumberBase1, data._1.columnNumberBase0, data._1.url, Option(fullStack)),
         fullJavaStack)
     }
   }
+
 
   private def allReachableTypesIncluding(refType: ReferenceType): Seq[ReferenceType] = refType match {
     case ct: ClassType =>
