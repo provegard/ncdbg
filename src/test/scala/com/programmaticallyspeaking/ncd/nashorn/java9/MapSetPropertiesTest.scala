@@ -2,7 +2,8 @@ package com.programmaticallyspeaking.ncd.nashorn.java9
 
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
-import com.programmaticallyspeaking.ncd.nashorn.{NashornDebuggerHost, NashornScriptHost, ObjectPropertyTesting, RealMarshallerTestFixture}
+import com.programmaticallyspeaking.ncd.infra.StringAnyMap
+import com.programmaticallyspeaking.ncd.nashorn._
 
 class MapSetPropertiesTest extends RealMarshallerTestFixture with RunningJava9 with ObjectPropertyTesting {
 
@@ -72,7 +73,7 @@ class MapSetPropertiesTest extends RealMarshallerTestFixture with RunningJava9 w
       desc.value.collect { case ArrayNode(size, _, _) => size } should be (Some(2))
     }
 
-    "doesn't expose hidden properties the second time properties are fetched" in {
+    "doesn't expose the hidden entries property the second time properties are fetched" in {
       evaluateExpression(expr) {
         case (host, c: ComplexNode) =>
           host.asInstanceOf[NashornScriptHost].disableObjectPropertiesCache()
@@ -87,6 +88,44 @@ class MapSetPropertiesTest extends RealMarshallerTestFixture with RunningJava9 w
         case (_, other) => fail("Unknown: " + other)
       }
     }
+
+    "doesn't expose the hidden entries property via Object.getOwnPropertyNames" in {
+      evaluateExpression(expr) {
+        case (host, c: ComplexNode) =>
+          host.asInstanceOf[NashornScriptHost].disableObjectPropertiesCache()
+
+          host.getObjectProperties(c.objectId, onlyOwn = true, onlyAccessors = false)
+
+          val array = host.evaluateOnStackFrame("$top", "Object.getOwnPropertyNames(x)", Map("x" -> c.objectId)).get
+          val expanded = RealMarshallerTest.expand(host, array)
+          expanded match {
+            case StringAnyMap(aMap) =>
+
+              aMap.values.toSeq should not contain (hiddenEntries)
+
+            case other => fail("Unexpected expanded: " + other)
+          }
+
+        case (_, other) => fail("Unknown: " + other)
+      }
+    }
+
+//    "doesn't expose the hidden entries property if symbols are fetched after properties" in {
+//      evaluateExpression(expr) {
+//        case (host, c: ComplexNode) =>
+//          host.asInstanceOf[NashornScriptHost].disableObjectPropertiesCache()
+//
+//          host.getObjectProperties(c.objectId, onlyOwn = true, onlyAccessors = false)
+//          val props2 = host.getObjectProperties(c.objectId, onlyOwn = true, onlyAccessors = false)
+//
+//          val symNames = props2.filter(_._2.symbol.isDefined).map(_._1)
+//          symNames should not contain (hiddenEntries)
+//
+//        case (_, other) => fail("Unknown: " + other)
+//      }
+//    }
+
+    def hiddenEntries = NashornDebuggerHost.hiddenPrefix + "entries"
 
     "has entries marshalled as a special MapSetEntryNode type" in {
       testEntries(expr) { entriesProps =>

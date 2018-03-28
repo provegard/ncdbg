@@ -155,6 +155,7 @@ object ScriptBasedPropertyHolderFactory {
       |  var hasMap = typeof Map === "function";
       |  var hasSet = typeof Set === "function";
       |  var HIDDEN_PROP_PREFIX = "${NashornDebuggerHost.hiddenPrefix}";
+      |  var mapSetEntries = typeof Symbol === "function" ? Symbol(HIDDEN_PROP_PREFIX + "entries") : HIDDEN_PROP_PREFIX + "entries";
       |  return function __getprops(target, isNative, onlyOwn, onlyAccessors, isScopeObject, strPropertyBlacklistRegExp) {
       |    var result = [], proto, i, j;
       |    if (isNative) {
@@ -188,6 +189,7 @@ object ScriptBasedPropertyHolderFactory {
       |        var symbols = hasSymbols && !onlyAccessors ? Object.getOwnPropertySymbols(current) : [];
       |        for (i = 0, j = symbols.length; i < j; i++) {
       |          var sym = symbols[i];
+      |          if (sym.toString() === mapSetEntries.toString()) continue;
       |          result.push(sym.toString(),
       |                      own ? "o" : "",
       |                      current[sym], // see Note 3 above
@@ -213,7 +215,8 @@ object ScriptBasedPropertyHolderFactory {
       |            }
       |
       |            // Attach the entries array to the current object to prevent it from being GCed.
-      |            current[HIDDEN_PROP_PREFIX + "entries"] = entries;
+      |            // Use a Symbol key to prevent Object.getOwnPropertyNames from leaking this.
+      |            current[mapSetEntries] = entries;
       |
       |            result.push("[[Entries]]",
       |                        "o",
