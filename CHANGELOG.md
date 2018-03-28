@@ -49,6 +49,7 @@
 * Ignore the silent flag passed to many methods, since we ignore exceptions anyway while in
   paused mode. Always return exception details back to the caller (issue #87)
 * Less verbose error message after evaluation, don't show ECMAException (issue #92)
+* Don't leak hidden entries array for Map/Set to console autocompletion (issue #94)
 
 ## 0.6.0 (2017-10-22)
 
