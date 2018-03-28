@@ -50,6 +50,12 @@
   paused mode. Always return exception details back to the caller (issue #87)
 * Less verbose error message after evaluation, don't show ECMAException (issue #92)
 * Don't leak hidden entries array for Map/Set to console autocompletion (issue #94)
+* Fixed broken class scanning, now scanning isn't complete until all classes have been scanned,
+  and yielding/resuming scan works.
+* Improve class scanning speed by giving NCDbg-evaluated scripts a special source name that can
+  be detected before getting the script source.
+    * **NOTE**! If NCDbg is attached to a process that has been debugged with an older version,
+      code eval scripts may appear in DevTools. Restarting the target process should fix that. 
 
 ## 0.6.0 (2017-10-22)
 
