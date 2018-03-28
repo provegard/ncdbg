@@ -47,6 +47,8 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
   private var classesToScan = List.empty[ReferenceType]
   private var totalScanCount: Int = 0
 
+  private var actionsOnComplete = List.empty[() => Unit]
+
   def handleEvent(ev: ClassPrepareEvent): Unit = consider(ev.referenceType(), Some(ev.thread()))
 
   /**
@@ -90,6 +92,20 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
     }
   }
 
+  private def checkIfWereDone(): Unit = {
+    val mandatoryTypes = wantedTypes.filter(_._2).keys
+    if (mandatoryTypes.forall(foundWantedTypes.contains) && classesToScan.isEmpty) {
+      actionsOnComplete.foreach(_.apply())
+      actionsOnComplete = List.empty
+      subject.onComplete()
+    }
+
+  }
+
+  private def doBeforeDone(f: () => Unit): Unit = {
+    actionsOnComplete = f :: actionsOnComplete
+  }
+
   private def considerReferenceType(thread: Option[ThreadReference], refType: ReferenceType): Unit = {
     val className = refType.name()
 
@@ -99,14 +115,11 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
           log.debug(s"Found the $className type")
           foundWantedTypes += className -> ct
 
-          // Execute any function associated with the type
-          actionPerWantedType.get(className).foreach(_.apply(ct))
+          // Record execution of any function associated with the type
+          val act = actionPerWantedType.get(className)
+          doBeforeDone(() => act.foreach(_.apply(ct)))
 
-          // If we have all mandatory types, we're done
-          val mandatoryTypes = wantedTypes.filter(_._2).keys
-          if (mandatoryTypes.forall(foundWantedTypes.contains)) {
-            subject.onComplete()
-          }
+          checkIfWereDone()
 
         case other =>
           log.warn(s"Found the $className type but it's a ${other.getClass.getName} rather than a ClassType")
@@ -135,6 +148,7 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
   }
 
   def setup(observer: Observer[ScanAction]): Unit = {
+    log.debug("ClassScanner setup")
     subject.subscribe(observer) //TODO: What to do about the subscription?
 
     val request = virtualMachine.eventRequestManager().createClassPrepareRequest()
@@ -146,7 +160,9 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
 
   private def bumpScanTimer(): Unit = {
     scanTimer.foreach(_.cancel())
-    scanTimer = Some(DelayedFuture(200.millis)(scanClasses()))
+    scanTimer = Some(DelayedFuture(200.millis) {
+      subject.onNext(ScanMoreLater(() => scanClasses()))
+    })
   }
 
   private def scanClasses(): Unit = {
@@ -176,7 +192,7 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
       val elapsed = (System.nanoTime() - nanosBefore).nanos
       if (elapsed >= SCAN_CLASSES_BATCH_LEN) {
         // Yield to other operations, to prevent blocking so long that a timeout occurs in ExecutorProxy.
-        log.debug(s"Scanned $count classes in ${elapsed.toMillis} ms, temporarily yielding to other operations.")
+        log.debug(s"Scanned $count classes in ${elapsed.toMillis} ms, temporarily yielding to other operations. ${classesToScan.size} classes left.")
         subject.onNext(ScanMoreLater(() => scanOutstandingClasses()))
         done = true
       }
@@ -184,6 +200,7 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
 
     if (classesToScan.isEmpty) {
       log.info(s"Class scanning complete! Scanned $totalScanCount classes in total.")
+      checkIfWereDone()
     }
   }
 
