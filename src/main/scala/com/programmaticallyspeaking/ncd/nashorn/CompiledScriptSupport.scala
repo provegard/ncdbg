@@ -12,7 +12,7 @@ import scala.collection.mutable
 import scala.concurrent.{Future, Promise}
 import scala.util.Try
 
-case class RunnerForStackFrame(runner: CompiledScriptRunner, stackFrameId: String)
+case class RunnerForStackFrame(runner: CompiledScriptRunner, stackFrameId: String, scriptId: String)
 
 trait CompiledScriptSupport { self: NashornDebuggerHost =>
 
@@ -22,20 +22,21 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
   private val nonPersistRunnerByScriptHash = new TrieMap[String, RunnerForStackFrame]()
 
   // Doesn't need to be thread safe, always accessed from the main host thread.
-  private val scriptPromiseByHash = mutable.Map[String, Promise[Option[Script]]]()
+  private val scriptPromiseByHash = mutable.Map[String, Promise[Script]]()
 
   protected def clearNonPersistedScripts(): Unit = {
     nonPersistRunnerByScriptHash.clear()
   }
 
-  protected def runCompiledScriptWithHash(scriptHash: String, stackFrameId: String): Option[ValueNode] = {
+  protected def runCompiledScriptWithHash(scriptHash: String, stackFrameId: String): Option[(ValueNode, String)] = {
     pausedData match {
       case Some(pd) if pd.stackFrames.head.id == stackFrameId =>
 
         nonPersistRunnerByScriptHash.get(scriptHash).map { rr =>
-          virtualMachine.withDisabledBreakpoints {
+          val vn = virtualMachine.withDisabledBreakpoints {
             rr.runner.run()(pd.marshaller)
           }
+          (vn, rr.scriptId)
         }
 
       case _ => None
@@ -49,7 +50,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
 
         // Create a hash that includes both the contents and the URL.
         val scriptHash = Hasher.md5(script.getBytes(StandardCharsets.UTF_8))
-        val hash = Hasher.md5(s"$scriptHash:$url".getBytes(StandardCharsets.UTF_8))
+        val compileHash = Hasher.md5(s"$scriptHash:$url".getBytes(StandardCharsets.UTF_8))
 
         findScript(ScriptIdentity.fromHash(scriptHash)) match {
           case Some(ss) if !persist =>
@@ -62,14 +63,16 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
         }
 
         // Did we compile the script already?
-        scriptPromiseByHash.get(hash) match {
+        scriptPromiseByHash.get(compileHash) match {
           case Some(promise) =>
-            log.debug(s"No need to compile, reusing compiled script with hash $hash.")
-            promise.future
+            promise.future.map { s =>
+              log.debug(s"No need to compile, reusing compiled script ${s.id} based on hash $compileHash.")
+              if (persist) Some(s) else None
+            }
 
           case None =>
             val correlationId = UUID.randomUUID().toString.replace("-", "")
-            log.debug(s"Compiling script with requested URL '$url' and hash $hash and unique ID $correlationId.")
+            log.debug(s"Compiling script with requested URL '$url' and hash $compileHash and unique ID $correlationId.")
 
             // If not persisting, embed a marker that makes ScriptPublisher suppress ScriptAdded, now and
             // on subsequent sessions
@@ -81,10 +84,10 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
                  |/*$correlationId$marker*/
                """.stripMargin
 
-            val scriptPromise = Promise[Option[Script]]
+            val scriptPromise = Promise[Script]
 
             // Enter the promise into the script-reuse cache
-            scriptPromiseByHash += hash -> scriptPromise
+            scriptPromiseByHash += compileHash -> scriptPromise
 
             // Listen to InternalScriptAdded since ScriptAdded is suppressed when persist==false
             var subscription: Subscription = null
@@ -92,7 +95,9 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
               case s: NashornDebuggerHost.InternalScriptAdded if s.script.contents.contains(correlationId) =>
                 subscription.unsubscribe()
 
-                scriptPromise.success(if (persist) Some(s.script) else None)
+                log.debug(s"Compilation of script with hash $compileHash resulted in script with ID ${s.script.id} (persist=$persist)")
+
+                scriptPromise.success(s.script)
             })
 
             val actualUrl = CompiledScript(correlationId, url).toCodeUrl
@@ -113,14 +118,15 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
             // We may observe InternalScriptAdded before the _scanner.withClassTracking call returns, so
             // connect runner with script here rather than in the InternalScriptAdded observer.
             Future.fromTry(tRunner).flatMap { theRunner =>
-              // Save the runner for reuse during evaluation
-              nonPersistRunnerByScriptHash += scriptHash -> RunnerForStackFrame(theRunner, stackFrame.id)
 
-              scriptPromise.future.map { maybeScript =>
-                maybeScript.foreach { theScript =>
-                  runnerByScriptId += theScript.id -> theRunner
-                }
-                maybeScript
+              scriptPromise.future.map { script =>
+                // Save the runner for reuse during evaluation (we test evaluation by hash)
+                nonPersistRunnerByScriptHash += scriptHash -> RunnerForStackFrame(theRunner, stackFrame.id, script.id)
+
+                // Save the runner for runScript (we run by ID)
+                runnerByScriptId += script.id -> theRunner
+
+                if (persist) Some(script) else None
               }
             }
         }

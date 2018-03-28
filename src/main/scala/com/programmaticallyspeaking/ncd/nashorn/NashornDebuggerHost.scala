@@ -490,8 +490,8 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
         val runResult = runCompiledScriptWithHash(hash, sfid)
 
         runResult match {
-          case Some(vn) =>
-            log.debug("Skipped expression evaluation, reused compiled script instead.")
+          case Some((vn, scriptId)) =>
+            log.debug(s"Skipped expression evaluation, reused compiled script with ID $scriptId instead.")
             vn
 
           case None =>
