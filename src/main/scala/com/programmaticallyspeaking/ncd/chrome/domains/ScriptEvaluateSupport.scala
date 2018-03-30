@@ -43,7 +43,7 @@ trait ScriptEvaluateSupport { self: Logging =>
     scriptHost.evaluateOnStackFrame(callFrameId, expression, namedObjects) match {
       case Success(err: ErrorValue) if err.isThrown =>
         val details = Runtime.ExceptionDetails.fromErrorValue(err, exceptionId)
-        log.debug("Responding with evaluation error: " + details.text)
+        log.debug(s"Responding with evaluation error: $details" + err.javaStack.map("\r\n" + _))
         // Apparently we need to pass an actual value with the exception details
         EvaluationResult(RemoteObject.undefinedValue, Some(details))
       case Success(result) => EvaluationResult(remoteObjectConverter.toRemoteObject(result))
