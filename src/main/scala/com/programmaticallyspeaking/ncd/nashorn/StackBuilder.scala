@@ -45,13 +45,20 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
     freeVariables.foreach {
       case (name, _) =>
         scopeObjFactory +=
-          s"""Object.defineProperty(obj,'$name',{
+          s"""obj['$hiddenPrefix$name'] = void 0;
+             |Object.defineProperty(obj,'$name',{
              |  get:function() { return this['$hiddenPrefix$name']; },
              |  set:function(v) { this['${hiddenPrefix}changes'].push('$name',v); this['$hiddenPrefix$name']=v; },
              |  enumerable:true
              |});
            """.stripMargin
     }
+
+    // This is a workaround for the fact that we're not creating a true scope object. Nashorn has
+    // a class Scope which is a ScriptObject subclass that overrides isScope() and returns true, but
+    // creating a Scope instance is quite involved as far as I can tell.
+    scopeObjFactory += """obj.__noSuchProperty__ = function (prop) { throw new ReferenceError('"' + prop + '" is not defined'); };"""
+
     scopeObjFactory += "return obj;}).call(this)"
 
     val anObject = codeEval.eval(Some(scopeObject), None, scopeObjFactory, Lifecycle.Paused).asInstanceOf[ObjectReference]

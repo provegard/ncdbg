@@ -206,6 +206,28 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
         err.isThrown should be (false)
       }
     }
+
+    "detects reference error inside function with artifical local scope" in {
+      val script =
+        """
+          |function fun() {
+          |  var obj = {};
+          |  debugger;
+          |  obj.toString();
+          |}
+          |fun();
+        """.stripMargin
+      evaluateInScript(script)({ (host, stackframes) =>
+        host.evaluateOnStackFrame(stackframes.head.id, "unknown", Map.empty) match {
+          case Success(vn: ErrorValue) =>
+            vn.data.stackIncludingMessage.getOrElse("") should startWith ("""ReferenceError: "unknown" is not defined""")
+          case Success(other) =>
+            fail("Unexpected value: " + other)
+          case Failure(t) =>
+            fail("Error", t)
+        }
+      })
+    }
   }
 }
 

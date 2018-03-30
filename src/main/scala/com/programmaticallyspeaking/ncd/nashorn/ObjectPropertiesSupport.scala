@@ -64,11 +64,13 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
     implicit val thread = marshaller.thread
 
     def scriptObjectHolder(ref: ObjectReference) = {
-      var blacklistParts = Seq(hiddenPrefixEscapedForUseInJavaScriptRegExp + ".+")
-      if (!includeProto) blacklistParts +:= "__proto__"
-      val propBlacklistRegex = blacklistParts.map("(" + _ + ")").mkString("^", "|", "$")
       val factory = scriptBasedPropertyHolderFactory()
       val isScopeObject = objectId.id.startsWith(localScopeObjectIdPrefix)
+
+      var blacklistParts = Seq(hiddenPrefixEscapedForUseInJavaScriptRegExp + ".+")
+      if (isScopeObject) blacklistParts +:= "__noSuchProperty__" // see StackBuilder.scopeWithFreeVariables
+      if (!includeProto) blacklistParts +:= "__proto__"
+      val propBlacklistRegex = blacklistParts.map("(" + _ + ")").mkString("^", "|", "$")
       val holder = factory.create(ref, propBlacklistRegex, isNative = true, isScopeObject)
       new PropertyHolder {
         override def properties(onlyOwn: Boolean, onlyAccessors: Boolean): Seq[(String, ObjectPropertyDescriptor)] = {
