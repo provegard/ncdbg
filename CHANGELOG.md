@@ -56,6 +56,7 @@
   be detected before getting the script source.
     * **NOTE**! If NCDbg is attached to a process that has been debugged with an older version,
       code eval scripts may appear in DevTools. Restarting the target process should fix that. 
+* Make sure undefined variable access in artificial local scope results in ReferenceError.
 
 ## 0.6.0 (2017-10-22)
 
