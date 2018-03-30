@@ -377,10 +377,12 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
 
   private def pretendToBeEvalIfNecessary(fileName: String): String =
     if (fileName == CodeEval.EvalSourceName) "<eval>" else fileName
+  private def replaceEvalSourceName(str: Option[String]): Option[String] =
+    str.map(_.replace(CodeEval.EvalSourceName, "<eval>"))
 
   // Creates ExceptionData but makes sure that file URL shows as <eval> for an NCDbg-evaled script.
   private def createExceptionData(name: String, message: String, lineNumberBase1: Int, columnNumberBase0: Int, url: String, stackIncludingMessage: Option[String]): ExceptionData =
-    ExceptionData(name, message, lineNumberBase1, columnNumberBase0, pretendToBeEvalIfNecessary(url), stackIncludingMessage)
+    ExceptionData(name, message, lineNumberBase1, columnNumberBase0, pretendToBeEvalIfNecessary(url), replaceEvalSourceName(stackIncludingMessage))
 
   object ExceptionValue {
     /** Unpack an [[ErrorValue]] instance and an optional Java stack string from an exception value. The Java stack

@@ -627,6 +627,11 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
       "has description which is name + message" in {
         resultException.description.getOrElse("") should startWith ("ReferenceError: \"foobar\" is not defined")
       }
+
+      "doesn't have <ncdbg_eval> in the stack trace" in {
+        // Test without trailing > since we may add more things inside <> later
+        resultException.description.getOrElse("") should not include ("<ncdbg_eval")
+      }
     }
   }
 }
