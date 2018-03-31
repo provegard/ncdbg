@@ -228,6 +228,34 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
         }
       })
     }
+
+    "detects reference error when evaluating on global scope the same code that previously was evaluated in a function with artifical local scope" in {
+      val script =
+        """
+          |function fun() {
+          |  var obj = {};
+          |  debugger;
+          |  obj.toString();
+          |}
+          |fun();
+          |debugger;
+        """.stripMargin
+      evaluateInScript(script)({ (host, stackframes) =>
+        host.evaluateOnStackFrame(stackframes.head.id, "obj", Map.empty) match {
+          case Success(_) => // ok
+          case Failure(t) => fail("Error", t)
+        }
+      }, { (host, stackframes) =>
+        host.evaluateOnStackFrame(stackframes.head.id, "obj", Map.empty) match {
+          case Success(vn: ErrorValue) =>
+            vn.data.stackIncludingMessage.getOrElse("") should startWith ("""ReferenceError: "obj" is not defined""")
+          case Success(other) =>
+            fail("Unexpected value: " + other)
+          case Failure(t) =>
+            fail("Error", t)
+        }
+      })
+    }
   }
 }
 

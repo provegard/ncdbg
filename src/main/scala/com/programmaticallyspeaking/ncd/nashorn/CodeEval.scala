@@ -133,7 +133,9 @@ class CodeEval(typeLookup: TypeLookup, preventGC: (Value, Lifecycle.EnumVal) => 
         val contextInvoker = Invokers.shared.getDynamic(context.asInstanceOf[ObjectReference])
 
         try {
-          contextInvoker.eval(initialScope, code, callThis, CodeEval.EvalSourceName)
+          // location + eval = direct eval
+          // which is necessary to make evaluation of same code work across artificial and real scopes, it seems
+          contextInvoker.eval(initialScope, code, callThis, CodeEval.EvalSourceName, /*strict:*/ false, /*eval:*/ true)
         } catch {
           case ex: InvocationFailedException =>
             new ThrownExceptionReference(thread.virtualMachine(), ex.exceptionReference)
