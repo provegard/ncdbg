@@ -144,6 +144,26 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
       }
     }
 
+    "Java NPE" - {
+      val expr = "(function(){try{throw new java.lang.NullPointerException();}catch(e){return e;}})()"
+
+      "with an extra/internal property 'Message' which is EmptyNode" in {
+        evaluateExpression(expr) { (host, actual) =>
+          actual match {
+            case cn: ComplexNode =>
+
+              val props = host.getObjectProperties(cn.objectId, true, false)
+              val messageProp = props.find(_._1 == "[[Message]]")
+              val messageValue = messageProp.flatMap(_._2.value)
+
+              messageValue should be (Some(EmptyNode))
+
+            case other => fail("Unexpected: " + other)
+          }
+        }
+      }
+    }
+
     "Java Exception" - {
       val expr = "(function(){try{throw new java.lang.IllegalArgumentException('oops');}catch(e){return e;}})()"
 

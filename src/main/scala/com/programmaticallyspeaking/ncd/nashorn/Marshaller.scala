@@ -138,7 +138,7 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
     case so if isJSObject(so) => marshalJSObject(so)
     case BoxedValue(vn) => vn
     case ExceptionValue(vn) =>
-      val extra = vn.javaStack.map(st => "JavaStack" -> SimpleValue(st)).toMap + ("Message" -> SimpleValue(vn.data.message))
+      val extra = vn.javaStack.map(st => "JavaStack" -> valueNodeFromString(st)).toMap + ("Message" -> valueNodeFromString(vn.data.message))
       MarshallerResult(vn, extra)
     case str: ObjectReference if isConsString(str) =>
       toStringOf(str)
@@ -149,6 +149,8 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
       ObjectNode(obj.`type`().name(), objectId(obj))
     case other => throw new IllegalArgumentException("Don't know how to marshal: " + other)
   }
+
+  private def valueNodeFromString(s: String): ValueNode = if (s == null) EmptyNode else SimpleValue(s)
 
   private def attemptUnboxing(value: ObjectReference): Option[ValueNode] = {
     val invoker = Invokers.shared.getDynamic(value)
