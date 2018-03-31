@@ -156,18 +156,20 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
         }
       }
 
+      lazy val expanded = {
+        var aMap: Map[String, Any] = null
+        evaluateException { m => aMap = m }
+        aMap
+      }
+
       "with an extra/internal property 'JavaStack' (which cannot be evaluated yet...)" in {
-        evaluateException { aMap =>
-          val st = getStringProperty(aMap, "[[JavaStack]]")
-          st should startWith ("java.lang.IllegalArgumentException: oops")
-        }
+        val st = getStringProperty(expanded, "[[JavaStack]]")
+        st should startWith ("java.lang.IllegalArgumentException: oops")
       }
 
       "with an extra/internal property 'Message' (which cannot be evaluated yet...)" in {
-        evaluateException { aMap =>
-          val st = getStringProperty(aMap, "[[Message]]")
-          st should startWith ("oops")
-        }
+        val st = getStringProperty(expanded, "[[Message]]")
+        st should startWith ("oops")
       }
     }
 
