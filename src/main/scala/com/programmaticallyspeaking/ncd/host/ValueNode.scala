@@ -63,7 +63,9 @@ sealed trait ComplexNode extends ValueNode {
   val objectId: ObjectId
 }
 case object EmptyNode extends ValueNode
-case class SimpleValue(value: Any) extends ValueNode
+case class SimpleValue(value: Any) extends ValueNode {
+  assert(value != null, "Use EmptyNode for null")
+}
 
 /** Represents a JS Error or an exception.
   *
