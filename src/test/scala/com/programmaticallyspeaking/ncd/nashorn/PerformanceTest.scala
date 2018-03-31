@@ -4,6 +4,7 @@ import java.util.concurrent.TimeUnit
 
 import com.programmaticallyspeaking.ncd.host._
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
@@ -49,6 +50,38 @@ class PerformanceTest extends PerformanceTestFixture {
   "extracting properties from a JSObject object" - {
     "is fast" ignore {
       measureNamedObject(s"createInstance('${classOf[BigObjectLikeJSObject].getName}')")
+    }
+  }
+
+  "evaluating code" - {
+    val script = "debugger;"
+    val expr = "1+2+3"
+
+    "is fast" ignore {
+      waitForBreakpoint(script) { (host, breakpoint) =>
+
+        val stackFrameId = breakpoint.stackFrames.head.id
+        // ~68
+        measure(50) {
+          host.evaluateOnStackFrame(stackFrameId, expr, Map.empty)
+        }
+      }
+    }
+
+    "is fast after compilation" ignore {
+      waitForBreakpoint(script) { (host, breakpoint) =>
+
+        val stackFrameId = breakpoint.stackFrames.head.id
+
+        host.compileScript(expr, "", persist = false).andThen {
+          case _ =>
+            // ~64 -> ~122
+            measure(50) {
+              host.evaluateOnStackFrame(stackFrameId, expr, Map.empty)
+            }
+        }
+
+      }
     }
   }
 }

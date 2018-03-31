@@ -5,14 +5,14 @@ import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Promise}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try}
 
 class BreakpointTestFixture extends UnitTest with NashornScriptHostTestFixture {
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
-  type Tester = (ScriptHost, HitBreakpoint) => Unit
+  type Tester = (ScriptHost, HitBreakpoint) => Any
 
   protected def waitForBreakpoints(script: String, hostSetup: (NashornScriptHost) => Unit = (_) => {})(testers: Tester*): Unit = {
     assert(script.contains("debugger;"), "Script must contain a 'debugger' statement")
@@ -23,10 +23,23 @@ class BreakpointTestFixture extends UnitTest with NashornScriptHostTestFixture {
       case bp: HitBreakpoint =>
         val host = getHost
         val next = testerQueue.dequeue()
+        val isDone = testerQueue.isEmpty
         Try(next(host, bp)) match {
+          case Success(f: Future[_]) =>
+            f.onComplete {
+              case Success(_) =>
+                host.resume()
+                if (isDone) donePromise.success(())
+
+              case Failure(t) =>
+//                host.resume()
+              donePromise.tryFailure(t)
+            }
+
           case Success(_) =>
             host.resume()
-            if (testerQueue.isEmpty) donePromise.success(())
+//            if (testerQueue.isEmpty) donePromise.success(())
+            if (isDone) donePromise.success(())
 
           case Failure(t) =>
             donePromise.failure(t)
