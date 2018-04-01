@@ -59,11 +59,9 @@ abstract class Invoker(referenceTypeData: ReferenceTypeData) {
       thread.virtualMachine().classesByName("java.lang.Object[]").asScala.headOption match {
         case Some(array: ArrayType) =>
           val arrayRef = array.newInstance(arr.length)
-          for (i <- arr.indices) {
-            // Note: This will fail if the value is primitive, because there's no auto-boxing going on.
-            arrayRef.setValue(i, toValue(arr(i)))
-          }
-
+          val values = arr.map(toValue).toList
+          // Note: This will fail if a value is primitive, because there's no auto-boxing going on.
+          arrayRef.setValues(values.asJava)
           arrayRef
         case Some(other) => throw new IllegalStateException("java.lang.Object[] is not an ArrayType, found: " + other)
         case None => throw new IllegalStateException("java.lang.Object[] wasn't found in the VM")
