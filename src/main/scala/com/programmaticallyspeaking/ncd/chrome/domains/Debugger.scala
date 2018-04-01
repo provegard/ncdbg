@@ -299,7 +299,8 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
           evaluate(scriptHost, callFrameId, expression, namedObjects.result).exceptionDetails match {
             case Some(details) =>
               val location = details.url.map(u => " (at " + Seq(u, details.lineNumber.toString, details.columnNumber.toString).mkString(":") + ")").getOrElse("")
-              throw new IllegalArgumentException(details.text + location)
+              val msg = details.exception.flatMap(e => e.description).getOrElse(details.text)
+              throw new IllegalArgumentException(msg + location)
             case None =>
               () // don't return anything
           }
