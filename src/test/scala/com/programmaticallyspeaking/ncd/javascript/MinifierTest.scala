@@ -30,5 +30,16 @@ class MinifierTest extends UnitTest {
       val result = Minifier.minify(code)
       result should include ("yield")
     }
+
+    "doesn't introduce 'use strict'" in {
+      val code =
+        """
+          |function fun() {
+          |}
+        """.stripMargin
+      val result = Minifier.minify(code)
+      result should not include ("use strict")
+    }
+
   }
 }

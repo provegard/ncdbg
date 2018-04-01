@@ -5,6 +5,7 @@ import java.util.Collections
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.Undefined
 import com.programmaticallyspeaking.ncd.infra.IdGenerator
+import com.programmaticallyspeaking.ncd.javascript.Minifier
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost._
 import com.programmaticallyspeaking.ncd.nashorn.StackBuilder.BreakableLocationLookup
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
@@ -18,6 +19,33 @@ object StackBuilder {
   trait BreakableLocationLookup {
     def apply(location: Location): Option[BreakableLocation]
   }
+
+  // Note: __noSuchProperty__ is a workaround for the fact that we're not creating a true scope object.
+  // Nashorn has a class Scope which is a ScriptObject subclass that overrides isScope() and returns true, but
+  // creating a Scope instance is quite involved as far as I can tell.
+  private val scopeFactoryExpr =
+    s"""
+       |(function () {
+       |  var varNames = [], storage = {}, scope = Object.create(this), name, value;
+       |  for (var i = 0, j = arguments.length; i < j; i+=2) {
+       |    name = arguments[i];
+       |    value = arguments[i+1];
+       |    storage[name] = value;
+       |    (function (name) {
+       |      Object.defineProperty(scope, name, {
+       |        get: function() { return storage[name]; },
+       |        set: function(v) { this['${hiddenPrefix}changes'].push(name,v); storage[name]=v; },
+       |        enumerable: true
+       |      });
+       |    })(name);
+       |  }
+       |  scope['${hiddenPrefix}changes'] = [];
+       |  scope['${hiddenPrefix}resetChanges'] = function() { scope['${hiddenPrefix}changes'].length=0; };
+       |  scope.__noSuchProperty__ = function(prop) { throw new ReferenceError('"' + prop + '" is not defined'); };
+       |  return scope;
+       |})
+     """.stripMargin
+  val scopeFactoryExprMinified = Minifier.minify(scopeFactoryExpr)
 }
 
 class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, mappingRegistry: MappingRegistry, codeEval: CodeEval, boxer: Boxer,
@@ -39,37 +67,13 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
       case null => null
       case other => throw new UnsupportedOperationException("Don't know how to handle: " + other)
     })
+    def stringValue(s: String): Value = thread.virtualMachine().mirrorOf(s)
 
-    val jsVarNames = varNames.mkString("['", "','", "']")
-
-    // Note: __noSuchProperty__ is a workaround for the fact that we're not creating a true scope object.
-    // Nashorn has a class Scope which is a ScriptObject subclass that overrides isScope() and returns true, but
-    // creating a Scope instance is quite involved as far as I can tell.
-    val funcExpression =
-      s"""
-         |(function () {
-         |  var varNames=$jsVarNames,storage={},scope=Object.create(this);
-         |  for (var i=0,j=varNames.length;i<j;i++) {
-         |    storage[varNames[i]] = arguments[i];
-         |    (function(name){
-         |      Object.defineProperty(scope,name,{
-         |        get:function(){return storage[name];},
-         |        set:function(v){this['${hiddenPrefix}changes'].push(name,v);storage[name]=v;},
-         |        enumerable:true
-         |      });
-         |    })(varNames[i]);
-         |  }
-         |  scope['${hiddenPrefix}changes']=[];
-         |  scope['${hiddenPrefix}resetChanges']=function(){ scope['${hiddenPrefix}changes'].length=0; };
-         |  scope.__noSuchProperty__=function(prop){throw new ReferenceError('"' + prop + '" is not defined');};
-         |  return scope;
-         |})
-       """.stripMargin
-
-    val aFunction = codeEval.eval(None, None, funcExpression, Lifecycle.Paused).asInstanceOf[ObjectReference]
+    val aFunction = codeEval.eval(None, None, StackBuilder.scopeFactoryExprMinified, Lifecycle.Paused).asInstanceOf[ObjectReference]
     val mirror = new ScriptObjectMirror(aFunction).asFunction
 
-    val anObject = gCContext.pin(Lifecycle.Paused)(mirror.invoke(scopeObject, varValues))
+    val args = varNames.map(stringValue).zip(varValues).flatMap(p => Seq(p._1, p._2))
+    val anObject = gCContext.pin(Lifecycle.Paused)(mirror.invoke(scopeObject, args))
 
     anObject
   }

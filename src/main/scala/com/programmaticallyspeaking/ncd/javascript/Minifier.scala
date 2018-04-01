@@ -11,6 +11,9 @@ object Minifier {
 
     CompilationLevel.SIMPLE_OPTIMIZATIONS.setOptionsForCompilationLevel(options)
 
+    // Don't introduce 'use strict' as it changes the visibility of globals (e.g. Object).
+    options.setEmitUseStrict(false)
+
     // Due to transpilation, we shouldn't need any externs.
     val extern = SourceFile.fromCode("externs.js", "")
 
