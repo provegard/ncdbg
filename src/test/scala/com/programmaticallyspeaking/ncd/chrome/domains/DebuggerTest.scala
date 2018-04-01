@@ -448,7 +448,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     "evaluateOnCallFrame" - {
 
       def testEvalHandling(theAnswer: => ValueNode, returnByValue: Option[Boolean] = None, generatePreview: Option[Boolean] = None)(fun: (Debugger.EvaluateOnCallFrameResult) => Unit): Unit = {
-        when(currentScriptHost.evaluateOnStackFrame(any[String], any[String], any[Map[String, ObjectId]])).thenAnswer(new Answer[Try[ValueNode]] {
+        when(currentScriptHost.evaluateOnStackFrame(any[String], any[String])).thenAnswer(new Answer[Try[ValueNode]] {
           override def answer(invocation: InvocationOnMock): Try[ValueNode] = {
             Try(theAnswer)
           }

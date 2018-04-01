@@ -21,7 +21,7 @@ object StackBuilder {
 }
 
 class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, mappingRegistry: MappingRegistry, codeEval: CodeEval, boxer: Boxer,
-                   breakableLocationLookup: BreakableLocationLookup) extends Logging {
+                   breakableLocationLookup: BreakableLocationLookup, preventGC: (Value, Lifecycle.EnumVal) => Unit) extends Logging {
   import scala.collection.JavaConverters._
   import JDIExtensions._
   import TypeConstants._
@@ -32,47 +32,63 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
     // If there aren't any free variables, we don't need to create a wrapper scope
     if (freeVariables.isEmpty) return scopeObject
 
-    // Just using "{}" returns undefined - don't know why - but "Object.create" works well.
-    // Use the passed scope object as prototype object so that scope variables will be seen as well.
-    var scopeObjFactory =
-    s"""(function() { var obj = Object.create(this);
-       |obj['${hiddenPrefix}changes']=[];
-       |obj['${hiddenPrefix}resetChanges']=function(){ obj['${hiddenPrefix}changes'].length=0; };
+    val entries: Seq[(String, AnyRef)] = freeVariables.toSeq
+    val varNames = entries.map(_._1)
+    val varValues: Seq[Value] = entries.map(_._2 match {
+      case prim: PrimitiveValue => boxer.boxed(prim)
+      case v: Value => v
+      case null => null
+      case other => throw new UnsupportedOperationException("Don't know how to handle: " + other)
+    })
+
+    val jsVarNames = varNames.mkString("['", "','", "']")
+
+    // Note: __noSuchProperty__ is a workaround for the fact that we're not creating a true scope object.
+    // Nashorn has a class Scope which is a ScriptObject subclass that overrides isScope() and returns true, but
+    // creating a Scope instance is quite involved as far as I can tell.
+    val funcExpression =
+      s"""
+         |(function () {
+         |  var varNames=$jsVarNames,storage={},scope=Object.create(this);
+         |  for (var i=0,j=varNames.length;i<j;i++) {
+         |    storage[varNames[i]] = arguments[i];
+         |    (function(name){
+         |      Object.defineProperty(scope,name,{
+         |        get:function(){return storage[name];},
+         |        set:function(v){this['${hiddenPrefix}changes'].push(name,v);storage[name]=v;},
+         |        enumerable:true
+         |      });
+         |    })(varNames[i]);
+         |  }
+         |  scope['${hiddenPrefix}changes']=[];
+         |  scope['${hiddenPrefix}resetChanges']=function(){ scope['${hiddenPrefix}changes'].length=0; };
+         |  scope.__noSuchProperty__=function(prop){throw new ReferenceError('"' + prop + '" is not defined');};
+         |  return scope;
+         |})
        """.stripMargin
 
-    // Add an accessor property for each free variable. This allows us to track changes to the variables, which is
-    // necessary to be able to update local variables later on.
-    freeVariables.foreach {
-      case (name, _) =>
-        scopeObjFactory +=
-          s"""obj['$hiddenPrefix$name'] = void 0;
-             |Object.defineProperty(obj,'$name',{
-             |  get:function() { return this['$hiddenPrefix$name']; },
-             |  set:function(v) { this['${hiddenPrefix}changes'].push('$name',v); this['$hiddenPrefix$name']=v; },
-             |  enumerable:true
-             |});
-           """.stripMargin
-    }
+    val aFunction = codeEval.eval(None, None, funcExpression, Lifecycle.Paused).asInstanceOf[ObjectReference]
+    val mirror = new ScriptObjectMirror(aFunction).asFunction
 
-    // This is a workaround for the fact that we're not creating a true scope object. Nashorn has
-    // a class Scope which is a ScriptObject subclass that overrides isScope() and returns true, but
-    // creating a Scope instance is quite involved as far as I can tell.
-    scopeObjFactory += """obj.__noSuchProperty__ = function (prop) { throw new ReferenceError('"' + prop + '" is not defined'); };"""
-
-    scopeObjFactory += "return obj;}).call(this)"
-
-    val anObject = codeEval.eval(Some(scopeObject), None, scopeObjFactory, Lifecycle.Paused).asInstanceOf[ObjectReference]
-    val mirror = new ScriptObjectMirror(anObject)
-    freeVariables.foreach {
-      case (name, value) =>
-        val valueToPut = value match {
-          case prim: PrimitiveValue => boxer.boxed(prim)
-          case other => other
-        }
-        mirror.put(hiddenPrefix + name, valueToPut, isStrict = false)
-    }
+    val anObject = withGCPrevention(Lifecycle.Paused)(mirror.invoke(scopeObject, varValues))
 
     anObject
+  }
+
+  private def withGCPrevention[R <: Value](lifecycle: Lifecycle.EnumVal)(f: => R): R = {
+    withGCPrevention(lifecycle, 3)(f)
+  }
+
+  //TODO: This one exists elsewhere
+  private def withGCPrevention[R <: Value](lifecycle: Lifecycle.EnumVal, attempts: Int)(f: => R): R = {
+    try {
+      val retVal = f
+      preventGC(retVal, lifecycle)
+      retVal
+    } catch {
+      case ex: ObjectCollectedException if attempts > 1 =>
+        withGCPrevention(lifecycle, attempts - 1)(f)
+    }
   }
 
   private def prototypeOf(value: Value)(implicit thread: ThreadReference): Option[Value] = value match {
@@ -153,7 +169,12 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
         // ":this" should always be present, but a function that doesn't capture anything may lack a ":scope" variable
         values.get(":this") match {
           case Some(originalThis) =>
-            val originalScope = values.get(":scope")
+            var originalScope = values.get(":scope")
+            //TODO: We didn't do this before... why?? If originalScope is null or undefined, should we leave it at that??
+            originalScope = originalScope.flatMap { s =>
+              if (s.`type`().name() == "jdk.nashorn.internal.runtime.Undefined") None
+              else Some(s)
+            }
 
             // Variables that don't start with ":" are locals
             val localValues = values.filter(e => !e._1.startsWith(":")) // for use in evaluateCodeOnFrame
@@ -163,7 +184,7 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
             // The scope may be missing, in which case we use 'this'. Which may be null (different from missing), in
             // which case we use global as scope.
             val scopeObject = originalScope
-              .orElse(Option(originalThis))
+              //.orElse(Option(originalThis))
               .orElse(getGlobal())
               .getOrElse(throw new IllegalStateException("Failed to locate a scope object. Tried scope, this, global."))
 
@@ -189,12 +210,24 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
             val scopeChain = createScopeChain(marshaller, originalScope, originalThis, thisObj, localNode)
 
             def evaluateCodeOnFrame: CodeEvaluator = {
-              case (code, namedValues) =>
-                // Create a scope object for the extra variables to use during evaluation, if any.
-                val scopeToUse = scopeWithFreeVariables(localScope, namedValues)
-
+              case (code, maybeInvokeFunctionData) =>
                 try {
-                  val ret = codeEval.eval(Some(originalThis), Some(scopeToUse), code, Lifecycle.Paused)
+                  // If we expect the result of eval to be a function, make sure to wrap the function declaration
+                  // in parentheses so that the function is returned.
+                  val actualCode = if (maybeInvokeFunctionData.isDefined) s"($code)" else code
+                  var ret = codeEval.eval(Some(originalThis), Some(localScope), actualCode, Lifecycle.Paused)
+
+                  maybeInvokeFunctionData match {
+//                    case Some(_) if !ret.isInstanceOf[ObjectReference] =>
+//                      throw new RuntimeException(s"$ret is not an object reference that can be a function")
+                    case Some(data) if ret.isInstanceOf[ObjectReference] =>
+                      // interpret 'ret' as a function and call it with the arguments
+                      val mirror = new ScriptObjectMirror(ret.asInstanceOf[ObjectReference]).asFunction
+                      ret = withGCPrevention(Lifecycle.Paused)(mirror.invoke(data.thisValue, data.arguments))
+                    case _ =>
+                      // return 'ret' unchanged
+                  }
+
                   marshaller.marshal(ret)
                 } catch {
                   case ex: ObjectCollectedException =>

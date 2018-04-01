@@ -63,7 +63,7 @@ class PerformanceTest extends PerformanceTestFixture {
         val stackFrameId = breakpoint.stackFrames.head.id
         // ~68
         measure(50) {
-          host.evaluateOnStackFrame(stackFrameId, expr, Map.empty)
+          host.evaluateOnStackFrame(stackFrameId, expr)
         }
       }
     }
@@ -77,7 +77,7 @@ class PerformanceTest extends PerformanceTestFixture {
           case _ =>
             // ~64 -> ~122
             measure(50) {
-              host.evaluateOnStackFrame(stackFrameId, expr, Map.empty)
+              host.evaluateOnStackFrame(stackFrameId, expr)
             }
         }
 
@@ -100,7 +100,7 @@ trait PerformanceTestFixture extends BreakpointTestFixture {
 
       getHost.disableObjectPropertiesCache()
 
-      host.evaluateOnStackFrame("$top", name, Map.empty) match {
+      host.evaluateOnStackFrame("$top", name) match {
         case Success(vn: ComplexNode) =>
 
           val objId = objectId(vn)

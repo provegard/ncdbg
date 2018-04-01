@@ -107,7 +107,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
             |  name: "unknown.js"
             |});
           """.stripMargin
-        host.evaluateOnStackFrame(hb.stackFrames.head.id, loader, Map.empty)
+        host.evaluateOnStackFrame(hb.stackFrames.head.id, loader)
       } {
         case BreakpointResolved(_, location) =>
           location.location.lineNumber1Based should be (1)
@@ -126,7 +126,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
             |});
             |print("ff = " + this.ff);
           """.stripMargin
-        host.evaluateOnStackFrame(hb.stackFrames.head.id, loader, Map.empty)
+        host.evaluateOnStackFrame(hb.stackFrames.head.id, loader)
       }, { (host, hb) =>
         hb.stackFrames.head.scriptURL.toString should include ("unknown2.js")
       })

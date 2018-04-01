@@ -2,45 +2,100 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 
 import java.io.File
 
+import com.google.common.collect.MultimapBuilder.ListMultimapBuilder
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
-import com.programmaticallyspeaking.ncd.host.{ErrorValue, ObjectId, ScriptHost}
+import com.programmaticallyspeaking.ncd.host.{ErrorValue, ObjectId, ScriptHost, ValueNode}
 import com.programmaticallyspeaking.ncd.infra.{ErrorUtils, IdGenerator, ObjectMapping}
 import com.programmaticallyspeaking.ncd.nashorn.InvocationFailedException
 import org.slf4s.Logging
 
-import scala.util.{Failure, Success}
+import scala.collection.mutable.ListBuffer
+import scala.util.{Failure, Success, Try}
 
 object ScriptEvaluateSupport {
   /**
-    * Serialize arguments to JSON so that they can be embedded in a script.
+    * Assuming `arguments` contains a mix of plain values and objects, constructs a function wrapper that takes only
+    * objects based on the object IDs and the invokes the given function with all arguments in correct order.
+    *
+    * @param functionDecl
+    * @param arguments
+    * @return
     */
-  def serializeArgumentValues(arguments: Seq[Runtime.CallArgument], namedObjects: NamedObjects): Seq[String] = {
-    arguments.map { arg =>
-      (arg.value, arg.unserializableValue, arg.objectId) match {
-        case (Some(value), None, None) =>
-          ObjectMapping.toJson(value)
-        case (None, Some(unserializableValue), None) => unserializableValue
-        case (None, None, Some(strObjectId)) =>
-          // Obtain a name for the object with the given ID
-          val objectId = ObjectId.fromString(strObjectId)
-          namedObjects.useNamedObject(objectId)
-        case (None, None, None) => "undefined"
-        case _ =>
-          // TODO: How can we differ between null and undefined?
-          "null"
-      }
+  //TODO: Unit test
+  def wrapInFunction(functionDecl: String, arguments: Seq[Runtime.CallArgument]): (String, Seq[ObjectId]) = {
+    val jsArgs = ListBuffer[String]()
+    val objIds = ListBuffer[ObjectId]()
+    val objArgNames = ListBuffer[String]()
+
+    val unpackedWithIndex = arguments.map(unpackArg).zipWithIndex
+    unpackedWithIndex.foreach {
+      case (either, idx) =>
+        either match {
+          case Left(s) =>
+            jsArgs += s
+          case Right(objId) =>
+            val name = "__o_" + idx
+            objIds += objId
+            objArgNames += name
+            jsArgs += name
+        }
+    }
+
+    if (objIds.size == arguments.size) {
+      // no need for wrapping
+      return (functionDecl, objIds)
+    }
+
+    val jsArray = jsArgs.mkString("[", ", ", "]")
+    val objArgList = objArgNames.mkString(", ")
+
+    val wrapperFun =
+      s"""
+         |function ($objArgList) {
+         |  var argsInOrder = $jsArray;
+         |  var f = ($functionDecl);
+         |  return f.apply(this, argsInOrder);
+         |}
+       """.stripMargin
+    (wrapperFun, objIds)
+  }
+
+  private def unpackArg(arg: Runtime.CallArgument): Either[String, ObjectId] = {
+    (arg.value, arg.unserializableValue, arg.objectId) match {
+      case (Some(value), None, None) =>
+        Left(ObjectMapping.toJson(value))
+      case (None, Some(unserializableValue), None) =>
+        Left(unserializableValue)
+      case (None, None, Some(strObjectId)) =>
+        val objectId = ObjectId.fromString(strObjectId)
+        Right(objectId)
+      case (None, None, None) =>
+        Left("void 0") // undefined
+      case _ =>
+        // TODO: How can we differ between null and undefined?
+        Left("null")
     }
   }
 }
 
 trait ScriptEvaluateSupport { self: Logging =>
 
-  def evaluate(scriptHost: ScriptHost, callFrameId: String, expression: String, namedObjects: Map[String, ObjectId])
+  def callFunctionOn(scriptHost: ScriptHost, callFrameId: String, thisObject: Option[ObjectId], functionDeclaration: String, arguments: Seq[ObjectId])
+                    (implicit remoteObjectConverter: RemoteObjectConverter): EvaluationResult = {
+
+    toEvaluationResult(scriptHost.callFunctionOn(callFrameId, thisObject, functionDeclaration, arguments))
+  }
+
+  def evaluate(scriptHost: ScriptHost, callFrameId: String, expression: String)
               (implicit remoteObjectConverter: RemoteObjectConverter): EvaluationResult = {
+
+    toEvaluationResult(scriptHost.evaluateOnStackFrame(callFrameId, expression))
+  }
+
+  private def toEvaluationResult(t: Try[ValueNode])(implicit remoteObjectConverter: RemoteObjectConverter): EvaluationResult = {
     // TODO: What is the exception ID for?
     val exceptionId = 1
-
-    scriptHost.evaluateOnStackFrame(callFrameId, expression, namedObjects) match {
+    t match {
       case Success(err: ErrorValue) if err.isThrown =>
         val details = Runtime.ExceptionDetails.fromErrorValue(err, exceptionId)
         log.debug(s"Responding with evaluation error: $details" + err.javaStack.map("\r\n" + _))
@@ -51,7 +106,6 @@ trait ScriptEvaluateSupport { self: Logging =>
         val exceptionDetails = exceptionDetailsFromError(t, exceptionId)
         EvaluationResult(RemoteObject.undefinedValue, Some(exceptionDetails))
     }
-
   }
 
   protected def exceptionDetailsFromError(t: Throwable, exceptionId: Int): ExceptionDetails = {

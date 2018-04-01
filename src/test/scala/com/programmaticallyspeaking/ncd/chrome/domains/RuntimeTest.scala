@@ -21,9 +21,8 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
   def evaluateOnStackFrameArgs: EvaluateOnStackFrameArgs = {
     val sidCaptor = ArgumentCaptor.forClass(classOf[String])
     val exprCaptor = ArgumentCaptor.forClass(classOf[String])
-    val mapCaptor = ArgumentCaptor.forClass(classOf[Map[String, ObjectId]])
-    verify(currentScriptHost).evaluateOnStackFrame(sidCaptor.capture(), exprCaptor.capture(), mapCaptor.capture())
-    EvaluateOnStackFrameArgs(sidCaptor.getValue, exprCaptor.getValue, mapCaptor.getValue)
+    verify(currentScriptHost).evaluateOnStackFrame(sidCaptor.capture(), exprCaptor.capture())
+    EvaluateOnStackFrameArgs(sidCaptor.getValue, exprCaptor.getValue)
   }
 
   "Runtime" - {
@@ -267,7 +266,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
                    returnByValue: Option[Boolean] = None, generatePreview: Option[Boolean] = None, functionDecl: Option[String] = None)(fun: (Any) => Unit) = {
 
         val actualRetVal = retVal.getOrElse(Success(SimpleValue("ok")))
-        when(currentScriptHost.evaluateOnStackFrame(any[String], any[String], any[Map[String, ObjectId]])).thenReturn(actualRetVal)
+        when(currentScriptHost.evaluateOnStackFrame(any[String], any[String])).thenReturn(actualRetVal)
 
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
@@ -285,19 +284,21 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       }
 
       "should perform ScriptHost evaluation with a wrapped function on the top stack frame and the target as a named object" in {
-        val obj = objectWithId("x")
-        testCall(obj, """{"id":"x"}""", Seq.empty) { resp =>
-          val expr = "(function(){}).apply(__obj_1,[])"
-          evaluateOnStackFrameArgs should be (EvaluateOnStackFrameArgs("$top", expr, Map("__obj_1" -> ObjectId("x"))))
-        }
+        fail("TODO")
+//        val obj = objectWithId("x")
+//        testCall(obj, """{"id":"x"}""", Seq.empty) { resp =>
+//          val expr = "(function(){}).apply(__obj_1,[])"
+//          evaluateOnStackFrameArgs should be (EvaluateOnStackFrameArgs("$top", expr, Map("__obj_1" -> ObjectId("x"))))
+//        }
       }
 
       "should accept null arguments (VSCode may omit the arguments)" in {
-        val obj = objectWithId("x")
-        testCall(obj, """{"id":"x"}""", null) { resp =>
-          val expr = "(function(){}).apply(__obj_1,[])"
-          evaluateOnStackFrameArgs should be (EvaluateOnStackFrameArgs("$top", expr, Map("__obj_1" -> ObjectId("x"))))
-        }
+        fail("TODO")
+//        val obj = objectWithId("x")
+//        testCall(obj, """{"id":"x"}""", null) { resp =>
+//          val expr = "(function(){}).apply(__obj_1,[])"
+//          evaluateOnStackFrameArgs should be (EvaluateOnStackFrameArgs("$top", expr, Map("__obj_1" -> ObjectId("x"))))
+//        }
       }
 
       "should transpile a generator function" in {
@@ -340,10 +341,11 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       }
 
       "should provide a name-object ID mapping when a call argument is an object ID" in {
-        val arg = CallArgument(None, None, Some("""{"id":"foo"}"""))
-        testCallArgs(Seq(arg)) { result =>
-          result.namedObjects should contain ("__obj_2" -> ObjectId("foo"))
-        }
+        fail("TODO")
+//        val arg = CallArgument(None, None, Some("""{"id":"foo"}"""))
+//        testCallArgs(Seq(arg)) { result =>
+//          result.namedObjects should contain ("__obj_2" -> ObjectId("foo"))
+//        }
       }
 
       "should support a call argument that is undefined" in {
@@ -385,7 +387,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
                    returnByValue: Option[Boolean] = None, generatePreview: Option[Boolean] = None)(fun: (Any) => Unit) = {
 
         val actualRetVal = retVal.getOrElse(Success(SimpleValue("ok")))
-        when(currentScriptHost.evaluateOnStackFrame(any[String], any[String], any[Map[String, ObjectId]])).thenReturn(actualRetVal)
+        when(currentScriptHost.evaluateOnStackFrame(any[String], any[String])).thenReturn(actualRetVal)
 
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
@@ -408,7 +410,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       "should perform ScriptHost evaluation with a wrapped function using null (global) as 'this'" in {
         testEvaluate("42") { _ =>
           val expr = "(function(){return (42);}).call(null);"
-          evaluateOnStackFrameArgs should be(EvaluateOnStackFrameArgs("$top", expr, Map.empty))
+          evaluateOnStackFrameArgs should be(EvaluateOnStackFrameArgs("$top", expr))
         }
       }
 
@@ -500,5 +502,5 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
   }
 
   // Helper class for matching against arguments of a mocked call to ScriptHost.evaluateOnStackFrame
-  case class EvaluateOnStackFrameArgs(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId])
+  case class EvaluateOnStackFrameArgs(stackFrameId: String, expression: String)
 }

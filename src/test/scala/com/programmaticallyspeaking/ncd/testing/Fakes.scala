@@ -18,7 +18,7 @@ object FakeFilePublisher extends FilePublisher {
 object FakeScriptHost extends ScriptHost {
   val eventSubject = new SerializedSubject[ScriptEvent]
 
-  override def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode] = Try(notImpl)
+  override def evaluateOnStackFrame(stackFrameId: String, expression: String): Try[ValueNode] = Try(notImpl)
   override def removeBreakpointById(id: String): Unit = notImpl
   override def resume(): Unit = notImpl
   override def reset(): Unit = notImpl
@@ -49,4 +49,6 @@ object FakeScriptHost extends ScriptHost {
   override def runCompiledScript(scriptId: String): Try[ValueNode] = notImpl
 
   override def warnings: Seq[String] = Seq.empty
+
+  override def callFunctionOn(stackFrameId: String, thisObject: Option[ObjectId], functionDeclaration: String, arguments: Seq[ObjectId]): Try[ValueNode] = Try(notImpl)
 }

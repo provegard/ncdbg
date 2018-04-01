@@ -35,7 +35,7 @@ trait PrintTestFixture extends NashornScriptHostTestFixture with Eventually with
     observeAndRunScriptAsync("debugger;", obs) { host =>
       stackframesPromise.future.map { sf =>
 
-        host.evaluateOnStackFrame(sf.head.id, code, Map.empty)
+        host.evaluateOnStackFrame(sf.head.id, code)
 
         handler(events)
       }

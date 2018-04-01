@@ -16,10 +16,7 @@ class ScriptHostBasedObjectInteraction(scriptHost: ScriptHost) extends ObjectInt
     scriptHost.getObjectProperties(objectId, onlyOwn = true, onlyAccessors = false)
 
   override def invokePropertyGetter(objectId: ObjectId, getter: FunctionNode): Try[ValueNode] = {
-    scriptHost.evaluateOnStackFrame("$top", "(__getter.call(__object))", Map(
-      "__getter" -> getter.objectId,
-      "__object" -> objectId
-    ))
+    scriptHost.callFunctionOn("$top", None, "function (g, o) { return g.call(o); }", Seq(getter.objectId, objectId))
   }
 }
 

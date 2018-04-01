@@ -82,10 +82,11 @@ trait ScriptHost {
     *
     * @param stackFrameId the ID of the stack frame to evaluate the expression on.
     * @param expression the expression to evaluate
-    * @param namedObjects map of objects to expose as free variables
     * @return
     */
-  def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode]
+  def evaluateOnStackFrame(stackFrameId: String, expression: String): Try[ValueNode]
+
+  def callFunctionOn(stackFrameId: String, thisObject: Option[ObjectId], functionDeclaration: String, arguments: Seq[ObjectId]): Try[ValueNode]
 
   def removeBreakpointById(id: String): Unit
 

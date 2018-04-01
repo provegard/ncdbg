@@ -106,6 +106,8 @@ class ScriptFunctionMirror(scriptObject: ObjectReference)(implicit marshaller: M
     */
   def invokeNoArgs(): Value = invoker.invoke(null, null)
 
+  def invoke(thiz: Value, args: Seq[Value]): Value = invoker.invoke(thiz, args.toArray)
+
   //TODO: Correct to return Value here? Marshalling is non-trivial due to special target (ScopeObject), i.e.
   //TODO: Marshaller doesn't auto-marshal to ScopeObject since it cannot recognize a scope object ref.
   def scopes: Seq[Value] = {

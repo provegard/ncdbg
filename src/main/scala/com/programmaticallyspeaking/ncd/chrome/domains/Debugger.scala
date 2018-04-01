@@ -262,7 +262,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
 
       implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
 
-      val evalResult = evaluate(scriptHost, callFrameId, expression, Map.empty)
+      val evalResult = evaluate(scriptHost, callFrameId, expression)
       EvaluateOnCallFrameResult(evalResult.result, evalResult.exceptionDetails)
 
     case Debugger.setBreakpointsActive(active) =>
@@ -289,14 +289,11 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Dom
         case Right(strObjectId) =>
           implicit val remoteObjectConverter = createRemoteObjectConverter(false, false)
 
-          val namedObjects = new NamedObjects
+          val scopeObjectId = ObjectId.fromString(strObjectId)
+          val func = s"function (value) { this['$varName'] = value; }"
+          val (wrapperFunc, objIds) = ScriptEvaluateSupport.wrapInFunction(func, Seq(newValue))
 
-          val scopeName = namedObjects.useNamedObject(ObjectId.fromString(strObjectId))
-          val newValueName = ScriptEvaluateSupport.serializeArgumentValues(Seq(newValue), namedObjects).head
-
-          val expression = s"$scopeName['$varName']=$newValueName;"
-
-          evaluate(scriptHost, callFrameId, expression, namedObjects.result).exceptionDetails match {
+          callFunctionOn(scriptHost, callFrameId, Some(scopeObjectId), wrapperFunc, objIds).exceptionDetails match {
             case Some(details) =>
               val location = details.url.map(u => " (at " + Seq(u, details.lineNumber.toString, details.columnNumber.toString).mkString(":") + ")").getOrElse("")
               val msg = details.exception.flatMap(e => e.description).getOrElse(details.text)

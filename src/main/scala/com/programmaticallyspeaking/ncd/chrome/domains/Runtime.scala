@@ -263,7 +263,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
 
         implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
 
-        val evalResult = evaluate(scriptHost, "$top", script, Map.empty)
+        val evalResult = evaluate(scriptHost, "$top", script)
         EvaluateResult(evalResult.result, evalResult.exceptionDetails)
       }
 
@@ -315,9 +315,10 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
         case None =>
           implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
 
-          val namedObjects = new NamedObjects
+//          val namedObjects = new NamedObjects
 
-          val targetName = namedObjects.useNamedObject(ObjectId.fromString(strObjectId))
+          val thisObjectId = ObjectId.fromString(strObjectId)
+//          val targetName = namedObjects.useNamedObject(ObjectId.fromString(strObjectId))
 
           // Transpile the code if needed.
           // Some considerations:
@@ -325,11 +326,12 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
           // - perhaps we should transpile in Runtime.evaluate also?
           val maybeTranspiled = if (needsTranspile(functionDeclaration)) transpile(functionDeclaration) else functionDeclaration
 
-          val argsArrayString = ScriptEvaluateSupport.serializeArgumentValues(safeArgs(arguments), namedObjects).mkString("[", ",", "]")
-          val expression = s"($maybeTranspiled).apply($targetName,$argsArrayString)"
+//          val argsArrayString = ScriptEvaluateSupport.serializeArgumentValues(safeArgs(arguments), namedObjects).mkString("[", ",", "]")
+//          val expression = s"($maybeTranspiled).apply($targetName,$argsArrayString)"
+          val (wrapperFunc, objIds) = ScriptEvaluateSupport.wrapInFunction(maybeTranspiled, arguments)
 
           // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
-          val evalResult = evaluate(scriptHost, "$top", expression, namedObjects.result)
+          val evalResult = callFunctionOn(scriptHost, "$top", Some(thisObjectId), wrapperFunc, objIds)
 
           if (evalResult.exceptionDetails.isEmpty && isCacheableFunction) {
             // Store in cache

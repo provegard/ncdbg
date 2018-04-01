@@ -94,7 +94,7 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
         """.stripMargin
 
       def getPropNames(objName: String, callFrame: CallFrame): Seq[String] = {
-        getHost.evaluateOnStackFrame(callFrame.callFrameId, objName, Map.empty) match {
+        getHost.evaluateOnStackFrame(callFrame.callFrameId, objName) match {
           case Success(c: ComplexNode) =>
             getHost.getObjectProperties(c.objectId, true, false).map(_._1)
           case Success(other) => fail(s"Unexpected: '$objName' evaluated to: " + other)

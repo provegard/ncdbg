@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.types.Undefined
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{StackFrameImpl, hiddenPrefix, stackFrameIndexExtraProp}
+import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{InvokeFunctionData, StackFrameImpl, hiddenPrefix, stackFrameIndexExtraProp}
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.{ObjectReference, StringReference, Value}
 import org.slf4s.Logging
@@ -11,56 +11,39 @@ import scala.util.{Failure, Success, Try}
 
 class StackFrameEvaluator(mappingRegistry: MappingRegistry, boxer: Boxer) extends Logging {
 
-  private def nativeValueForObjectId(objectId: ObjectId): Option[Value] = {
-    mappingRegistry.byId(objectId) match {
-      // TODO: Should we handle extras here?
-      case Some(descriptor) if descriptor.native.isDefined => Some(descriptor.native.get)
-      case Some(_) => None
-      case _ =>
-        throw new IllegalArgumentException(s"No object with ID '$objectId' was found.")
-    }
-  }
+//  private def nativeValueForObjectId(objectId: ObjectId): Option[Value] = {
+//    mappingRegistry.byId(objectId) match {
+//      // TODO: Should we handle extras here?
+//      case Some(descriptor) if descriptor.native.isDefined => Some(descriptor.native.get)
+//      case Some(_) => None
+//      case _ =>
+//        throw new IllegalArgumentException(s"No object with ID '$objectId' was found.")
+//    }
+//  }
+  private def nativeValueForObject(objId: ObjectId) = mappingRegistry.byId(objId).flatMap(_.native).getOrElse(throw new IllegalArgumentException("No native Value for object: " + objId))
 
-  private def valuesForObjects(namedObjects: Map[String, ObjectId]): Map[String, Value] = {
-    namedObjects.flatMap {
-      case (name, objectId) => nativeValueForObjectId(objectId).map(name -> _).toSeq
-    }
-  }
-
-  def evaluateOnStackFrame(pd: PausedData, stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): ValueNode = {
+  def evaluateOnStackFrame(pd: PausedData, stackFrameId: String, expression: String, invokeFunctionData: Option[InvokeFunctionData]): ValueNode = {
     findStackFrame(pd, stackFrameId) match {
       case Some(sf: StackFrameImpl) =>
         implicit val marshaller = pd.marshaller
 
-        // Get the Value instances corresponding to the named objects
-        val namedValues = valuesForObjects(namedObjects)
-
-        // To be able to detect changes to local variables, find the local scope (unless it's in namedObjects already,
-        // e.g. in the setVariableValue case).
-        val localScopeId = sf.scopeChain.find(_.scopeType == ScopeType.Local).map(_.value) match {
-          case Some(c: ComplexNode) if !namedObjects.values.toSeq.contains(c.objectId) => Some(c.objectId)
-          case _ => None
-        }
-        val localScopeValue = localScopeId.flatMap(nativeValueForObjectId)
+        // To be able to detect changes to local variables, find the artificial local scope, if any.
+        val localScopeId = sf.scopeChain.find(_.scopeType == ScopeType.Local).map(_.value).collect { case c: ComplexNode => c.objectId }
+        val localScope = localScopeId.map(id => (id, nativeValueForObject(id)))
 
         // Evaluating code may modify any existing object, which means that we cannot keep our object properties
         // cache. There's no point trying to be smart here and only remove entries for the named objects, since the
         // code may call a function that modifies an object that we don't know about here.
         pd.objectPropertiesCache.clear()
 
-        // By resetting change tracking before evaluating the expression, we can track changes made to any
-        // named objects.
-        resetChangeTracking(sf, namedValues)
+        // By resetting change tracking before evaluating the expression, we can track changes made to local vars.
+        resetChangeTracking(sf, localScope)
 
-        val result = sf.eval(expression, namedValues)
+        val result = sf.eval(expression, invokeFunctionData)
 
         // Update locals that changed, if needed. It's not sufficient for the synthetic locals object to have
         // been updated, since generated Java code will access the local variables directly.
-        // Add the local scope here, if any.
-        val localScopeName = localsName(namedObjects.keys.toSet)
-        updateChangedLocals(sf,
-          namedValues ++ localScopeValue.map(localScopeName -> _),
-          namedObjects ++ localScopeId.map(localScopeName -> _))
+        updateChangedLocals(sf, localScope)
         result
       case _ =>
         log.warn(s"Cannot evaluate '$expression', because no stack frame found with ID $stackFrameId. Available IDs: " + pd.stackFrames.map(_.id).mkString(", "))
@@ -68,65 +51,66 @@ class StackFrameEvaluator(mappingRegistry: MappingRegistry, boxer: Boxer) extend
     }
   }
 
-  /**
-    * Finds a unique name for the locals object we pass to updateChangedLocals. Probably overkill.
-    */
-  private def localsName(objectNames: Set[String]): String = {
-    val origName = "___locals"
-    var name = origName
-    var idx = 1
-    while (objectNames.contains(name)) {
-      name = origName + idx
-      idx += 1
-    }
-    name
-  }
+//  /**
+//    * Finds a unique name for the locals object we pass to updateChangedLocals. Probably overkill.
+//    */
+//  private def localsName(objectNames: Set[String]): String = {
+//    val origName = "___locals"
+//    var name = origName
+//    var idx = 1
+//    while (objectNames.contains(name)) {
+//      name = origName + idx
+//      idx += 1
+//    }
+//    name
+//  }
 
-  private def updateChangedLocals(sf: StackFrameImpl, namedValues: Map[String, AnyRef], namedObjects: Map[String, ObjectId])(implicit marshaller: Marshaller): Unit = {
+  private def updateChangedLocals(sf: StackFrameImpl, localScope: Option[(ObjectId, Value)])(implicit marshaller: Marshaller): Unit = {
     def stackFrameIndexForObject(id: ObjectId): Option[Int] =
       mappingRegistry.byId(id).flatMap(_.extras.get(stackFrameIndexExtraProp)).flatMap(_.as[Number].map(_.intValue()))
 
     def jdiStackFrameFromIndex(index: Int) = marshaller.thread.frame(index)
 
-    // Note: namedValues is created from namedObjects, so we access namedObjects directly (not via get)
-    namedValues.map(e => {
-      val objectId = namedObjects(e._1)
-      // Get the stack frame index before evaluating any code, so that we can avoid evaluation for
-      // non-scope objects.
-      (e._1, e._2, objectId, stackFrameIndexForObject(objectId))
-    }).foreach {
-      case (key, value, objectId, Some(stackFrameIdx)) =>
-        // Read the changes tracked by the property setters, if any.
-        val changes = sf.eval(s"$key['${hiddenPrefix}changes']", Map(key -> value))
-        arrayValuesFrom(changes) match {
-          case Right(values) if values.nonEmpty =>
+    localScope.foreach { case (objectId, value) =>
+      stackFrameIndexForObject(objectId) match {
+        case Some(stackFrameIdx) =>
+          val invokeFunctionData = InvokeFunctionData(null, Seq(value))
+          val funcDecl = s"function (ls) { return ls['${hiddenPrefix}changes']; }"
 
-            // Get the stack frame. We cannot do that earlier due to marshalling, which causes the thread to resume.
-            val jdiStackFrame = jdiStackFrameFromIndex(stackFrameIdx)
-            values.grouped(2).collect { case (str: StringReference) :: v :: Nil => str.value() -> v }.foreach {
-              case (name, newValue) =>
-                // We have almost everything we need. Find the LocalVariable and set its value.
-                Try(Option(jdiStackFrame.visibleVariableByName(name))).map(_.foreach(localVar => {
-                  // Unbox if necessary
-                  val valueToSet = newValue match {
-                    case objRef: ObjectReference if typeNameLooksPrimitive(localVar.typeName()) => boxer.unboxed(objRef)
-                    case other => other
+          // Read the changes tracked by the property setters, if any.
+          val changes = sf.eval(funcDecl, Some(invokeFunctionData))
+
+          arrayValuesFrom(changes) match {
+            case Right(values) if values.nonEmpty =>
+
+              // Get the stack frame. We cannot do that earlier due to marshalling, which causes the thread to resume.
+              val jdiStackFrame = jdiStackFrameFromIndex(stackFrameIdx)
+              values.grouped(2).collect { case (str: StringReference) :: v :: Nil => str.value() -> v }.foreach {
+                case (name, newValue) =>
+                  // We have almost everything we need. Find the LocalVariable and set its value.
+                  Try(Option(jdiStackFrame.visibleVariableByName(name))).map(_.foreach(localVar => {
+                    // Unbox if necessary
+                    val valueToSet = newValue match {
+                      case objRef: ObjectReference if typeNameLooksPrimitive(localVar.typeName()) => boxer.unboxed(objRef)
+                      case other => other
+                    }
+                    jdiStackFrame.setValue(localVar, valueToSet)
+                  })) match {
+                    case Success(_) =>
+                      log.debug(s"Updated the value of $name for $objectId to $newValue in ${jdiStackFrame.location()}")
+                    case Failure(t) =>
+                      log.error(s"Failed to update the value of $name for $objectId to $newValue", t)
                   }
-                  jdiStackFrame.setValue(localVar, valueToSet)
-                })) match {
-                  case Success(_) =>
-                    log.debug(s"Updated the value of $name for $objectId to $newValue in ${jdiStackFrame.location()}")
-                  case Failure(t) =>
-                    log.error(s"Failed to update the value of $name for $objectId to $newValue", t)
-                }
 
-            }
-          case Right(_) => // empty changes, noop
-          case Left(reason) =>
-            log.warn(s"Failed to read changes from $key: $reason")
-        }
-      case _ =>
+              }
+            case Right(_) => // empty changes, noop
+            case Left(reason) =>
+              log.warn(s"Failed to read changes from local scope: $reason")
+          }
+
+        case None =>
         // We didn't find a stack frame index, so not a scope object
+      }
     }
   }
 
@@ -149,18 +133,17 @@ class StackFrameEvaluator(mappingRegistry: MappingRegistry, boxer: Boxer) extend
     }
   }
 
-  private def resetChangeTracking(sf: StackFrameImpl, namedValues: Map[String, AnyRef]): Unit = {
-    if (namedValues.isEmpty) return
-    val objectNames = namedValues.keys.mkString(",")
-    val js =
-      s"""[$objectNames].forEach(function (obj) {
-         |  if(typeof obj['${hiddenPrefix}resetChanges']==='function') obj['${hiddenPrefix}resetChanges']();
-         |});
-       """.stripMargin
-    sf.eval(js, namedValues) match {
-      case ErrorValue(data, _, _, _) =>
-        throw new RuntimeException("Failed to reset change tracking: " + data.message)
-      case _ =>
+  private def resetChangeTracking(sf: StackFrameImpl, localScope: Option[(ObjectId, Value)]): Unit = {
+    localScope.foreach { case (objectId, value) =>
+      val invokeFunctionData = InvokeFunctionData(null, Seq(value))
+      val funcDecl = s"function (ls) { if(typeof ls['${hiddenPrefix}resetChanges']==='function') ls['${hiddenPrefix}resetChanges'](); }"
+
+      sf.eval(funcDecl, Some(invokeFunctionData)) match {
+        case ErrorValue(data, _, _, _) =>
+          val msg = data.stackIncludingMessage.getOrElse(data.message)
+          throw new RuntimeException("Failed to reset change tracking: " + msg)
+        case _ =>
+      }
     }
   }
 

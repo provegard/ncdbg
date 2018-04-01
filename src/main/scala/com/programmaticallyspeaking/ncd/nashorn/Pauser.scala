@@ -106,7 +106,7 @@ class Pauser(breakpoints: ActiveBreakpoints, scripts: Scripts, emitter: ScriptEv
             // will be slow) because we need stack frames and locals to be setup for code evaluation.
             val conditionIsTrue = activeBreakpoint.condition match {
               case Some(c) =>
-                topStackFrame.eval(c, Map.empty) match {
+                topStackFrame.eval(c, None) match {
                   case SimpleValue(true) => true
                   case SimpleValue(false) =>
                     log.trace(s"Not pausing on breakpoint $breakpointId in script $scriptId since the condition ($c) evaluated to false.")

@@ -37,7 +37,8 @@ object NashornDebuggerHost {
     NIR_JSType -> false  // don't stop init
   )
 
-  type CodeEvaluator = (String, Map[String, AnyRef]) => ValueNode
+  case class InvokeFunctionData(thisValue: Value, arguments: Seq[Value])
+  type CodeEvaluator = (String, Option[InvokeFunctionData]) => ValueNode
 
 //  case object PostponeInitialize extends NashornScriptOperation
 
@@ -165,7 +166,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   private val boxer = new Boxer(typeLookup)
   protected val codeEval = new CodeEval(typeLookup, preventGC)
   private val stackBuilder = new StackBuilder(stackframeIdGenerator, typeLookup, mappingRegistry, codeEval, boxer,
-    (location: Location) => findBreakableLocation(location))
+    (location: Location) => findBreakableLocation(location), preventGC)
 
   private val _stackFramEval = new StackFrameEvaluator(mappingRegistry, boxer)
 
@@ -452,12 +453,33 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     resume()
   }
 
-  override def evaluateOnStackFrame(stackFrameId: String, expression: String, namedObjects: Map[String, ObjectId]): Try[ValueNode] = Try {
+  override def callFunctionOn(stackFrameId: String, thisObject: Option[ObjectId], functionDeclaration: String, arguments: Seq[ObjectId]): Try[ValueNode] = Try {
+    def nativeValueForObject(objId: ObjectId) = mappingRegistry.byId(objId).flatMap(_.native).getOrElse(throw new IllegalArgumentException("No native Value for object: " + objId))
+    //TODO: Duplication
+    pausedData match {
+      case Some(pd) =>
+
+        val thisValue = thisObject.map(nativeValueForObject)
+        val argValues = arguments.map(nativeValueForObject)
+        val data = InvokeFunctionData(thisValue.orNull, argValues)
+
+        _scanner.withClassTracking {
+          virtualMachine.withDisabledBreakpoints {
+            _stackFramEval.evaluateOnStackFrame(pd, stackFrameId, functionDeclaration, Some(data))
+          }
+        }
+      case None =>
+        log.warn(s"Evaluation of '$functionDeclaration' cannot be done in a non-paused state.")
+        throw new IllegalStateException("Code evaluation can only be done in a paused state.")
+    }
+  }
+
+  override def evaluateOnStackFrame(stackFrameId: String, expression: String): Try[ValueNode] = Try {
     pausedData match {
       case Some(pd) =>
         _scanner.withClassTracking {
           virtualMachine.withDisabledBreakpoints {
-            _stackFramEval.evaluateOnStackFrame(pd, stackFrameId, expression, namedObjects)
+            _stackFramEval.evaluateOnStackFrame(pd, stackFrameId, expression, None)
           }
         }
       case None =>

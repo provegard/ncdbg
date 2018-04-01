@@ -80,7 +80,7 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
   "Evaluating on a stack frame" - {
     def evaluate(script: String, expression: String)(handler: (ValueNode) => Unit): Unit = {
       evaluateInScript(script) { (host, stackframes) =>
-        testSuccess(host.evaluateOnStackFrame(stackframes.head.id, expression, Map.empty))(handler)
+        testSuccess(host.evaluateOnStackFrame(stackframes.head.id, expression))(handler)
       }
     }
 
@@ -104,8 +104,8 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
       s"remembers a var-defined variable $desc" in {
         evaluateInScript(script) { (host, stackframes) =>
           testSuccess(for {
-            _ <- host.evaluateOnStackFrame(stackframes.head.id, "var zz = 21;", Map.empty)
-            result <- host.evaluateOnStackFrame(stackframes.head.id, "zz+zz", Map.empty)
+            _ <- host.evaluateOnStackFrame(stackframes.head.id, "var zz = 21;")
+            result <- host.evaluateOnStackFrame(stackframes.head.id, "zz+zz")
           } yield result) { r =>
             r should be (SimpleValue(42))
           }
@@ -116,9 +116,9 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
     "commits a change to a local var-defined variable" in {
       val script = "(function () { var xx = 5; debugger; debugger; return xx; })();"
       evaluateInScript(script)({ (host, stackframes) =>
-        host.evaluateOnStackFrame(stackframes.head.id, "xx = 99;", Map.empty)
+        host.evaluateOnStackFrame(stackframes.head.id, "xx = 99;")
       }, { (host, stackframes) =>
-        testSuccess(host.evaluateOnStackFrame(stackframes.head.id, "xx", Map.empty)) { r =>
+        testSuccess(host.evaluateOnStackFrame(stackframes.head.id, "xx")) { r =>
           r should be (SimpleValue(99))
         }
       })
@@ -132,7 +132,7 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
           |})(42)
         """.stripMargin
       evaluateInScript("debugger;") { (host, stackframes) =>
-        val result = host.evaluateOnStackFrame(stackframes.head.id, script, Map.empty)
+        val result = host.evaluateOnStackFrame(stackframes.head.id, script)
         result should be (Success(SimpleValue(42)))
       }
     }
@@ -153,7 +153,7 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
         case _ =>
       }
       evaluateInScript("debugger;", recordEvent) { (host, stackframes) =>
-        host.evaluateOnStackFrame(stackframes.head.id, loadIt, Map.empty).get // get forces any failure
+        host.evaluateOnStackFrame(stackframes.head.id, loadIt).get // get forces any failure
       }
 
       whenReady(foundIt.future) { _ => }
@@ -218,7 +218,7 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
           |fun();
         """.stripMargin
       evaluateInScript(script)({ (host, stackframes) =>
-        host.evaluateOnStackFrame(stackframes.head.id, "unknown", Map.empty) match {
+        host.evaluateOnStackFrame(stackframes.head.id, "unknown") match {
           case Success(vn: ErrorValue) =>
             vn.data.stackIncludingMessage.getOrElse("") should startWith ("""ReferenceError: "unknown" is not defined""")
           case Success(other) =>
@@ -241,12 +241,12 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
           |debugger;
         """.stripMargin
       evaluateInScript(script)({ (host, stackframes) =>
-        host.evaluateOnStackFrame(stackframes.head.id, "obj", Map.empty) match {
+        host.evaluateOnStackFrame(stackframes.head.id, "obj") match {
           case Success(_) => // ok
           case Failure(t) => fail("Error", t)
         }
       }, { (host, stackframes) =>
-        host.evaluateOnStackFrame(stackframes.head.id, "obj", Map.empty) match {
+        host.evaluateOnStackFrame(stackframes.head.id, "obj") match {
           case Success(vn: ErrorValue) =>
             vn.data.stackIncludingMessage.getOrElse("") should startWith ("""ReferenceError: "obj" is not defined""")
           case Success(other) =>
