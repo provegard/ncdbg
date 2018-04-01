@@ -17,11 +17,10 @@ object ScriptEvaluateSupport {
     * Assuming `arguments` contains a mix of plain values and objects, constructs a function wrapper that takes only
     * objects based on the object IDs and the invokes the given function with all arguments in correct order.
     *
-    * @param functionDecl
-    * @param arguments
-    * @return
+    * @param functionDecl the original function declaration
+    * @param arguments arguments to the function
+    * @return a tuple with a function wrapper (possibly) and a list of object IDs of objects to pass to the function
     */
-  //TODO: Unit test
   def wrapInFunction(functionDecl: String, arguments: Seq[Runtime.CallArgument]): (String, Seq[ObjectId]) = {
     val jsArgs = ListBuffer[String]()
     val objIds = ListBuffer[ObjectId]()
@@ -46,18 +45,17 @@ object ScriptEvaluateSupport {
       return (functionDecl, objIds)
     }
 
-    val jsArray = jsArgs.mkString("[", ", ", "]")
+    val jsArray = jsArgs.mkString("[", ",", "]")
     val objArgList = objArgNames.mkString(", ")
 
     val wrapperFun =
-      s"""
-         |function ($objArgList) {
-         |  var argsInOrder = $jsArray;
-         |  var f = ($functionDecl);
-         |  return f.apply(this, argsInOrder);
+      s"""function($objArgList) {
+         |  var argsInOrder=$jsArray;
+         |  var f=($functionDecl);
+         |  return f.apply(this,argsInOrder);
          |}
-       """.stripMargin
-    (wrapperFun, objIds)
+       """.stripMargin.trim
+    (wrapperFun, objIds.toList)
   }
 
   private def unpackArg(arg: Runtime.CallArgument): Either[String, ObjectId] = {
