@@ -163,10 +163,12 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     override def apply(name: String): Option[ClassType] = _scanner.typeByName(name)
   }
 
+  protected val gcContext = new GCContext(virtualMachine)
+
   private val boxer = new Boxer(typeLookup)
-  protected val codeEval = new CodeEval(typeLookup, preventGC)
+  protected val codeEval = new CodeEval(typeLookup, gcContext)
   private val stackBuilder = new StackBuilder(stackframeIdGenerator, typeLookup, mappingRegistry, codeEval, boxer,
-    (location: Location) => findBreakableLocation(location), preventGC)
+    (location: Location) => findBreakableLocation(location), gcContext)
 
   private val _stackFramEval = new StackFrameEvaluator(mappingRegistry, boxer)
 
@@ -398,10 +400,6 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
 
   protected def disableGarbageCollectionFor(value: Value, entireSession: Boolean = false): Unit = {
     virtualMachine.disableGarbageCollectionFor(value, entireSession)
-  }
-
-  private def preventGC(value: Value, lifecycle: Lifecycle.EnumVal): Unit = {
-    disableGarbageCollectionFor(value, lifecycle == Lifecycle.Session)
   }
 
   private def createMarshaller()(implicit threadReference: ThreadReference): Marshaller = {

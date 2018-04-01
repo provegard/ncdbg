@@ -21,7 +21,7 @@ object StackBuilder {
 }
 
 class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, mappingRegistry: MappingRegistry, codeEval: CodeEval, boxer: Boxer,
-                   breakableLocationLookup: BreakableLocationLookup, preventGC: (Value, Lifecycle.EnumVal) => Unit) extends Logging {
+                   breakableLocationLookup: BreakableLocationLookup, gCContext: GCContext) extends Logging {
   import scala.collection.JavaConverters._
   import JDIExtensions._
   import TypeConstants._
@@ -70,25 +70,9 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
     val aFunction = codeEval.eval(None, None, funcExpression, Lifecycle.Paused).asInstanceOf[ObjectReference]
     val mirror = new ScriptObjectMirror(aFunction).asFunction
 
-    val anObject = withGCPrevention(Lifecycle.Paused)(mirror.invoke(scopeObject, varValues))
+    val anObject = gCContext.pin(Lifecycle.Paused)(mirror.invoke(scopeObject, varValues))
 
     anObject
-  }
-
-  private def withGCPrevention[R <: Value](lifecycle: Lifecycle.EnumVal)(f: => R): R = {
-    withGCPrevention(lifecycle, 3)(f)
-  }
-
-  //TODO: This one exists elsewhere
-  private def withGCPrevention[R <: Value](lifecycle: Lifecycle.EnumVal, attempts: Int)(f: => R): R = {
-    try {
-      val retVal = f
-      preventGC(retVal, lifecycle)
-      retVal
-    } catch {
-      case ex: ObjectCollectedException if attempts > 1 =>
-        withGCPrevention(lifecycle, attempts - 1)(f)
-    }
   }
 
   private def prototypeOf(value: Value)(implicit thread: ThreadReference): Option[Value] = value match {

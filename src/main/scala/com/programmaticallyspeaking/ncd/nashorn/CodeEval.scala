@@ -13,7 +13,7 @@ object CodeEval {
   val EvalSourceName = "<ncdbg_eval>"
 }
 
-class CodeEval(typeLookup: TypeLookup, preventGC: (Value, Lifecycle.EnumVal) => Unit) {
+class CodeEval(typeLookup: TypeLookup, gCContext: GCContext) {
   import TypeConstants._
 
   /**
@@ -29,7 +29,7 @@ class CodeEval(typeLookup: TypeLookup, preventGC: (Value, Lifecycle.EnumVal) => 
     */
   def eval(thisObject: Option[Value], scopeObject: Option[Value], code: String, lifecycle: Lifecycle.EnumVal)(implicit thread: ThreadReference): Value = {
     // We've observed ObjectCollectedException while disabling GC... Try a few times before giving up!
-    attempt(lifecycle, 3) {
+    gCContext.pin(lifecycle) {
       DebuggerSupport_eval_custom(thisObject.orNull, scopeObject.orNull, code)
     }
   }
@@ -38,29 +38,18 @@ class CodeEval(typeLookup: TypeLookup, preventGC: (Value, Lifecycle.EnumVal) => 
     // NashornScriptEngine.evalImpl:
     //  var7 = ScriptObjectMirror.translateUndefined(ScriptObjectMirror.wrap(ScriptRuntime.apply(script, ctxtGlobal, new Object[0]), ctxtGlobal));
     val mirror = new ScriptObjectMirror(scriptFunction).asFunction
-    val value = attempt(lifecycle, 3)(mirror.invokeNoArgs())
+    val value = gCContext.pin(lifecycle)(mirror.invokeNoArgs())
     marshaller.marshal(value)
   }
 
   def compileScript(script: String, url: String, lifecycle: Lifecycle.EnumVal)(implicit marshaller: Marshaller): CompiledScriptRunner = {
-    val fun = attempt(lifecycle, 3) {
+    val fun = gCContext.pin(lifecycle) {
       implicit val thread = marshaller.thread
       NashornScriptEngine_asCompiledScript(script, url)
     }
     new CompiledScriptRunner {
       override def run()(implicit marshaller: Marshaller): ValueNode =
         runCompiledScript(fun, Lifecycle.Paused)
-    }
-  }
-
-  private def attempt[R <: Value](lifecycle: Lifecycle.EnumVal, attemptsLeft: Int)(f: => R): R = {
-    try {
-      val v = f
-      preventGC(v, lifecycle)
-      v
-    } catch {
-      case _: ObjectCollectedException if attemptsLeft > 0 =>
-        attempt(lifecycle, attemptsLeft - 1)(f)
     }
   }
 
