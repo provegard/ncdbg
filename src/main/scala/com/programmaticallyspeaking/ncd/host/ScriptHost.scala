@@ -82,10 +82,17 @@ trait ScriptHost {
     *
     * @param stackFrameId the ID of the stack frame to evaluate the expression on.
     * @param expression the expression to evaluate
-    * @return
     */
   def evaluateOnStackFrame(stackFrameId: String, expression: String): Try[ValueNode]
 
+  /**
+    * Evaluates code that is a function that is called with a special 'this' object and arguments.
+    *
+    * @param stackFrameId the stack frame ID, for local variable change tracking
+    * @param thisObject optional 'this' object for the function call
+    * @param functionDeclaration the function to call
+    * @param arguments arguments to the function
+    */
   def callFunctionOn(stackFrameId: String, thisObject: Option[ObjectId], functionDeclaration: String, arguments: Seq[ObjectId]): Try[ValueNode]
 
   def removeBreakpointById(id: String): Unit

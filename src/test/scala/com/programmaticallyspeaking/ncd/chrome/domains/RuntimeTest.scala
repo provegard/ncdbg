@@ -25,6 +25,15 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
     EvaluateOnStackFrameArgs(sidCaptor.getValue, exprCaptor.getValue)
   }
 
+  def callFunctionOnArgs: CallFunctionOnArgs = {
+    val sidCaptor = ArgumentCaptor.forClass(classOf[String])
+    val exprCaptor = ArgumentCaptor.forClass(classOf[String])
+    val thisCaptor = ArgumentCaptor.forClass(classOf[Option[ObjectId]])
+    val argsCaptor = ArgumentCaptor.forClass(classOf[Seq[ObjectId]])
+    verify(currentScriptHost).callFunctionOn(sidCaptor.capture(), thisCaptor.capture(), exprCaptor.capture(), argsCaptor.capture())
+    CallFunctionOnArgs(sidCaptor.getValue, thisCaptor.getValue, exprCaptor.getValue, argsCaptor.getValue)
+  }
+
   "Runtime" - {
     "enable" - {
       "should emit an ExecutionContextCreated event" in {
@@ -262,49 +271,47 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
     }
 
     "callFunctionOn" - {
-      def testCall(obj: ComplexNode, targetId: String, args: Seq[CallArgument], retVal: Option[Try[ValueNode]] = None,
+      def testCall(target: ComplexNode, args: Seq[CallArgument], retVal: Option[Try[ValueNode]] = None,
                    returnByValue: Option[Boolean] = None, generatePreview: Option[Boolean] = None, functionDecl: Option[String] = None)(fun: (Any) => Unit) = {
 
         val actualRetVal = retVal.getOrElse(Success(SimpleValue("ok")))
-        when(currentScriptHost.evaluateOnStackFrame(any[String], any[String])).thenReturn(actualRetVal)
+        when(currentScriptHost.callFunctionOn(any[String], any[Option[ObjectId]], any[String], any[Seq[ObjectId]])).thenReturn(actualRetVal)
 
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
         val functionDeclaration = functionDecl.getOrElse("function(){}")
-        val response = requestAndReceiveResponse(runtime, "2", Runtime.callFunctionOn(targetId, functionDeclaration, args,
+        val response = requestAndReceiveResponse(runtime, "2", Runtime.callFunctionOn(target.objectId.toString, functionDeclaration, args,
           returnByValue, generatePreview))
         fun(response)
       }
 
-      def testCallArgs(args: Seq[CallArgument])(fun: (EvaluateOnStackFrameArgs) => Unit) = {
+      def testCallArgs(args: Seq[CallArgument])(fun: (CallFunctionOnArgs) => Unit) = {
         val obj = objectWithId("x")
-        testCall(obj, """{"id":"x"}""", args) { _ =>
-          fun(evaluateOnStackFrameArgs)
+        testCall(obj, args) { _ =>
+          fun(callFunctionOnArgs)
         }
       }
 
       "should perform ScriptHost evaluation with a wrapped function on the top stack frame and the target as a named object" in {
-        fail("TODO")
-//        val obj = objectWithId("x")
-//        testCall(obj, """{"id":"x"}""", Seq.empty) { resp =>
-//          val expr = "(function(){}).apply(__obj_1,[])"
-//          evaluateOnStackFrameArgs should be (EvaluateOnStackFrameArgs("$top", expr, Map("__obj_1" -> ObjectId("x"))))
-//        }
+        val obj = objectWithId("x")
+        testCall(obj, Seq.empty) { _ =>
+          val expr = "function(){}"
+          callFunctionOnArgs should be (CallFunctionOnArgs("$top", Some(obj.objectId), expr, Seq.empty))
+        }
       }
 
       "should accept null arguments (VSCode may omit the arguments)" in {
-        fail("TODO")
-//        val obj = objectWithId("x")
-//        testCall(obj, """{"id":"x"}""", null) { resp =>
-//          val expr = "(function(){}).apply(__obj_1,[])"
-//          evaluateOnStackFrameArgs should be (EvaluateOnStackFrameArgs("$top", expr, Map("__obj_1" -> ObjectId("x"))))
-//        }
+        val obj = objectWithId("x")
+        testCall(obj, null) { _ =>
+          val expr = "function(){}"
+          callFunctionOnArgs should be (CallFunctionOnArgs("$top", Some(obj.objectId), expr, Seq.empty))
+        }
       }
 
       "should transpile a generator function" in {
         val obj = objectWithId("x")
-        testCall(obj, """{"id":"x"}""", Seq.empty, functionDecl = Some("function *gen() { yield 42; }")) { resp =>
-          val codePassedToHost = evaluateOnStackFrameArgs.expression
+        testCall(obj, Seq.empty, functionDecl = Some("function *gen() { yield 42; }")) { resp =>
+          val codePassedToHost = callFunctionOnArgs.funcDecl
           codePassedToHost shouldNot include ("yield")
         }
       }
@@ -312,7 +319,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       "should generate a preview if requested" in {
         val obj = objectWithId("x")
         val retVal = objectWithId("y")
-        testCall(obj, """{"id":"x"}""", Seq.empty, retVal = Some(Success(retVal)), generatePreview = Some(true)) {
+        testCall(obj, Seq.empty, retVal = Some(Success(retVal)), generatePreview = Some(true)) {
           case Runtime.CallFunctionOnResult(result, _) =>
             result.preview should be('defined)
           case other => fail("Unexpected response: " + other)
@@ -322,36 +329,28 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       "should support a call argument that is a plain value" in {
         val arg = CallArgument(Some("test"), None, None)
         testCallArgs(Seq(arg)) { result =>
-          result.expression should include ("[\"test\"]")
+          result.funcDecl should include ("[\"test\"]")
         }
       }
 
       "should support a call argument that is an unserializable value" in {
         val arg = CallArgument(None, Some("NaN"), None)
         testCallArgs(Seq(arg)) { result =>
-          result.expression should include ("[NaN]")
+          result.funcDecl should include ("[NaN]")
         }
       }
 
       "should support a call argument that is an object ID" in {
         val arg = CallArgument(None, None, Some("""{"id":"foo"}"""))
         testCallArgs(Seq(arg)) { result =>
-          result.expression should include ("[__obj_2]")
+          result.args should contain (ObjectId("foo"))
         }
-      }
-
-      "should provide a name-object ID mapping when a call argument is an object ID" in {
-        fail("TODO")
-//        val arg = CallArgument(None, None, Some("""{"id":"foo"}"""))
-//        testCallArgs(Seq(arg)) { result =>
-//          result.namedObjects should contain ("__obj_2" -> ObjectId("foo"))
-//        }
       }
 
       "should support a call argument that is undefined" in {
         val arg = CallArgument(None, None, None)
         testCallArgs(Seq(arg)) { result =>
-          result.expression should include ("[undefined]")
+          result.funcDecl should include ("[void 0]")
         }
       }
 
@@ -359,7 +358,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         val arg1 = CallArgument(Some("test"), None, None)
         val arg2 = CallArgument(Some(42), None, None)
         testCallArgs(Seq(arg1, arg2)) { result =>
-          result.expression should include ("[\"test\",42]")
+          result.funcDecl should include ("[\"test\",42]")
         }
       }
     }
@@ -503,4 +502,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
 
   // Helper class for matching against arguments of a mocked call to ScriptHost.evaluateOnStackFrame
   case class EvaluateOnStackFrameArgs(stackFrameId: String, expression: String)
+
+  // Helper class for matching against arguments of a mocked call to ScriptHost.callFunctionOn
+  case class CallFunctionOnArgs(stackFrameId: String, thisObject: Option[ObjectId], funcDecl: String, args: Seq[ObjectId])
 }

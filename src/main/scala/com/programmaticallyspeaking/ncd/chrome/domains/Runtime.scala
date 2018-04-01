@@ -315,10 +315,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
         case None =>
           implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
 
-//          val namedObjects = new NamedObjects
-
           val thisObjectId = ObjectId.fromString(strObjectId)
-//          val targetName = namedObjects.useNamedObject(ObjectId.fromString(strObjectId))
 
           // Transpile the code if needed.
           // Some considerations:
@@ -326,9 +323,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
           // - perhaps we should transpile in Runtime.evaluate also?
           val maybeTranspiled = if (needsTranspile(functionDeclaration)) transpile(functionDeclaration) else functionDeclaration
 
-//          val argsArrayString = ScriptEvaluateSupport.serializeArgumentValues(safeArgs(arguments), namedObjects).mkString("[", ",", "]")
-//          val expression = s"($maybeTranspiled).apply($targetName,$argsArrayString)"
-          val (wrapperFunc, objIds) = ScriptEvaluateSupport.wrapInFunction(maybeTranspiled, arguments)
+          val (wrapperFunc, objIds) = ScriptEvaluateSupport.wrapInFunction(maybeTranspiled, safeArgs(arguments))
 
           // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
           val evalResult = callFunctionOn(scriptHost, "$top", Some(thisObjectId), wrapperFunc, objIds)
