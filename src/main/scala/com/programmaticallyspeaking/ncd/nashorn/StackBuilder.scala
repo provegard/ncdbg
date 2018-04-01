@@ -27,7 +27,6 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
   import TypeConstants._
 
   private def scopeWithFreeVariables(scopeObject: Value, freeVariables: Map[String, AnyRef])(implicit marshaller: Marshaller): Value = {
-    require(scopeObject != null, "Scope object must be non-null")
     implicit val thread = marshaller.thread
     // If there aren't any free variables, we don't need to create a wrapper scope
     if (freeVariables.isEmpty) return scopeObject
@@ -154,23 +153,14 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
         values.get(":this") match {
           case Some(originalThis) =>
             var originalScope = values.get(":scope")
-            //TODO: We didn't do this before... why?? If originalScope is null or undefined, should we leave it at that??
-            originalScope = originalScope.flatMap { s =>
-              if (s.`type`().name() == "jdk.nashorn.internal.runtime.Undefined") None
-              else Some(s)
-            }
 
             // Variables that don't start with ":" are locals
             val localValues = values.filter(e => !e._1.startsWith(":")) // for use in evaluateCodeOnFrame
 
             val thisObj = marshaller.marshal(originalThis)
 
-            // The scope may be missing, in which case we use 'this'. Which may be null (different from missing), in
-            // which case we use global as scope.
-            val scopeObject = originalScope
-              //.orElse(Option(originalThis))
-              .orElse(getGlobal())
-              .getOrElse(throw new IllegalStateException("Failed to locate a scope object. Tried scope, this, global."))
+            // The scope may be missing/null/undefined, which is fine.
+            val scopeObject = originalScope.collect { case s if !s.isUndefined => s }.orNull
 
             // If needed, create a scope object to hold the local variables as "free" variables - so that evaluated
             // code can refer to them.

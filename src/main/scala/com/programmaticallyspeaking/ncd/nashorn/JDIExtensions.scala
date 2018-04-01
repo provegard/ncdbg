@@ -101,6 +101,10 @@ object JDIExtensions {
       else ScopeType.Closure
     }
 
+    def isUndefined = {
+      val typeName = v.`type`().name()
+      typeName == "jdk.nashorn.internal.runtime.Undefined"
+    }
   }
 
   class ExtReferenceType(referenceType: ReferenceType) {
