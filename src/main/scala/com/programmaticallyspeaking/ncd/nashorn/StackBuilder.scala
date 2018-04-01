@@ -202,14 +202,12 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
                   var ret = codeEval.eval(Some(originalThis), Some(localScope), actualCode, Lifecycle.Paused)
 
                   maybeInvokeFunctionData match {
-//                    case Some(_) if !ret.isInstanceOf[ObjectReference] =>
-//                      throw new RuntimeException(s"$ret is not an object reference that can be a function")
                     case Some(data) if ret.isInstanceOf[ObjectReference] =>
                       // interpret 'ret' as a function and call it with the arguments
                       val mirror = new ScriptObjectMirror(ret.asInstanceOf[ObjectReference]).asFunction
-                      ret = withGCPrevention(Lifecycle.Paused)(mirror.invoke(data.thisValue, data.arguments))
+                      ret = gCContext.pin(Lifecycle.Paused)(mirror.invoke(data.thisValue, data.arguments))
                     case _ =>
-                      // return 'ret' unchanged
+                      // marshal 'ret' unchanged
                   }
 
                   marshaller.marshal(ret)
