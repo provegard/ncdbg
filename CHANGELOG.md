@@ -61,6 +61,7 @@
   evaluating same code on local artificial scope.
 * Faster code evaluation for Runtime.callFunctionOn, and faster construction of artificial local
   scope.
+* Reuse syntax check via compileScript for subsequent code evaluation (EXPERIMENTAL).
 
 ## 0.6.0 (2017-10-22)
 
