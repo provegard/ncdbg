@@ -47,6 +47,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
     pausedData match {
       case Some(pd) =>
         implicit val marshaller = pd.marshaller
+        val compileResultTransformer = toCompileResult(persist)(_)
 
         // Create a hash that includes both the contents and the URL.
         val scriptHash = Hasher.md5(script.getBytes(StandardCharsets.UTF_8))
@@ -67,7 +68,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
           case Some(promise) =>
             promise.future.map { s =>
               log.debug(s"No need to compile, reusing compiled script ${s.id} based on hash $compileHash.")
-              if (persist) Some(s) else None
+              compileResultTransformer(s)
             }
 
           case None =>
@@ -94,9 +95,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
             subscription = events.subscribe(Observer.from[ScriptEvent] {
               case s: NashornDebuggerHost.InternalScriptAdded if s.script.contents.contains(correlationId) =>
                 subscription.unsubscribe()
-
                 log.debug(s"Compilation of script with hash $compileHash resulted in script with ID ${s.script.id} (persist=$persist)")
-
                 scriptPromise.success(s.script)
             })
 
@@ -118,7 +117,6 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
             // We may observe InternalScriptAdded before the _scanner.withClassTracking call returns, so
             // connect runner with script here rather than in the InternalScriptAdded observer.
             Future.fromTry(tRunner).flatMap { theRunner =>
-
               scriptPromise.future.map { script =>
                 // Save the runner for reuse during evaluation (we test evaluation by hash)
                 nonPersistRunnerByScriptHash += scriptHash -> RunnerForStackFrame(theRunner, stackFrame.id, script.id)
@@ -126,7 +124,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
                 // Save the runner for runScript (we run by ID)
                 runnerByScriptId += script.id -> theRunner
 
-                if (persist) Some(script) else None
+                compileResultTransformer(script)
               }
             }
         }
@@ -134,6 +132,8 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
         throw new IllegalStateException("Script compilation can only be done in a paused state.")
     }
   }
+
+  private def toCompileResult(persist: Boolean)(script: Script) = if (persist) Some(script) else None
 
   override def runCompiledScript(scriptId: String): Try[ValueNode] = Try {
     pausedData match {
