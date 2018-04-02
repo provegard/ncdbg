@@ -42,12 +42,12 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
         // Did we compile the script already?
         scriptPromiseByHash.get(hash) match {
           case Some(promise) =>
-            log.info(s"Reusing compiled script with hash $hash.")
+            log.debug(s"Reusing compiled script with hash $hash.")
             promise.future
 
           case None =>
             val correlationId = UUID.randomUUID().toString.replace("-", "")
-            log.info(s"Compiling script with requested URL '$url' and hash $hash and unique ID $correlationId.")
+            log.debug(s"Compiling script with requested URL '$url' and hash $hash and unique ID $correlationId.")
 
             // If not persisting, embed a marker that makes ScriptPublisher suppress ScriptAdded, now and
             // on subsequent sessions
@@ -99,7 +99,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
       case Some(pd) =>
         runnerByScriptId.get(scriptId) match {
           case Some(runner) =>
-            log.info(s"Running script with ID $scriptId")
+            log.debug(s"Running script with ID $scriptId")
             virtualMachine.withDisabledBreakpoints {
               runner.run()(pd.marshaller)
             }

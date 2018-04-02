@@ -269,7 +269,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
 
     case Runtime.compileScript(expr, url, persist, _) =>
       def firstLine = firstNonEmptyLine(expr)
-      log.info(s"Request to compile script that starts '$firstLine' with URL '$url' and persist = $persist")
+      log.debug(s"Request to compile script that starts '$firstLine' with URL '$url' and persist = $persist")
 
       // If persist is false, then we may get None back in which case we cannot report an ID.
       scriptHost.compileScript(expr, url, persist).map(s => CompileScriptResult(s.map(_.id).orNull, None)).recover {
@@ -281,7 +281,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
 
     case Runtime.runScript(scriptId, _, returnByValue, generatePreview) =>
       //TODO: silent "Overrides setPauseOnException state."
-      log.info(s"Request to run script with ID $scriptId")
+      log.debug(s"Request to run script with ID $scriptId")
       scriptHost.runCompiledScript(scriptId) match {
         case Success(v) =>
           val remoteObjectConverter = createRemoteObjectConverter(generatePreview, returnByValue)
@@ -290,7 +290,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
 
         case Failure(t) =>
           val exceptionDetails = exceptionDetailsFromError(t, 1)
-          log.debug("Responding with run-script error: " + exceptionDetails.text)
+          log.warn("Responding with run-script error: " + exceptionDetails.text)
           RunScriptResult(RemoteObject.undefinedValue, Some(exceptionDetails))
       }
 

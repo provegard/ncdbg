@@ -96,6 +96,8 @@ trait ScriptEvaluateSupport { self: Logging =>
     t match {
       case Success(err: ErrorValue) if err.isThrown =>
         val details = Runtime.ExceptionDetails.fromErrorValue(err, exceptionId)
+        // Note that an error here may be expected (if the code being evaluated isn't correct, for example), so
+        // log at debug level.
         log.debug(s"Responding with evaluation error: $details" + err.javaStack.map("\r\n" + _))
         // Apparently we need to pass an actual value with the exception details
         EvaluationResult(RemoteObject.undefinedValue, Some(details))
