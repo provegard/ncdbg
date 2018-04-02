@@ -56,10 +56,12 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
         val compileResultTransformer = toCompileResult(persist)(_)
 
         // Script hash: a hash of only the script contents
-        // Compile hash: a hash of script contents + requested URL
+        // Compile hash: a hash of script contents + requested URL + persist flag
         // We use the compile hash to reuse a previous compilation.
+        // TODO: Make it possible to reuse a script regardless of the persist flag. The problem is that
+        // TODO: the persist flag controls publishing, and we need the script to be published when persist=true.
         val scriptHash = Hasher.md5(script.getBytes(StandardCharsets.UTF_8))
-        val compileHash = Hasher.md5(s"$scriptHash:$url".getBytes(StandardCharsets.UTF_8))
+        val compileHash = Hasher.md5(s"$scriptHash:$url:$persist".getBytes(StandardCharsets.UTF_8))
 
         findScript(ScriptIdentity.fromHash(scriptHash)) match {
           case Some(ss) if !persist =>

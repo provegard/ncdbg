@@ -33,19 +33,42 @@ class CompileScriptTest extends CompileScriptTestFixture {
 
   "Compiling a script with persist=false" - {
     val emitted = ListBuffer[ScriptAdded]()
-    lazy val compiledScript = compileAndCollectScripts(Seq(("1+2+5", "")), false, emitted.+=)
+    lazy val compiledScripts = compileAndCollectScripts(Seq(("1+2+5", "")), false, emitted.+=)
 
     "doesn't return the script" in {
-      compiledScript should be ('empty)
+      compiledScripts should be ('empty)
     }
 
     "doesn't emit the script as ScriptAdded" in {
       emitted.map(_.script.contents).filter(_.contains("1+2+5")) should be ('empty)
     }
+  }
 
-    "and THEN compiling with persist=true returns the script" in {
-      val res = compileAndCollectScripts(Seq(("1+2+5", "")), persist = true, preventRestart = true).headOption
-      res should be ('defined)
+  "Compiling a script with persist=false and then immediately with persist=true" - {
+    val emitted = ListBuffer[ScriptAdded]()
+    lazy val compiledScripts = {
+      import scala.collection.JavaConverters._
+      val scripts = new LinkedBlockingQueue[Script]()
+      runTest(emitted.+=) { host =>
+        host.compileScript("99+99", "", false).flatMap { _ =>
+          host.compileScript("99+99", "", true).map { s =>
+            s.foreach(scripts.put)
+            ()
+          }
+        }
+      }
+      scripts.asScala.toSeq
+    }
+
+    "returns the script" in {
+      val compiled = compiledScripts.headOption
+      compiled should be ('defined)
+    }
+
+    "emits the script" in {
+      val compiled = compiledScripts.headOption
+      val compiledId = compiled.map(_.id).getOrElse("<none>")
+      emitted.map(_.script.id) should contain (compiledId)
     }
   }
 
@@ -218,7 +241,7 @@ class CompileScriptTestFixture extends UnitTest with NashornScriptHostTestFixtur
 
   type Tester = ScriptHost => Future[Unit]
 
-  protected def runTest(collectScriptAdded: ScriptAdded => Unit = _ => {}, runnerCode: String = "debugger;", preventRestart: Boolean = false)(tester: Tester): Unit = {
+  protected def runTest(collectScriptAdded: ScriptAdded => Unit = _ => {}, runnerCode: String = "debugger;")(tester: Tester): Unit = {
     val donePromise = Promise[Unit]()
     val observer = Observer.from[ScriptEvent] {
       case _: HitBreakpoint =>
@@ -229,7 +252,7 @@ class CompileScriptTestFixture extends UnitTest with NashornScriptHostTestFixtur
         collectScriptAdded(s)
       case _ => // ignore
     }
-    observeAndRunScriptAsync(runnerCode, observer, preventRestart = preventRestart)(_ => donePromise.future)
+    observeAndRunScriptAsync(runnerCode, observer)(_ => donePromise.future)
   }
 
   def compileAndRun(code: String, url: String): ValueNode = {
@@ -252,10 +275,10 @@ class CompileScriptTestFixture extends UnitTest with NashornScriptHostTestFixtur
     result
   }
 
-  def compileAndCollectScripts(codesAndUrls: Seq[(String, String)], persist: Boolean = true, collectEmitted: ScriptAdded => Unit = _ => {}, preventRestart: Boolean = false): Seq[Script] = {
+  def compileAndCollectScripts(codesAndUrls: Seq[(String, String)], persist: Boolean = true, collectEmitted: ScriptAdded => Unit = _ => {}): Seq[Script] = {
     import scala.collection.JavaConverters._
     val scripts = new LinkedBlockingQueue[Script]()
-    runTest(collectEmitted, preventRestart = preventRestart) { host =>
+    runTest(collectEmitted) { host =>
       var f = Future.successful(())
       codesAndUrls.foreach { tup =>
         val (code, url) = tup

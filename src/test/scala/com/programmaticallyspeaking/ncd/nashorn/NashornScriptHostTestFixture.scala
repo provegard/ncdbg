@@ -205,9 +205,9 @@ trait NashornScriptHostTestFixture extends UnitTest with Logging with SharedInst
 
   protected def beforeEachTest(): Unit = {}
 
-  protected def observeAndRunScriptAsync[R](script: String, observer: Observer[ScriptEvent] = null, beforeTest: (NashornScriptHost) => Unit = _ => {}, preventRestart: Boolean = false)(handler: (NashornScriptHost) => Future[R]): Unit = {
+  protected def observeAndRunScriptAsync[R](script: String, observer: Observer[ScriptEvent] = null, beforeTest: (NashornScriptHost) => Unit = _ => {})(handler: (NashornScriptHost) => Future[R]): Unit = {
     // if we have seen this script before, restart the VM to avoid test dependencies due to script reuse
-    if (seenScripts.contains(script) && !preventRestart) {
+    if (seenScripts.contains(script)) {
       log.info("Restarting VM before test since script has been seen before.")
       stopRunner()
       // Seen scripts are no longer relevant - only per VM
