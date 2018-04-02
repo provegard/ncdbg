@@ -256,6 +256,27 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
         }
       })
     }
+
+    "can access Object in a strict mode function" in {
+      val script =
+        """
+          |function fun() {
+          |  'use strict';
+          |  var obj = { value: 99 };
+          |  debugger;
+          |  obj.toString();
+          |}
+          |fun();
+        """.stripMargin
+      evaluateInScript(script)({ (host, stackframes) =>
+        host.evaluateOnStackFrame(stackframes.head.id, "Object.getOwnPropertyNames(obj)") match {
+          case Success(an: ArrayNode) =>
+            an.size should be (1)
+          case Success(other) => fail("Unexpected result: " + other)
+          case Failure(t) => fail("Error", t)
+        }
+      })
+    }
   }
 }
 

@@ -14,25 +14,30 @@ class CallFunctionOnTest extends EvaluateTestFixture with TableDrivenPropertyChe
     case Failure(t) => fail(t)
   }
 
-  "callFunctionOn" - {
+  def testObjectValue(script: String, objName: String)(f: ObjectId => Unit): Unit = {
+    evaluateInScript(script)({ (host, stackframes) =>
+      host.evaluateOnStackFrame(stackframes.head.id, objName) match {
+        case Success(cn: ComplexNode) => f(cn.objectId)
+        case Success(other) => fail("Unexpected evaluate result: " + other)
+        case Failure(t) => fail("Error", t)
+      }
+    })
+  }
 
-    def testObjectValue(f: ObjectId => Unit): Unit = {
-      val script =
-        """
-          |function fun() {
-          |  var obj = { value: 42 };
-          |  debugger;
-          |  obj.toString();
-          |}
-          |fun();
-        """.stripMargin
-      evaluateInScript(script)({ (host, stackframes) =>
-        host.evaluateOnStackFrame(stackframes.head.id, "obj") match {
-          case Success(cn: ComplexNode) => f(cn.objectId)
-          case Failure(t) => fail("Error", t)
-        }
-      })
-    }
+  def testObjectValue(f: ObjectId => Unit): Unit = {
+    val script =
+      """
+        |function fun() {
+        |  var obj = { value: 42 };
+        |  debugger;
+        |  obj.toString();
+        |}
+        |fun();
+      """.stripMargin
+    testObjectValue(script, "obj")(f)
+  }
+
+  "callFunctionOn" - {
 
     "works for access to 'this'" in {
       val funcDecl = "function () { return this.value; }"
@@ -49,6 +54,27 @@ class CallFunctionOnTest extends EvaluateTestFixture with TableDrivenPropertyChe
         val retVal = getHost.callFunctionOn("$top", None, funcDecl, Seq(objId))
 
         retVal should be(Success(SimpleValue(42)))
+      }
+    }
+
+    "can access Object in a strict mode function" in {
+      val script =
+        """
+          |function fun() {
+          |  'use strict';
+          |  var obj = { value: 99 };
+          |  debugger;
+          |  obj.toString();
+          |}
+          |fun();
+        """.stripMargin
+      testObjectValue(script, "obj") { objId =>
+        getHost.callFunctionOn("$top", None, "function (x) { return Object.getOwnPropertyNames(x); }", Seq(objId)) match {
+          case Success(an: ArrayNode) =>
+            an.size should be (1)
+          case Success(other) => fail("Unexpected callFunctionOn result: " + other)
+          case Failure(t) => fail("Error", t)
+        }
       }
     }
   }
