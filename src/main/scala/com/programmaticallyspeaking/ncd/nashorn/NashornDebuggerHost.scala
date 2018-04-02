@@ -458,7 +458,6 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
 
   override def callFunctionOn(stackFrameId: String, thisObject: Option[ObjectId], functionDeclaration: String, arguments: Seq[ObjectId]): Try[ValueNode] = Try {
     def nativeValueForObject(objId: ObjectId) = mappingRegistry.byId(objId).flatMap(_.native).getOrElse(throw new IllegalArgumentException("No native Value for object: " + objId))
-    //TODO: Duplication
     pausedData match {
       case Some(pd) =>
 
