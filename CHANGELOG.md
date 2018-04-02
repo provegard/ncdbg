@@ -59,7 +59,7 @@
 * Make sure undefined variable access in artificial local scope results in ReferenceError.
 * Avoid NPE in UserAccessorProperty (Nashorn) when evaluating code on global scope after
   evaluating same code on local artificial scope.
-* Faster code evaluation for Runtime.callFunctionOn, and faster construction of artificial local
+* Faster code evaluation (~50%) for Runtime.callFunctionOn, and faster construction of artificial local
   scope.
 * Reuse syntax check via compileScript for subsequent code evaluation (EXPERIMENTAL).
 

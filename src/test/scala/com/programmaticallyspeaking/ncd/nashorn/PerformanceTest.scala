@@ -83,6 +83,30 @@ class PerformanceTest extends PerformanceTestFixture {
 
       }
     }
+
+    "is fast in the function call case" ignore {
+      waitForBreakpoint(script) { (host, breakpoint) =>
+
+        val stackFrameId = breakpoint.stackFrames.head.id
+        val objId = host.evaluateOnStackFrame(stackFrameId, "({value:42})") match {
+//        val objId = host.evaluateOnStackFrame(stackFrameId, "({value:42})", Map.empty) match {
+          case Success(cn: ComplexNode) => cn.objectId
+          case Success(other) => fail("Unexpected: " + other)
+          case Failure(t) => fail("Error", t)
+        }
+
+        // callFunctionOn, ops per second = 30.31524501341549
+        // callFunctionOn, ops per second = 30.46207400991905
+        // callFunctionOn, ops per second = 30.6396343173861
+        // evaluateOnStackFrame, ops per second = 20.64219701329967
+        // evaluateOnStackFrame, ops per second = 18.50634890797751
+        // evaluateOnStackFrame, ops per second = 19.855548935649356
+        measure(50) {
+          host.callFunctionOn(stackFrameId, None, "function (x) { return x.value; }", Seq(objId))
+//          host.evaluateOnStackFrame(stackFrameId, "(function (x) { return x.value; })(xx)", Map("xx" -> objId))
+        }
+      }
+    }
   }
 }
 
