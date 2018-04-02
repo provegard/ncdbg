@@ -282,9 +282,13 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
     case Runtime.runScript(scriptId, _, returnByValue, generatePreview) =>
       //TODO: silent "Overrides setPauseOnException state."
       log.debug(s"Request to run script with ID $scriptId")
+      implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, returnByValue)
       scriptHost.runCompiledScript(scriptId) match {
+        case Success(err: ErrorValue) if err.isThrown =>
+          val details = Runtime.ExceptionDetails.fromErrorValue(err, 1)
+          RunScriptResult(RemoteObject.undefinedValue, Some(details))
+
         case Success(v) =>
-          val remoteObjectConverter = createRemoteObjectConverter(generatePreview, returnByValue)
           val ro = remoteObjectConverter.toRemoteObject(v)
           RunScriptResult(ro, None)
 

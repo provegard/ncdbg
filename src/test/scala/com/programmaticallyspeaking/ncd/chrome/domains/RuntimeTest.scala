@@ -122,7 +122,27 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         requestAndReceiveResponse(runtime, "2", Runtime.runScript("xx", None, false, true))
       }
 
+      def testRunScriptReturnsErrorValue(ev: ErrorValue) = {
+        when(currentScriptHost.runCompiledScript(any[String])).thenReturn(Success(ev))
+
+        val runtime = newActorInstance[Runtime]
+        requestAndReceive(runtime, "1", Domain.enable)
+        requestAndReceiveResponse(runtime, "2", Runtime.runScript("xx", None, false, true))
+      }
+
       lazy val testRunScriptFailsResult = testRunScriptFails()
+
+      "converts a thrown error into exception result" in {
+        val data = ExceptionData("Error", "oops", 1, 0, "", None)
+        val ev = ErrorValue(data, true, ObjectId("x"), None)
+        val response = testRunScriptReturnsErrorValue(ev)
+
+        response match {
+          case r: Runtime.RunScriptResult =>
+            r.exceptionDetails.flatMap(_.exception.flatMap(_.description)) should be (Some("Error: oops"))
+          case other => fail("Unexpected response: " + other)
+        }
+      }
 
       "invokes the corresponding ScriptHost operation" in {
         testRunScript

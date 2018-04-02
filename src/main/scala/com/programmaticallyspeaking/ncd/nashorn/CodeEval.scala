@@ -34,12 +34,19 @@ class CodeEval(typeLookup: TypeLookup, gCContext: GCContext) {
     }
   }
 
+  //TODO: I don't think we should marshal here. The caller should do that. But ScriptObjectMirror takes an implicit Marshaller, so...
   private def runCompiledScript(scriptFunction: ObjectReference, lifecycle: Lifecycle.EnumVal)(implicit marshaller: Marshaller): ValueNode = {
     // NashornScriptEngine.evalImpl:
     //  var7 = ScriptObjectMirror.translateUndefined(ScriptObjectMirror.wrap(ScriptRuntime.apply(script, ctxtGlobal, new Object[0]), ctxtGlobal));
     val mirror = new ScriptObjectMirror(scriptFunction).asFunction
-    val value = gCContext.pin(lifecycle)(mirror.invokeNoArgs())
-    marshaller.marshal(value)
+    try {
+      val value = gCContext.pin(lifecycle)(mirror.invokeNoArgs())
+      marshaller.marshal(value)
+    } catch {
+      case ex: InvocationFailedException =>
+        val v = new ThrownExceptionReference(marshaller.thread.virtualMachine(), ex.exceptionReference)
+        marshaller.marshal(v)
+    }
   }
 
   def compileScript(script: String, url: String, scopeObject: AnyRef, lifecycle: Lifecycle.EnumVal)(implicit marshaller: Marshaller): CompiledScriptRunner = {

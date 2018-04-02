@@ -9,7 +9,7 @@ import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.util.{Success, Try}
+import scala.util.{Failure, Success, Try}
 
 class CompileScriptTest extends CompileScriptTestFixture {
 
@@ -188,6 +188,25 @@ class CompileScriptTest extends CompileScriptTestFixture {
 
       "gives the expected result" in {
         result should be (Success(SimpleValue(45)))
+      }
+    }
+  }
+
+  "Running a compiled script with a reference error" - {
+    val script =
+      """function f() {
+        |  return zz;
+        |}
+        |f()
+      """.stripMargin
+
+    "gives the same error result as if the code was evaluated" in {
+      val runResult = compileAndRun(script, "")
+      runResult match {
+        case ev: ErrorValue =>
+          ev.isThrown should be (true)
+        case other =>
+          fail("Unexpected: " + other)
       }
     }
   }
