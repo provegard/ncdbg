@@ -100,7 +100,7 @@ trait PerformanceTestFixture extends BreakpointTestFixture {
 
       getHost.disableObjectPropertiesCache()
 
-      host.evaluateOnStackFrame("$top", name) match {
+      host.evaluateOnStackFrame(StackFrame.TopId, name) match {
         case Success(vn: ComplexNode) =>
 
           val objId = objectId(vn)

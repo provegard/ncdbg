@@ -231,7 +231,7 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
           case (host, c: ComplexNode) =>
             // Prime the cache, then evaluate
             val ignored = expand(host, c)
-            host.callFunctionOn("$top", None, "function (x) { x['a'] = 'c'; }", Seq(c.objectId)).get
+            host.callFunctionOn(StackFrame.TopId, None, "function (x) { x['a'] = 'c'; }", Seq(c.objectId)).get
 
             expand(host, c) should be (Map("a" -> "c"))
 

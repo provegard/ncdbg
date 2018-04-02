@@ -480,7 +480,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     pausedData match {
       case Some(pd) =>
         // Note: StackFrameEvaluator does this also. Move to helper?
-        val sfid = if (stackFrameId == "$top") {
+        val sfid = if (StackFrame.isTopId(stackFrameId)) {
           pd.stackFrames.head.id
         } else stackFrameId
 

@@ -246,7 +246,7 @@ class CompileScriptTestFixture extends UnitTest with NashornScriptHostTestFixtur
     var result: Try[ValueNode] = null
     runTest(_ => (), runner) { host =>
       host.compileScript(code, "", persist = false).map { _ =>
-        result = host.evaluateOnStackFrame("$top", code)
+        result = host.evaluateOnStackFrame(StackFrame.TopId, code)
       }
     }
     result

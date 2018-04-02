@@ -148,7 +148,7 @@ class StackFrameEvaluator(mappingRegistry: MappingRegistry, boxer: Boxer) extend
   }
 
   private def findStackFrame(pausedData: PausedData, id: String): Option[StackFrame] = {
-    if (id == "$top") return pausedData.stackFrames.headOption
+    if (StackFrame.isTopId(id)) return pausedData.stackFrames.headOption
     pausedData.stackFrames.find(_.id == id)
   }
 

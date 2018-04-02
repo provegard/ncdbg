@@ -316,7 +316,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         val obj = objectWithId("x")
         testCall(obj, Seq.empty) { _ =>
           val expr = "function(){}"
-          callFunctionOnArgs should be (CallFunctionOnArgs("$top", Some(obj.objectId), expr, Seq.empty))
+          callFunctionOnArgs should be (CallFunctionOnArgs(StackFrame.TopId, Some(obj.objectId), expr, Seq.empty))
         }
       }
 
@@ -324,7 +324,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         val obj = objectWithId("x")
         testCall(obj, null) { _ =>
           val expr = "function(){}"
-          callFunctionOnArgs should be (CallFunctionOnArgs("$top", Some(obj.objectId), expr, Seq.empty))
+          callFunctionOnArgs should be (CallFunctionOnArgs(StackFrame.TopId, Some(obj.objectId), expr, Seq.empty))
         }
       }
 
@@ -429,7 +429,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
       "should perform ScriptHost evaluation with a wrapped function using null (global) as 'this'" in {
         testEvaluate("42") { _ =>
           val expr = "(function(){return (42);}).call(null);"
-          evaluateOnStackFrameArgs should be(EvaluateOnStackFrameArgs("$top", expr))
+          evaluateOnStackFrameArgs should be(EvaluateOnStackFrameArgs(StackFrame.TopId, expr))
         }
       }
 

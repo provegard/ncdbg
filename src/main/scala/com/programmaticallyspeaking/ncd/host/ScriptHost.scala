@@ -42,6 +42,11 @@ object ExceptionPauseType {
   object All extends ExceptionPauseType
 }
 
+object StackFrame {
+  val TopId: String = "$top"
+  def isTopId(s: String): Boolean = s == TopId
+}
+
 trait StackFrame {
   val id: String
   val thisObj: ValueNode

@@ -263,7 +263,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
 
         implicit val remoteObjectConverter = createRemoteObjectConverter(generatePreview, actualReturnByValue)
 
-        val evalResult = evaluate(scriptHost, "$top", script)
+        val evalResult = evaluate(scriptHost, StackFrame.TopId, script)
         EvaluateResult(evalResult.result, evalResult.exceptionDetails)
       }
 
@@ -329,8 +329,7 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
 
           val (wrapperFunc, objIds) = ScriptEvaluateSupport.wrapInFunction(maybeTranspiled, safeArgs(arguments))
 
-          // TODO: Stack frame ID should be something else here, to avoid the use of magic strings
-          val evalResult = callFunctionOn(scriptHost, "$top", Some(thisObjectId), wrapperFunc, objIds)
+          val evalResult = callFunctionOn(scriptHost, StackFrame.TopId, Some(thisObjectId), wrapperFunc, objIds)
 
           if (evalResult.exceptionDetails.isEmpty && isCacheableFunction) {
             // Store in cache

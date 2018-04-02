@@ -96,7 +96,7 @@ class MapSetPropertiesTest extends RealMarshallerTestFixture with RunningJava9 w
 
           host.getObjectProperties(c.objectId, onlyOwn = true, onlyAccessors = false)
 
-          val array = host.callFunctionOn("$top", None, "function (x) { return Object.getOwnPropertyNames(x); }", Seq(c.objectId)).get
+          val array = host.callFunctionOn(StackFrame.TopId, None, "function (x) { return Object.getOwnPropertyNames(x); }", Seq(c.objectId)).get
           val expanded = RealMarshallerTest.expand(host, array)
           expanded match {
             case StringAnyMap(aMap) =>

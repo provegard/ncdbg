@@ -42,7 +42,7 @@ class CallFunctionOnTest extends EvaluateTestFixture with TableDrivenPropertyChe
     "works for access to 'this'" in {
       val funcDecl = "function () { return this.value; }"
       testObjectValue { objId =>
-        val retVal = getHost.callFunctionOn("$top", Some(objId), funcDecl, Seq.empty)
+        val retVal = getHost.callFunctionOn(StackFrame.TopId, Some(objId), funcDecl, Seq.empty)
 
         retVal should be(Success(SimpleValue(42)))
       }
@@ -51,7 +51,7 @@ class CallFunctionOnTest extends EvaluateTestFixture with TableDrivenPropertyChe
     "works with argument" in {
       val funcDecl = "function (x) { return x.value; }"
       testObjectValue { objId =>
-        val retVal = getHost.callFunctionOn("$top", None, funcDecl, Seq(objId))
+        val retVal = getHost.callFunctionOn(StackFrame.TopId, None, funcDecl, Seq(objId))
 
         retVal should be(Success(SimpleValue(42)))
       }
@@ -69,7 +69,7 @@ class CallFunctionOnTest extends EvaluateTestFixture with TableDrivenPropertyChe
           |fun();
         """.stripMargin
       testObjectValue(script, "obj") { objId =>
-        getHost.callFunctionOn("$top", None, "function (x) { return Object.getOwnPropertyNames(x); }", Seq(objId)) match {
+        getHost.callFunctionOn(StackFrame.TopId, None, "function (x) { return Object.getOwnPropertyNames(x); }", Seq(objId)) match {
           case Success(an: ArrayNode) =>
             an.size should be (1)
           case Success(other) => fail("Unexpected callFunctionOn result: " + other)
