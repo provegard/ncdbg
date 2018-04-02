@@ -52,7 +52,10 @@ class ScriptImpl(val url: ScriptURL, scriptData: Array[Byte], val id: String) ex
     lines.lift(lineNumber1Based - 1)
   }
 
-  override def toString: String = url.toString
+  override def toString: String = {
+    val str = url.toString
+    if (str == "") s"[id=$id]" else str
+  }
 }
 
 object ScriptImpl {
