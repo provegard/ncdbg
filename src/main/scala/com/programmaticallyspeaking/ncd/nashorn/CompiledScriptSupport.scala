@@ -21,11 +21,17 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
 
   private val nonPersistRunnerByScriptHash = new TrieMap[String, RunnerForStackFrame]()
 
+  private val nonPersistCompileHashes = mutable.Set[String]()
+
   // Doesn't need to be thread safe, always accessed from the main host thread.
-  private val scriptPromiseByHash = mutable.Map[String, Promise[Script]]()
+  private val scriptPromiseByCompileHash = mutable.Map[String, Promise[Script]]()
 
   protected def clearNonPersistedScripts(): Unit = {
     nonPersistRunnerByScriptHash.clear()
+
+    // Prevent reuse of scripts compiled with persist=false after the VM has resumed.
+    nonPersistCompileHashes.foreach(scriptPromiseByCompileHash.remove)
+    nonPersistCompileHashes.clear()
   }
 
   protected def runCompiledScriptWithHash(scriptHash: String, stackFrameId: String): Option[(ValueNode, String)] = {
@@ -49,7 +55,9 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
         implicit val marshaller = pd.marshaller
         val compileResultTransformer = toCompileResult(persist)(_)
 
-        // Create a hash that includes both the contents and the URL.
+        // Script hash: a hash of only the script contents
+        // Compile hash: a hash of script contents + requested URL
+        // We use the compile hash to reuse a previous compilation.
         val scriptHash = Hasher.md5(script.getBytes(StandardCharsets.UTF_8))
         val compileHash = Hasher.md5(s"$scriptHash:$url".getBytes(StandardCharsets.UTF_8))
 
@@ -64,7 +72,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
         }
 
         // Did we compile the script already?
-        scriptPromiseByHash.get(compileHash) match {
+        scriptPromiseByCompileHash.get(compileHash) match {
           case Some(promise) =>
             promise.future.map { s =>
               log.debug(s"No need to compile, reusing compiled script ${s.id} based on hash $compileHash.")
@@ -88,7 +96,15 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
             val scriptPromise = Promise[Script]
 
             // Enter the promise into the script-reuse cache
-            scriptPromiseByHash += compileHash -> scriptPromise
+            scriptPromiseByCompileHash += compileHash -> scriptPromise
+
+            // If this isn't a persisted script, record the compile hash so that we can clear out the script promise
+            // later on and thereby avoid reusing a non-persist script compiled in a previous pause state. We do this
+            // because for a non-persist script we tie it to a scope and set its lifecycle to Paused, so it seems like
+            // a bad idea to reuse it for longer than that.
+            if (!persist) {
+              nonPersistCompileHashes += compileHash
+            }
 
             // Listen to InternalScriptAdded since ScriptAdded is suppressed when persist==false
             var subscription: Subscription = null
@@ -121,8 +137,10 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
                 // Save the runner for reuse during evaluation (we test evaluation by hash)
                 nonPersistRunnerByScriptHash += scriptHash -> RunnerForStackFrame(theRunner, stackFrame.id, script.id)
 
-                // Save the runner for runScript (we run by ID)
-                runnerByScriptId += script.id -> theRunner
+                if (persist) {
+                  // Save the runner for runScript (we run by ID)
+                  runnerByScriptId += script.id -> theRunner
+                }
 
                 compileResultTransformer(script)
               }
