@@ -3,7 +3,7 @@ package com.programmaticallyspeaking.ncd.e2e
 import akka.actor.{ActorRef, Inbox, PoisonPill}
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, EvaluateOnCallFrameResult, Location}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{CallArgument, RemoteObject}
-import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, Runtime => RuntimeD}
+import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, EventEmitHook, Runtime => RuntimeD}
 import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
 import com.programmaticallyspeaking.ncd.host.{ComplexNode, Script, ScriptIdentity, ScriptLocation}
 import com.programmaticallyspeaking.ncd.ioc.Container
@@ -22,7 +22,7 @@ trait RealDebuggerTestFixture extends E2ETestFixture with SharedInstanceActorTes
   def enableDebugger: Unit = {
     // Reuse the debugger, so create & enable only once.
     if (debugger == null) {
-      implicit val container = new Container(Seq(FakeFilePublisher, getHost))
+      implicit val container = new Container(Seq(FakeFilePublisher, getHost, new EventEmitHook))
       debugger = newActorInstance[Debugger]
       sendRequest(Domain.enable)
     }

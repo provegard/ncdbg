@@ -4,7 +4,7 @@ import java.net.ConnectException
 import java.util.logging.LogManager
 
 import akka.actor.ActorSystem
-import com.programmaticallyspeaking.ncd.chrome.domains.DefaultDomainFactory
+import com.programmaticallyspeaking.ncd.chrome.domains.{DefaultDomainFactory, EventEmitHook}
 import com.programmaticallyspeaking.ncd.chrome.net.{FilePublisher, FileServer, WebSocketServer}
 import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.infra.BuildProperties
@@ -91,5 +91,5 @@ object Boot extends App with Logging {
     }
   }
 
-  class BootContainer(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Container(Seq(filePublisher, scriptHost))
+  class BootContainer(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Container(Seq(filePublisher, scriptHost, new EventEmitHook))
 }

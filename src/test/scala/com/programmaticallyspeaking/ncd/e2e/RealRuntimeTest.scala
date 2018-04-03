@@ -1,10 +1,13 @@
 package com.programmaticallyspeaking.ncd.e2e
 
+import java.util.concurrent.LinkedBlockingQueue
+
 import akka.actor.{ActorRef, Inbox, PoisonPill}
-import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.CallFrame
-import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, Runtime => RuntimeD}
+import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, ScriptParsedEventParams}
+import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, EventEmitHook, Messages, Runtime => RuntimeD}
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.ioc.Container
+import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, SharedInstanceActorTesting}
 import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.prop.TableDrivenPropertyChecks
@@ -17,7 +20,7 @@ trait RealRuntimeTestFixture extends E2ETestFixture with SharedInstanceActorTest
   var debugger: ActorRef = _
 
   def enableRuntime: Unit = {
-    implicit val container = new Container(Seq(FakeFilePublisher, getHost))
+    implicit val container = new Container(Seq(FakeFilePublisher, getHost, new EventEmitHook))
     // Reuse the debugger, so create & enable only once.
     if (runtime == null) {
       runtime = newActorInstance[RuntimeD]
@@ -112,6 +115,28 @@ class RealRuntimeTest extends RealRuntimeTestFixture with TableDrivenPropertyChe
             }
           })
         }
+      }
+
+      "emits ScriptAdded _before_ responding to compileScript" in {
+        import scala.collection.JavaConverters._
+        val scriptAddedIds = new LinkedBlockingQueue[String]()
+        scriptEvents.subscribe(Observer.from[Messages.DomainMessage] {
+          case Messages.Event(_, p: ScriptParsedEventParams) =>
+            scriptAddedIds.put(p.scriptId)
+        })
+        waitForDebugger(_ => {
+          for (i <- 1 to 10) {
+            scriptAddedIds.clear()
+            val result = sendRequest(RuntimeD.compileScript("1+" + i, "", true, None))
+            result match {
+              case r: RuntimeD.CompileScriptResult =>
+                // Obtain a copy of the list so that the failure message will reflect the comparison
+                val copy = scriptAddedIds.asScala.toList
+                copy should contain(r.scriptId)
+              case other => fail("unexpected: " + other)
+            }
+          }
+        })
       }
     }
   }

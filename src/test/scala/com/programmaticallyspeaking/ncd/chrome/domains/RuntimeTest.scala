@@ -1,5 +1,6 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
+import akka.actor.Inbox
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime._
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor, PropertyDescriptorType}
@@ -66,13 +67,16 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
         val script = new ScriptImpl(ScriptURL.create(""), Array.empty, "xx")
         when(currentScriptHost.compileScript(any[String], any[String], any[Boolean])).thenReturn(Future.successful(Some(script)))
 
+        // Simulate emit from Debugger
+        val dummyReceiver = Inbox.create(system).getRef()
+        eventEmitHook.emitEvent(Messages.Event("Debugger.scriptParsed", Debugger.ScriptParsedEventParams(script)), dummyReceiver)
+
         val runtime = newActorInstance[Runtime]
         requestAndReceive(runtime, "1", Domain.enable)
         requestAndReceiveResponse(runtime, "2", Runtime.compileScript("1+1", "file:///test", true, None))
       }
 
       lazy val testCompileScriptFail = {
-        val script = new ScriptImpl(ScriptURL.create(""), Array.empty, "xx")
         when(currentScriptHost.compileScript(any[String], any[String], any[Boolean])).thenReturn(Future.failed(new Exception("oops")))
 
         val runtime = newActorInstance[Runtime]

@@ -3,6 +3,7 @@ package com.programmaticallyspeaking.ncd.chrome.net
 import java.net.URI
 import java.util.concurrent.{ConcurrentHashMap, Executors}
 
+import com.programmaticallyspeaking.ncd.chrome.domains.EventEmitHook
 import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.infra.{ExecutorProxy, ObjectMapping}
 import com.programmaticallyspeaking.ncd.ioc.Container
@@ -31,7 +32,7 @@ class WebSocketServerTest extends UnitTest with BeforeAndAfterAll with MockitoSu
     val scriptHost = mock[ScriptHost]
     when(scriptHost.events).thenReturn(Subject.serialized[ScriptEvent])
     val scriptHostForContainer = new ExecutorProxy(Executors.newSingleThreadExecutor()).createFor[ScriptHost](scriptHost)
-    implicit val container = new Container(Seq(FakeFilePublisher, scriptHostForContainer))
+    implicit val container = new Container(Seq(FakeFilePublisher, scriptHostForContainer, new EventEmitHook))
     domainFactory = new CapturingDomainFactory()
     server = new WebSocketServer(domainFactory, None)
   }

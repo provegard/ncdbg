@@ -9,6 +9,7 @@ import com.programmaticallyspeaking.ncd.transpile.{CachingES5Transpiler, Closure
 import org.slf4s.Logging
 
 import scala.collection.mutable
+import scala.concurrent.Future
 import scala.util.{Failure, Success}
 
 object Runtime {
@@ -143,7 +144,7 @@ object Runtime {
   val LoadedScriptsInfo = "It looks like you are using Visual Studio Code. If the Loaded Scripts pane is empty, please read: https://github.com/provegard/ncdbg/blob/master/docs/VSCode.md#activate-the-node-debug-extension"
 }
 
-class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport with TranspileSupport {
+class Runtime(scriptHost: ScriptHost, eventEmitHook: EventEmitHook) extends DomainActor(scriptHost, eventEmitHook) with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport with TranspileSupport {
 
   import Runtime._
 
@@ -272,7 +273,20 @@ class Runtime(scriptHost: ScriptHost) extends DomainActor(scriptHost) with Loggi
       log.debug(s"Request to compile script that starts '$firstLine' with URL '$url' and persist = $persist")
 
       // If persist is false, then we may get None back in which case we cannot report an ID.
-      scriptHost.compileScript(expr, url, persist).map(s => CompileScriptResult(s.map(_.id).orNull, None)).recover {
+      scriptHost.compileScript(expr, url, persist).flatMap({
+        case Some(s) =>
+          // Order is important - DevTools expects a Script snippet script to be known when compileScript returns,
+          // so make sure we return _after_ Debugger has emitted scriptParsed.
+          log.debug(s"Awaiting Debugger.scriptParsed for script with ID ${s.id} before returning compilation result.")
+          eventEmitHook.awaitEvent {
+            case Messages.Event(_, p: Debugger.ScriptParsedEventParams) if p.scriptId == s.id => true
+          }.map { _ =>
+            CompileScriptResult(s.id, None)
+          }
+        case None =>
+          Future.successful(CompileScriptResult(null, None))
+
+      }).recover {
         case t =>
           val exceptionDetails = exceptionDetailsFromError(t, 1)
           val returnedDetails = translateExceptionForDevTools(expr, exceptionDetails)

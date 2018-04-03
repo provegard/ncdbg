@@ -5,7 +5,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import akka.actor.{Actor, ActorRef, Props}
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, PausedEventParams}
 import com.programmaticallyspeaking.ncd.chrome.domains.Messages
-import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject}
+import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, SerializedSubject}
 import com.programmaticallyspeaking.ncd.nashorn.NashornScriptHostTestFixture
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.scalatest.exceptions.TestFailedException
@@ -28,6 +28,8 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
   private val requestor = system.actorOf(Props(new Requestor), "E2E-Requestor")
   private val currentId: AtomicInteger = new AtomicInteger(0)
   private val promises = new TrieMap[String, Promise[Any]]()
+
+  protected def scriptEvents: Observable[Messages.DomainMessage] = domainEventSubject
 
   protected def sendRequestAndWait(target: ActorRef, msg: AnyRef): Any = {
     val id = currentId.incrementAndGet()
@@ -52,29 +54,31 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
     var callFrameIdLists = Seq[Seq[String]]()
     val eventSubscription = domainEventSubject.subscribe(Observer.from[Messages.DomainMessage] {
       case Messages.Event(_, PausedEventParams(callFrames, _, _, _)) =>
-        callFrameIdLists :+= callFrames.map(_.callFrameId)
+        Future {
+          callFrameIdLists :+= callFrames.map(_.callFrameId)
 
-        val tester = testerQueue.dequeue()
-        try {
-          tester(callFrames) match {
-            case DontAutoResume =>
-            case _ => getHost.resume()
+          val tester = testerQueue.dequeue()
+          try {
+            tester(callFrames) match {
+              case DontAutoResume =>
+              case _ => getHost.resume()
+            }
+
+            if (testerQueue.isEmpty) {
+              donePromise.trySuccess(())
+            }
+
+          } catch {
+            case t: TestFailedException =>
+              donePromise.tryFailure(t)
+            case NonFatal(t) =>
+              val ids = callFrameIdLists.map(_.mkString("[ ", ", ", " ]")).mkString("[ ", ", ", " ]")
+              val errMsg = s"ERROR '${t.getMessage}' (call frame IDs: $ids), progress = \n${summarizeProgress()}"
+              // Gradle shortens any stack trace too much, so suppress the stack trace of the wrapper exception
+              donePromise.tryFailure(new RuntimeException(errMsg, t) {
+                override def fillInStackTrace(): Throwable = this
+              })
           }
-
-          if (testerQueue.isEmpty) {
-            donePromise.trySuccess(())
-          }
-
-        } catch {
-          case t: TestFailedException =>
-            donePromise.tryFailure(t)
-          case NonFatal(t) =>
-            val ids = callFrameIdLists.map(_.mkString("[ ", ", ", " ]")).mkString("[ ", ", ", " ]")
-            val errMsg = s"ERROR '${t.getMessage}' (call frame IDs: $ids), progress = \n${summarizeProgress()}"
-            // Gradle shortens any stack trace too much, so suppress the stack trace of the wrapper exception
-            donePromise.tryFailure(new RuntimeException(errMsg, t) {
-              override def fillInStackTrace(): Throwable = this
-            })
         }
     })
     donePromise.future.onComplete(_ => eventSubscription.unsubscribe())
@@ -96,7 +100,7 @@ class E2ETestFixture extends UnitTest with NashornScriptHostTestFixture {
         promises.remove(id).foreach(_.tryFailure(ex))
 
       case event: Messages.DomainMessage =>
-        Future { domainEventSubject.onNext(event) }
+        domainEventSubject.onNext(event)
     }
   }
 }

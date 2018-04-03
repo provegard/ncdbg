@@ -26,7 +26,7 @@ object Profiler {
   object Profile extends ProfileBuilder
 }
 
-class Profiler(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
+class Profiler(scriptHost: ScriptHost, eventEmitHook: EventEmitHook) extends DomainActor(scriptHost, eventEmitHook) {
   import Profiler._
 
   private var currentSamplingInterval: Option[FiniteDuration] = None

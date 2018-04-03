@@ -15,7 +15,7 @@ object TestDomainActor {
   case class customEnable()
 }
 
-class TestDomainActor(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
+class TestDomainActor(scriptHost: ScriptHost) extends DomainActor(scriptHost, new EventEmitHook) {
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case TestDomainActor.fail =>
       throw new Exception("I failed")
@@ -34,7 +34,7 @@ class TestDomainActor(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
   }
 }
 
-class TestDomainActorCustomEnable(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
+class TestDomainActorCustomEnable(scriptHost: ScriptHost) extends DomainActor(scriptHost, new EventEmitHook) {
   override protected def isEnable = {
     case TestDomainActor.customEnable() =>
   }
@@ -42,7 +42,7 @@ class TestDomainActorCustomEnable(scriptHost: ScriptHost) extends DomainActor(sc
 
 case class AScriptEvent(msg: String) extends ScriptEvent
 
-class EnableDisableDomainActor extends DomainActor(FakeScriptHost) {
+class EnableDisableDomainActor extends DomainActor(FakeScriptHost, new EventEmitHook) {
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case Domain.enable => "enabled"
     case Domain.disable => "disabled"

@@ -26,6 +26,7 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
   private val scripts = ListBuffer[Script]()
   private var scriptEventSubject: Subject[ScriptEvent] = _
   protected var currentScriptHost: ScriptHost = _
+  protected val eventEmitHook: EventEmitHook = new EventEmitHook
 
   implicit var container: Container = _
 
@@ -109,6 +110,6 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
   override def beforeTest(): Unit = {
     currentScriptHost = createScriptHost()
     val scriptHostForContainer = new ExecutorProxy(Executors.newSingleThreadExecutor()).createFor[ScriptHost](currentScriptHost)
-    container = new Container(Seq(FakeFilePublisher, scriptHostForContainer))
+    container = new Container(Seq(FakeFilePublisher, scriptHostForContainer, eventEmitHook))
   }
 }

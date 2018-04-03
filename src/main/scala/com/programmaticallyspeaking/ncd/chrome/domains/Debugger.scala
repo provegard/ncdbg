@@ -153,7 +153,7 @@ object Debugger extends Logging {
   }
 }
 
-class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost) extends DomainActor(scriptHost) with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
+class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHook: EventEmitHook) extends DomainActor(scriptHost, eventEmitHook) with Logging with ScriptEvaluateSupport with RemoteObjectConversionSupport {
   import Debugger._
   import com.programmaticallyspeaking.ncd.infra.BetterOption._
 

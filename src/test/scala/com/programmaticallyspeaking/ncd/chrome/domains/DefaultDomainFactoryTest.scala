@@ -41,7 +41,7 @@ object BarTestDomain {
   case object tellMe
 }
 
-class BarTestDomain(bar: Bar) extends DomainActor(FakeScriptHost) {
+class BarTestDomain(bar: Bar) extends DomainActor(FakeScriptHost, new EventEmitHook) {
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case BarTestDomain.tellMe => bar.bar
   }

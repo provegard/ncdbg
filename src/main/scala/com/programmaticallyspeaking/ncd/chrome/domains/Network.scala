@@ -13,7 +13,7 @@ object Network {
 /**
   * Exists only to satisfy VSCode. Without it, VSCode fails to attach.
   */
-class Network(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
+class Network(scriptHost: ScriptHost, eventEmitHook: EventEmitHook) extends DomainActor(scriptHost, eventEmitHook) {
   override protected def isEnable = {
     case Network.enable() => // ok
   }

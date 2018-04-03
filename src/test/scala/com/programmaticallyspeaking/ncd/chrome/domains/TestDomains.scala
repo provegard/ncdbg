@@ -26,7 +26,7 @@ object FooTestDomain {
   }
 }
 
-class FooTestDomain extends DomainActor(FakeScriptHost) {
+class FooTestDomain extends DomainActor(FakeScriptHost, new EventEmitHook) {
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case FooTestDomain.bar => // noop
 
@@ -50,7 +50,7 @@ object BazTestDomain {
   case class echo(msg: String)
 }
 
-class BazTestDomain extends DomainActor(FakeScriptHost) {
+class BazTestDomain extends DomainActor(FakeScriptHost, new EventEmitHook) {
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case BazTestDomain.echo(msg) => msg
   }

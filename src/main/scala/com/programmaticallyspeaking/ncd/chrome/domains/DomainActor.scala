@@ -22,7 +22,7 @@ object DomainActor {
   private[DomainActor] case class EmittableEvent(event: Messages.Event, receiver: ActorRef)
 }
 
-abstract class DomainActor(scriptHost: ScriptHost) extends Actor with Logging {
+abstract class DomainActor(scriptHost: ScriptHost, eventEmitHook: EventEmitHook) extends Actor with Logging {
   import DomainActor._
   implicit val ec = ExecutionContext.global
 
@@ -173,9 +173,13 @@ abstract class DomainActor(scriptHost: ScriptHost) extends Actor with Logging {
 
   private def emitQueuedEvents(): Unit = {
     eventsToEmit.foreach { e =>
-      e.receiver ! e.event
+      emitSingleEvent(e.event, e.receiver)
     }
     eventsToEmit.clear()
+  }
+
+  private def emitSingleEvent(e: Messages.Event, to: ActorRef) = {
+    eventEmitHook.emitEvent(e, to)
   }
 
   protected def emitEvent(method: String, params: Any): Unit = {

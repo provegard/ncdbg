@@ -34,7 +34,7 @@ object Page {
   private[Page] val FrameContent = "<html></html>"
 }
 
-class Page(scriptHost: ScriptHost) extends DomainActor(scriptHost) {
+class Page(scriptHost: ScriptHost, eventEmitHook: EventEmitHook) extends DomainActor(scriptHost, eventEmitHook) {
   import Page._
 
   override protected def handle: PartialFunction[AnyRef, Any] = {
