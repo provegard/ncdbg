@@ -88,11 +88,11 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
     } catch {
       case ex: IllegalArgumentException =>
         invalidMethods += msg.method
-        log.warn("Failed to handle message: " + ex.getMessage)
+        log.warn(s"Failed to handle message ($msg): " + ex.getMessage)
         sendToDevTools(Protocol.ErrorResponse(msg.id, "Unknown domain or method: " + msg.method))
       case ex: Exception =>
         // Unknown stuff
-        log.error("Failed to handle message", ex)
+        log.error(s"Failed to handle message ($msg)", ex)
         sendToDevTools(Protocol.ErrorResponse(msg.id, "ERROR: " + ex.getMessage))
     }
   }
