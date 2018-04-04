@@ -35,8 +35,8 @@ trait DisabledJavaUtilLogging {
   DisabledJavaUtilLogging.disable()
 }
 
-trait UnitTest extends FreeSpec with Matchers with DisabledJavaUtilLogging
-trait IsolatedUnitTest extends path.FreeSpec with Matchers with DisabledJavaUtilLogging
+trait UnitTest extends FreeSpecLike with Matchers with DisabledJavaUtilLogging
+trait IsolatedUnitTest extends path.FreeSpecLike with Matchers with DisabledJavaUtilLogging
 
 trait AsyncUnitTest extends UnitTest with ScalaFutures {
   implicit val executionContext: ExecutionContext = ExecutionContext.global
