@@ -7,11 +7,10 @@ import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.{ArrayReference, ObjectReference, ThreadReference, Value}
 import org.slf4s.Logging
 
-import scala.util.{Failure, Success}
-
 trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerHost with Logging =>
   import NashornDebuggerHost._
   import TypeConstants._
+  import JDIExtensions._
 
   private var maybeScriptBasedPropertyHolderFactory: Option[ScriptBasedPropertyHolderFactory] = None
   private var objectPropertiesCacheEnabled = true
@@ -85,7 +84,7 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
       objectDescriptor.native collect {
         case ref: ObjectReference if marshaller.isScriptObject(ref) =>
           val mirror = new ScriptObjectMirror(ref)
-          if (mirror.isWithObject) scriptObjectHolder(mirror.getExpression()) else scriptObjectHolder(ref)
+          if (ref.isWithObject) scriptObjectHolder(mirror.getExpression()) else scriptObjectHolder(ref)
         case ref: ObjectReference if marshaller.isJSObject(ref) =>
           val factory = scriptBasedPropertyHolderFactory()
           factory.create(ref, "", isNative = false, isScopeObject = false)

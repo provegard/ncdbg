@@ -30,8 +30,6 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
   def getProto(): Value = invoker.getProto()
   def setProto(proto: Value): Unit = invoker.setProto(proto)
 
-  def isWithObject: Boolean = scriptObject.`type`().name().endsWith(".WithObject")
-
   // For WithObject
   def getExpression(): ObjectReference = invoker.getExpression().asInstanceOf[ObjectReference]
 

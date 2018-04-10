@@ -13,13 +13,7 @@ object JDIExtensions {
   import scala.collection.JavaConverters._
   import TypeConstants._
 
-  implicit def location2ExtLocation(l: Location): ExtLocation = new ExtLocation(l)
-  implicit def value2ExtValue(v: Value): ExtValue = new ExtValue(v)
-  implicit def refType2ExtRefType(refType: ReferenceType): ExtReferenceType = new ExtReferenceType(refType)
-  implicit def eventRequest2ExtRequest(eventRequest: EventRequest): ExtRequest = new ExtRequest(eventRequest)
-  implicit def event2ExtEvent(event: Event): ExtEvent = new ExtEvent(event)
-
-  class ExtEvent(event: Event) {
+  implicit class RichEvent(val event: Event) extends AnyVal {
     def handle(): Option[Boolean] = {
       // Null-testing the request for https://github.com/provegard/ncdbg/issues/88
       Option(event.request()).flatMap(r => Option(r.getProperty(EventHandlerKey))).collect {
@@ -28,14 +22,14 @@ object JDIExtensions {
     }
   }
 
-  class ExtRequest(eventRequest: EventRequest) {
+  implicit class RichRequest(val eventRequest: EventRequest) extends AnyVal {
     def onEventDo(h: EventHandler): Unit = {
       Option(eventRequest.getProperty(EventHandlerKey)).foreach(_ => throw new IllegalStateException("Event handler already associated."))
       eventRequest.putProperty(EventHandlerKey, h)
     }
   }
 
-  class ExtLocation(location: Location) {
+  implicit class RichLocation(val location: Location) extends AnyVal {
 
     /**
       * Determines if the location is in ScriptRuntime.DEBUGGER.
@@ -44,20 +38,20 @@ object JDIExtensions {
       location.declaringType().name() == NIR_ScriptRuntime && location.method().name() == ScriptRuntime_DEBUGGER
 
 
-    lazy val byteCode: Int = {
+    def byteCode: Int = {
       val methodByteCodes = location.method().bytecodes()
       val bc = methodByteCodes(location.codeIndex().toInt).toInt
       if (bc < 0) bc + 256 else bc
     }
 
-    private lazy val lineOfLastLocation = location.method().allLineLocations().asScala.last.lineNumber()
+    private def lineOfLastLocation = location.method().allLineLocations().asScala.last.lineNumber()
     def isLastLineInFunction: Boolean = location.lineNumber() == lineOfLastLocation
 
     def sameMethodAndLineAs(other: Option[Location]): Boolean =
       other.exists(l => l.method() == location.method() && l.lineNumber() == location.lineNumber())
 
     def scriptURL: ScriptURL = ScriptURL.create(scriptPath)
-    private lazy val scriptPath: String = {
+    private def scriptPath: String = {
       // It appears *name* is a path on the form 'file:/c:/...', whereas path has a namespace prefix
       // (jdk\nashorn\internal\scripts\). This seems to be consistent with the documentation (although it's a bit
       // surprising), where it is stated that the Java stratum doesn't use source paths and a path therefore is a
@@ -89,25 +83,30 @@ object JDIExtensions {
       .replaceFirst("/eval/?$", "")
   }
 
-  class ExtValue(v: Value) {
-    lazy val scopeType: ScopeType = {
+  implicit class RichValue(val v: Value) extends AnyVal {
+    def scopeType: ScopeType = {
       val typeName = v.`type`().name()
       // jdk.nashorn.internal.objects.Global
       if (typeName.endsWith(".Global"))
         ScopeType.Global
       // jdk.nashorn.internal.runtime.WithObject
-      else if (typeName.endsWith(".WithObject"))
+      else if (isWithObject)
         ScopeType.With
       else ScopeType.Closure
     }
 
-    def isUndefined = {
-      val typeName = v.`type`().name()
+    def typeName: String = v.`type`().name()
+
+    def isUndefined: Boolean = {
       typeName == "jdk.nashorn.internal.runtime.Undefined"
+    }
+
+    def isWithObject: Boolean = {
+      typeName.endsWith(".WithObject")
     }
   }
 
-  class ExtReferenceType(referenceType: ReferenceType) {
+  implicit class RichReferenceType(val referenceType: ReferenceType) extends AnyVal {
     private def scriptSourceField(refType: ReferenceType): Field = {
       // Generated script classes has a field named 'source'
       Option(refType.fieldByName("source"))
@@ -115,7 +114,7 @@ object JDIExtensions {
     }
 
     def scriptURL: ScriptURL = ScriptURL.create(scriptPath)
-    private lazy val scriptPath: String = {
+    private def scriptPath: String = {
       val sourceName = referenceType.sourceName()
       sourceNameToUrl(referenceType, sourceName)
     }
