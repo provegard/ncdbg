@@ -13,6 +13,7 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import scala.language.implicitConversions
+import scala.util.{Success, Try}
 
 object Marshaller {
   val objectIdGenerator = new IdGenerator("objid-")
@@ -82,7 +83,8 @@ class MarshallerCache {
   }
 }
 
-class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = MarshallerCache.global)(implicit val thread: ThreadReference) {
+class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = MarshallerCache.global)
+                (implicit val thread: ThreadReference) {
   import Marshaller._
 
   import scala.collection.JavaConverters._
@@ -190,11 +192,11 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
         case "Set" => toSet(mirror, weak = false)
         case "WeakSet" => toSet(mirror, weak = true)
         case "Object" =>
-          mirror.getString(ScriptBasedPropertyHolderFactory.mapSetEntryMarker) match {
-            case "Set" =>
+          Try(mirror.getString(ScriptBasedPropertyHolderFactory.mapSetEntryMarker)) match {
+            case Success("Set") =>
               val entryValue = mirror.get("value")
               MapSetEntryNode(None, entryValue, objectId(value))
-            case "Map" =>
+            case Success("Map") =>
               val key = mirror.get("key")
               val entryValue = mirror.get("value")
               MapSetEntryNode(Some(key), entryValue, objectId(value))

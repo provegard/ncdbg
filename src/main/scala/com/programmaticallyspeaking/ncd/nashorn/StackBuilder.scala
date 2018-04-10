@@ -8,10 +8,12 @@ import com.programmaticallyspeaking.ncd.infra.IdGenerator
 import com.programmaticallyspeaking.ncd.javascript.Minifier
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost._
 import com.programmaticallyspeaking.ncd.nashorn.StackBuilder.BreakableLocationLookup
+import com.programmaticallyspeaking.ncd.nashorn.TypeConstants.NIR_Context
 import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi._
 import org.slf4s.Logging
 
+import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 import scala.util.Try
 
@@ -52,7 +54,6 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
                    breakableLocationLookup: BreakableLocationLookup, gCContext: GCContext) extends Logging {
   import scala.collection.JavaConverters._
   import JDIExtensions._
-  import TypeConstants._
 
   private def scopeWithFreeVariables(scopeObject: Value, freeVariables: Map[String, AnyRef])(implicit marshaller: Marshaller): Value = {
     implicit val thread = marshaller.thread
@@ -78,74 +79,15 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
     anObject
   }
 
-  private def prototypeOf(value: Value)(implicit thread: ThreadReference): Option[Value] = value match {
-    case ref: ObjectReference =>
-      val invoker = Invokers.shared.getDynamic(ref)
-      val maybeProto = Option(invoker.getProto())
-      // Prototype of Global is jdk.nashorn.internal.objects.NativeObject$Prototype - ignore it
-      if (maybeProto.exists(_.`type`().name().endsWith("$Prototype"))) None
-      else maybeProto
-    case _ => None
-  }
-
-  private def prototypeChain(value: Value)(implicit thread: ThreadReference): Seq[Value] = prototypeOf(value) match {
-    case Some(proto) => Seq(proto) ++ prototypeChain(proto)
-    case None => Seq.empty
-  }
-
-  private def getGlobal()(implicit thread: ThreadReference): Option[Value] = typeLookup(NIR_Context) match {
-    case Some(context) =>
-      val invoker = Invokers.shared.getStatic(context)
-      val global = invoker.getGlobal()
-      Option(global)
-    case None =>
-      // No global found :-(
-      None
-  }
-
-  private def createScopeChain(marshaller: Marshaller, originalScopeValue: Option[Value], thisValue: Value, marshalledThisNode: ValueNode, localNode: Option[ObjectNode]): Seq[Scope] = {
-    implicit val thread: ThreadReference = marshaller.thread
-    // Note: I tried to mimic how Chrome reports scopes, but it's a bit difficult. For example, if the current scope
-    // is a 'with' scope, there is no way (that I know of) to determine if we're in a function (IIFE) inside a with
-    // block or if we're inside a with block inside a function.
-    def toScope(v: Value) = Scope(marshaller.marshal(v), v.scopeType)
-    def findGlobalScope(): Option[Scope] = {
-      if (Option(thisValue).map(_.scopeType).contains(ScopeType.Global)) {
-        // this == global, so no need to call Context.getGlobal().
-        Some(Scope(marshalledThisNode, ScopeType.Global))
-      } else {
-        getGlobal().map(toScope)
-      }
-    }
-
-    val scopeChain = ListBuffer[Scope]()
-
-    // If we have locals, add a local scope
-    localNode.foreach(scopeChain += Scope(_, ScopeType.Local))
-
-    originalScopeValue.map(v => (v, toScope(v))) match {
-      case Some((_, s)) if s.scopeType == ScopeType.Global =>
-        // If the current scope is the global scope, add it but don't follow the prototype chain since it's unnecessary.
-        scopeChain += s
-      case Some((v, s)) =>
-        // Add the scope and all its parent scopes
-        scopeChain += s
-        scopeChain ++= prototypeChain(v).map(toScope)
-      case None =>
-      // noop
-    }
-
-    // Make sure we have a global scope lsat!
-    if (!scopeChain.exists(_.scopeType == ScopeType.Global)) {
-      scopeChain ++= findGlobalScope()
-    }
-
-    scopeChain
-  }
-
   private def buildStackFramesSequence(perStackFrame: Seq[(Map[String, Value], Location)])(implicit marshaller: Marshaller): Seq[StackFrameHolder] = {
     implicit val thread: ThreadReference = marshaller.thread
-    perStackFrame.zipWithIndex.map {
+    val scopeManager = new ScopeManager(typeLookup)
+
+    var originalScopeOfLastScriptFrame: Option[Value] = None
+
+    // Traverse the scopes bottom-up (reversed), since then ScopeManager should be able to reuse a lot
+    // of knowledge it gains on the way. In the end, we'll reverse again to get a proper result order.
+    val reversed = perStackFrame.zipWithIndex.reverse.map {
       case ((values, location), stackIdx) =>
         val functionMethod = location.method()
 
@@ -156,7 +98,12 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
         // ":this" should always be present, but a function that doesn't capture anything may lack a ":scope" variable
         values.get(":this") match {
           case Some(originalThis) =>
-            var originalScope = values.get(":scope")
+            val originalScope = values.get(":scope")
+
+            // If the original scope is such that it's the same one as that of the last script frame, then
+            // this frame doesn't have its own scope.
+            val stackFrameHasNoOwnScope = originalScope.exists(originalScopeOfLastScriptFrame.contains)
+            originalScopeOfLastScriptFrame = originalScope
 
             // Variables that don't start with ":" are locals
             val localValues = values.filter(e => !e._1.startsWith(":")) // for use in evaluateCodeOnFrame
@@ -166,26 +113,52 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
             // The scope may be missing/null/undefined, which is fine.
             val scopeObject = originalScope.collect { case s if !s.isUndefined => s }.orNull
 
-            // If needed, create a scope object to hold the local variables as "free" variables - so that evaluated
-            // code can refer to them.
-            // If we don't have :scope, use :this - it's used as a parent object for the created scope object.
-            val localScope = scopeWithFreeVariables(scopeObject, localValues)
+            // Figure out the scope chain. 'scopeObject' (of non-null) will be last.
+            var scopes = scopeManager.scopeChainTopLast(scopeObject)
 
-            // Create an artificial object node to hold the locals. Note that the object ID must be unique per stack
-            // since we store object nodes in a map.
-            val locals = localValues.map(e => e._1 -> marshaller.marshal(e._2))
-            val localNode = if (locals.nonEmpty) {
+            // Do we need an artificial scope? Always when we have local variables, because they are not
+            // necessarily captured by a Nashorn-generated scope.
+            //TODO: When the code contains eval, there should be a complete Nashorn-generated scope. Can we detect?
+            val needsArtificialLocalScope = localValues.nonEmpty
+
+            val optArtificialLocalScope = if (needsArtificialLocalScope) {
+
+              val (parentOfArtificial, childOfArtificial) = if (stackFrameHasNoOwnScope) {
+                (Option(scopeObject), None)
+              } else {
+                val (withScopesReversed, baseScopesReversed) = scopes.reverse.span(_.scopeType == ScopeType.With)
+                (baseScopesReversed.headOption, withScopesReversed.lastOption)
+              }
+
+              val artificialScope = scopeWithFreeVariables(parentOfArtificial.orNull, localValues)
+
+              // Let the scope that logically follows the artificial scope have it as prototype.
+              childOfArtificial.foreach { c =>
+                val mirror = new ScriptObjectMirror(c.asInstanceOf[ObjectReference])
+                mirror.setProto(artificialScope)
+              }
+
+              // Create an artificial object node to hold the locals. Note that the object ID must be unique per stack
+              // since we store object nodes in a map.
               val objectId = ObjectId(localScopeObjectIdPrefix + stackframeId)
               val node = ObjectNode("Object", objectId)
 
               // Note: Don't register locals as extra properties, since they will shadow the real properties on the
               // local scope object.
-              mappingRegistry.register(localScope, node, Map(stackFrameIndexExtraProp -> SimpleValue(stackIdx)))
+              mappingRegistry.register(artificialScope, node, Map(stackFrameIndexExtraProp -> SimpleValue(stackIdx)))
 
-              Some(node)
+              // Rewrite the scopes list by inserting the artificial scopes in the appropriate position
+              val (before, after) = scopes.span(s => !childOfArtificial.contains(s))
+              scopes = (before :+ artificialScope) ++ after
+
+              // Let the scope manager know about our now scope, so it can update its caches.
+              scopeManager.registerArtificialLocalScope(artificialScope, node, parentOfArtificial, childOfArtificial)
+
+              Some(artificialScope)
             } else None
 
-            val scopeChain = createScopeChain(marshaller, originalScope, originalThis, thisObj, localNode)
+            val optTopScope = scopes.lastOption
+            val scopeChain = scopeManager.createScopeChain((originalThis, thisObj), optArtificialLocalScope, scopes)
 
             def evaluateCodeOnFrame: CodeEvaluator = {
               case (code, maybeInvokeFunctionData) =>
@@ -193,7 +166,7 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
                   // If we expect the result of eval to be a function, make sure to wrap the function declaration
                   // in parentheses so that the function is returned.
                   val actualCode = if (maybeInvokeFunctionData.isDefined) s"($code)" else code
-                  var ret = codeEval.eval(Some(originalThis), Some(localScope), actualCode, Lifecycle.Paused)
+                  var ret = codeEval.eval(Some(originalThis), optTopScope, actualCode, Lifecycle.Paused)
 
                   maybeInvokeFunctionData match {
                     case Some(data) if ret.isInstanceOf[ObjectReference] =>
@@ -235,6 +208,7 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
         }
 
     }
+    reversed.reverse
   }
 
   def captureStackFrames(thread: ThreadReference)(implicit marshaller: Marshaller): Seq[StackFrameHolder] = {
@@ -274,3 +248,4 @@ class StackBuilder(stackframeIdGenerator: IdGenerator, typeLookup: TypeLookup, m
     FunctionDetails(functionMethod.name())
   }
 }
+

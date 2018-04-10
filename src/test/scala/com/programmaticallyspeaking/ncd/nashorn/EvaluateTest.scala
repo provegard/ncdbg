@@ -100,7 +100,7 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
     }
 
     // https://github.com/provegard/ncdbg/issues/93
-    "works for variable from 'with' statement" ignore {
+    "works for variable that comes from a 'with' statement expression" in {
       val script =
         """(function () {
           |  var obj = { value: 99 };
@@ -110,10 +110,26 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
           |  }
           |})();
         """.stripMargin
-      val expression = "value"
-      val result = SimpleValue(99)
-      evaluate(script, expression) { value =>
-        value should be(result)
+      evaluate(script, "value") { value =>
+        value should be(SimpleValue(99))
+      }
+    }
+
+    // https://github.com/provegard/ncdbg/issues/93
+    "works for variable that comes from a function within a 'with' statement" in {
+      val script =
+        """(function () {
+          |  var obj = { value: 101 };
+          |  with (obj) {
+          |    (function (xx) {
+          |      debugger;
+          |      return xx;
+          |    })(value);
+          |  }
+          |})();
+        """.stripMargin
+      evaluate(script, "xx") { value =>
+        value should be(SimpleValue(101))
       }
     }
 

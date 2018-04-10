@@ -3,6 +3,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 import com.programmaticallyspeaking.ncd.host.types.{ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.host.{ComplexNode, MapSetEntryNode, ObjectId, ObjectNode}
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost._
+import com.programmaticallyspeaking.ncd.nashorn.mirrors.ScriptObjectMirror
 import com.sun.jdi.{ArrayReference, ObjectReference, ThreadReference, Value}
 import org.slf4s.Logging
 
@@ -83,7 +84,8 @@ trait ObjectPropertiesSupport extends NashornScriptHost { self: NashornDebuggerH
     cache.getOrElseUpdate(objectId, {
       objectDescriptor.native collect {
         case ref: ObjectReference if marshaller.isScriptObject(ref) =>
-          scriptObjectHolder(ref)
+          val mirror = new ScriptObjectMirror(ref)
+          if (mirror.isWithObject) scriptObjectHolder(mirror.getExpression()) else scriptObjectHolder(ref)
         case ref: ObjectReference if marshaller.isJSObject(ref) =>
           val factory = scriptBasedPropertyHolderFactory()
           factory.create(ref, "", isNative = false, isScopeObject = false)

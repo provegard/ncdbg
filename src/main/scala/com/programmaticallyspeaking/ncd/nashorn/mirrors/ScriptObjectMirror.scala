@@ -6,6 +6,7 @@ import com.sun.jdi._
 
 import scala.collection.immutable.Stream.Empty
 import scala.language.implicitConversions
+import scala.util.{Success, Try}
 
 /**
   * Mirror for `jdk.nashorn.internal.runtime.ScriptObject`.
@@ -13,7 +14,6 @@ import scala.language.implicitConversions
   * @param scriptObject the `ScriptObject` instance to interact with
   */
 class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller: Marshaller) {
-
   import Mirrors._
   import ScriptObjectMirror._
 
@@ -26,6 +26,14 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
 
   lazy val isRegularOrTypedArray: Boolean =
     isArray || className.endsWith("Array")
+
+  def getProto(): Value = invoker.getProto()
+  def setProto(proto: Value): Unit = invoker.setProto(proto)
+
+  def isWithObject: Boolean = scriptObject.`type`().name().endsWith(".WithObject")
+
+  // For WithObject
+  def getExpression(): ObjectReference = invoker.getExpression().asInstanceOf[ObjectReference]
 
   def put(key: AnyRef, value: AnyRef, isStrict: Boolean): Unit =
     invoker.applyDynamic(putObjectObjectBoolSignature)(key, value, isStrict)
@@ -42,14 +50,14 @@ class ScriptObjectMirror(val scriptObject: ObjectReference)(implicit marshaller:
   def actualToString: String = invoker.applyDynamic("toString")().asString
 
   def typeOfObject(): String = {
-    val v = invoker.applyDynamic(getObjectSignature)("constructor")
-    // Marshalling via FunctionNode is expensive as it gets the source, so do this manually.
-    if (marshaller.isScriptObject(v)) {
-      val mirror = new ScriptObjectMirror(v.asInstanceOf[ObjectReference])
-      mirror.maybeAsFunction.map(_.name).getOrElse(className)
-    } else {
-      // Fallback to the class name
-      className
+    Try(invoker.applyDynamic(getObjectSignature)("constructor")) match {
+      case Success(v) if marshaller.isScriptObject(v) =>
+        // Marshalling via FunctionNode is expensive as it gets the source, so do this manually.
+        val mirror = new ScriptObjectMirror(v.asInstanceOf[ObjectReference])
+        mirror.maybeAsFunction.map(_.name).getOrElse(className)
+      case _ =>
+        // Fallback to the class name
+        className
     }
   }
 

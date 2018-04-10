@@ -26,7 +26,6 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         |  x.toString();
         |})();
       """.stripMargin, Seq("Local:x", "Global:.*")),
-    // TODO: Figure out how to see the 'foo' variable in the 'with' block.
     ("inside a with block inside a function",
       """(function () {
         |  var x = 0;
@@ -36,7 +35,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         |    x.toString(); // capture something from the surrounding scope
         |  }
         |})();
-      """.stripMargin, Seq("Local:obj", "With:", "Closure:x", "Global:.*")),
+      """.stripMargin, Seq("With:foo", "Local:obj", "Closure:x", "Global:.*")),
     ("inside a function inside a function",
       """(function () {
         |  var x = 0;
@@ -61,7 +60,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         |    })();
         |  }
         |})();
-      """.stripMargin, Seq("Local:y", "With:", "Closure:x", "Global:.*")),
+      """.stripMargin, Seq("Local:y", "With:foo", "Closure:obj", "Closure:x", "Global:.*")),
     ("inside a function where this != global",
       """(function () {
         |  var x = 0;
@@ -135,17 +134,20 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
 
   "when a breakpoint is hit" - {
     "the scopes should be sorted out" - {
+      def runTest(script: String, expectationRegExps: Seq[String]): Unit = {
+        waitForBreakpoint(script) { (host, breakpoint) =>
+          breakpoint.stackFrames.headOption match {
+            case Some(st) =>
+
+              st.scopeChain.map(s => describeScope(host, s)) should equal (expectationRegExps)
+
+            case None => fail("no stack frames!")
+          }
+        }
+      }
       forAll(scopeTests) { (desc, script, expectationRegExps) =>
         desc in {
-          waitForBreakpoint(script) { (host, breakpoint) =>
-            breakpoint.stackFrames.headOption match {
-              case Some(st) =>
-
-                st.scopeChain.map(s => describeScope(host, s)) should equal (expectationRegExps)
-
-              case None => fail("no stack frames!")
-            }
-          }
+          runTest(script, expectationRegExps)
         }
       }
     }
