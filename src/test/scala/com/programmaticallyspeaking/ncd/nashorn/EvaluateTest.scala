@@ -133,6 +133,39 @@ class EvaluateTest extends EvaluateTestFixture with TableDrivenPropertyChecks {
       }
     }
 
+    "works for variable that belongs to the function containing a 'with' statement" in {
+      val script =
+        """(function () {
+          |  var xx = 42;
+          |  var obj = { value: 99 };
+          |  with (obj) {
+          |    debugger;
+          |  }
+          |  return xx;
+          |})();
+        """.stripMargin
+      evaluate(script, "xx") { value =>
+        value should be(SimpleValue(42))
+      }
+    }
+
+    "works for a global variable, inside a 'with' statement" in {
+      val script =
+        """(function () {
+          |  var obj = { value: 99 };
+          |  with (obj) {
+          |    debugger;
+          |  }
+          |})();
+        """.stripMargin
+      evaluate(script, "NaN") {
+        case SimpleValue(x: Double) =>
+          java.lang.Double.isNaN(x) should be (true)
+        case other =>
+          fail("Unexpected: " + other)
+      }
+    }
+
     // Failing test for #20
     forAll(varRemember) { (desc, script) =>
       s"remembers a var-defined variable $desc" in {
