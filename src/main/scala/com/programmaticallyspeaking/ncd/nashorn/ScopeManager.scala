@@ -13,7 +13,7 @@ class ScopeManager(typeLookup: TypeLookup)(implicit marshaller: Marshaller) {
   private val marshalledScope = mutable.Map[Value, ValueNode]()
 
   private def getProtoOf(v: Value): Value = v match {
-    case x if x.scopeType == ScopeType.Global => null
+    case x if x.isGlobal => null
     case x: ObjectReference =>
       val m = new ScriptObjectMirror(x)
       m.getProto()

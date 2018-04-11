@@ -118,7 +118,16 @@ class ScriptFunctionMirror(scriptObject: ObjectReference)(implicit marshaller: M
   //TODO: Marshaller doesn't auto-marshal to ScopeObject since it cannot recognize a scope object ref.
   def scopes: Seq[Value] = {
     val scopeValue = invoker.getScope()
-    if (scopeValue == null) Seq.empty else Seq(scopeValue)
+    Option(scopeValue).toSeq ++ scopeParents(scopeValue)
+  }
+
+  private def scopeParents(value: Value): Seq[Value] = value match {
+    case v if v == null     => Seq.empty
+    case v if v.isGlobal    => Seq.empty // because prototype of Global is Object, which isn't a scope
+    case c: ObjectReference =>
+      val proto = new ScriptObjectMirror(c).getProto()
+      Option(proto).toSeq ++ scopeParents(proto)
+    case _                  => Seq.empty
   }
 }
 

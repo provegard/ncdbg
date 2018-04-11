@@ -95,6 +95,8 @@ object JDIExtensions {
       else ScopeType.Closure
     }
 
+    def isGlobal: Boolean = scopeType == ScopeType.Global
+
     def typeName: String = v.`type`().name()
 
     def isUndefined: Boolean = {

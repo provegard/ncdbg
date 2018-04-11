@@ -253,6 +253,33 @@ class ObjectPropertiesTest extends RealMarshallerTestFixture with Inside with Ta
       }
     }
 
+    "function with multiple scopes" - {
+      val expr =
+        """(function f() {
+          |  var x = 1;
+          |  return x1();
+          |
+          |  function x1() {
+          |    var y = 2;
+          |    return y1;
+          |
+          |    function y1() {
+          |      return x + y;
+          |    }
+          |  }
+          |})()
+        """.stripMargin
+
+      "and gives multiple internal 'Scopes'" in {
+        testProperties(expr) { props =>
+          getDescriptorFor(props, "[[Scopes]]").value match {
+            case Some(ScopeList(size, _)) => size should be (2)
+            case other => fail("Unexpected: " + other)
+          }
+        }
+      }
+    }
+
     "Regular function that captures something" - {
       val expr = "(function (global) { function Add(a) { return a + global.x?0:1; }; return Add; })(this)"
 
