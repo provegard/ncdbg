@@ -203,6 +203,8 @@ class Marshaller(mappingRegistry: MappingRegistry, cache: MarshallerCache = Mars
             case _ =>
               toObject(mirror)
           }
+        case "global" =>
+          ObjectNode("global", objectId(value))
         case _ =>
           toObject(mirror)
       }

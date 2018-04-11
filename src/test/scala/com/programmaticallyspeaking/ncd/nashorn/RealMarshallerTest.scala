@@ -196,7 +196,8 @@ class RealMarshallerTest extends RealMarshallerTestFixture with Inside with Tabl
         ("Java object", "new java.util.ArrayList()", "java.util.ArrayList"),
         ("JSObject object", s"createInstance('${classOf[ObjectLikeJSObject].getName}')", "Object"),
         ("JS 'class'", s"(function() { return new MyClass(); function MyClass() {} })()", "MyClass"),
-        ("DataView", "new DataView(new ArrayBuffer(10))", "DataView")
+        ("DataView", "new DataView(new ArrayBuffer(10))", "DataView"),
+        ("Global", "this", "global")
       )
 
       forAll(classNameCases) { (desc, expr, className) =>
