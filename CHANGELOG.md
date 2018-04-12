@@ -64,6 +64,8 @@
 * Reuse syntax check via compileScript for subsequent code evaluation (EXPERIMENTAL).
 * Ensure DevTools sees Debugger.scriptParsed for a script before compileScript returns.
 * Fix bug with evaluating code inside a `with` block (issue #93)
+* Make sure global object is described properly when evaluated in the console.
+* List all scopes in a function [[Scopes]] internal property.
 
 ## 0.6.0 (2017-10-22)
 
