@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 (2018-04-12)
 
 * Don't rely on Nashorn syntax extensions in the property extractor code, since the target may
   have disabled them (issue #68)
