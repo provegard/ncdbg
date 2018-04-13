@@ -39,11 +39,10 @@ object DomainMethodArgumentFactory {
           throw rejection(domain, method, "there are arguments")
       }
     } else {
-      // Return the case object instance.
+      // Return case class or case object instance.
       maybeClasses.caseClass match {
-        case Some(_) =>
-          // However, there is a case class, so this domain method expects arguments!
-          throw rejection(domain, method, "arguments are missing")
+        case Some(caseClass) =>
+          ObjectMapping.fromMap(Map.empty, caseClass).asInstanceOf[AnyRef]
         case None =>
           // Creating a new instance of the case class isn't stable, since whether or not we get the correct instance
           // depends on if the case object has been initialized. Instead, we read the value of the MODULE$ field.

@@ -7,6 +7,8 @@ import com.programmaticallyspeaking.ncd.testing.FakeScriptHost
 object FooTestDomain {
   case object bar
 
+  case class barArgs(x: Option[String] = None)
+
   case class baz(a: String, b: Int)
 
   case class barcase(s: Option[String])
