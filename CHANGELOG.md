@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* Handle arguments to Debugger.stepInto (issue #95)
+
 ## 0.8.0 (2018-04-12)
 
 * Don't rely on Nashorn syntax extensions in the property extractor code, since the target may
