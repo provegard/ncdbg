@@ -19,7 +19,7 @@ object Debugger extends Logging {
   type BreakpointId = String
 
   case object stepOver
-  case object stepInto
+  case class stepInto(breakOnAsyncCall: Option[Boolean] = None)
   case object stepOut
 
   case object resume
@@ -230,7 +230,10 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHo
     case Debugger.removeBreakpoint(id) =>
       scriptHost.removeBreakpointById(id)
 
-    case Debugger.stepInto =>
+    case Debugger.stepInto(breakOnAsyncCall) =>
+      if (breakOnAsyncCall.contains(true)) {
+        log.debug("Debugger.stepInto, breakOnAsyncCall is ignored")
+      }
       lastCallFrameList = None
       scriptHost.step(StepInto)
 
