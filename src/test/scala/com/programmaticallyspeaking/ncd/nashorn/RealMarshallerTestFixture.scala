@@ -14,11 +14,6 @@ trait RealMarshallerTestFixture extends UnitTest with NashornScriptHostTestFixtu
 
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
-  private def unpack(t: Throwable): Throwable = t match {
-    case x: UndeclaredThrowableException => unpack(x.getCause)
-    case x => x
-  }
-
   protected def evaluateExpression(expr: String)(tester: (ScriptHost, ValueNode) => Unit): Unit = {
     val wrapped =
       s"""|(function (result) {

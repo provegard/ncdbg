@@ -13,6 +13,7 @@ import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
 import scala.concurrent.duration._
+import scala.util.control.NonFatal
 import scala.util.{Failure, Success}
 
 trait RealDebuggerTestFixture extends E2ETestFixture with SharedInstanceActorTesting with ScalaFutures with IntegrationPatience {
@@ -55,8 +56,13 @@ trait RealDebuggerTestFixture extends E2ETestFixture with SharedInstanceActorTes
       val inbox = Inbox.create(system)
       inbox.watch(actorRef)
       inbox.send(actorRef, PoisonPill)
-      // wait a few seconds for the actor to die
-      inbox.receive(2.seconds)
+      try {
+        // wait a few seconds for the actor to die
+        inbox.receive(2.seconds)
+      } catch {
+        case NonFatal(t) =>
+          log.warn("Failed to stop Debugger actor. It may be locked.")
+      }
     }
     debugger = null
     super.stopRunner()

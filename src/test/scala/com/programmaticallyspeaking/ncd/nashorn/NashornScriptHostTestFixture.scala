@@ -1,5 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import java.lang.reflect.UndeclaredThrowableException
+
 import akka.actor.{ActorRef, Inbox, Props}
 import com.programmaticallyspeaking.ncd.host.{ExceptionPauseType, ScriptEvent}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, Subscription}
@@ -95,6 +97,11 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
     inbox.receive(2.seconds)
   }
 
+  protected def unpack(t: Throwable): Throwable = t match {
+    case x: UndeclaredThrowableException => unpack(x.getUndeclaredThrowable)
+    case x => x
+  }
+
   protected def executeScript[R](script: String, observer: Observer[ScriptEvent], handler: (NashornScriptHost) => Future[R]): R = {
     assert(runner != null, "Runner is unset")
 
@@ -125,10 +132,13 @@ trait VirtualMachineLauncher { self: SharedInstanceActorTesting with Logging =>
     inbox.receive(runnerTimeout) match {
       case ScriptExecutorRunner.ScriptWillExecute =>
 
-        val handlerResult = Try(Await.result(f, resultTimeout))
+        val handlerResult = Try(Await.result(f, resultTimeout)).transform(Success.apply, t => Failure(unpack(t)))
 
-        // If we break due to a failure about, host is set to null.
-        Option(host).foreach(_.resume())
+        handlerResult.foreach { _ =>
+          // Only resume on handler success.
+          // Host may be null here.
+          Option(host).foreach(_.resume())
+        }
 
         def unexpectedError(reason: String) = {
           stopRunner()
