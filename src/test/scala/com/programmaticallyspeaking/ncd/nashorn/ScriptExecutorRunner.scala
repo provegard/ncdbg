@@ -6,7 +6,6 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.TimeoutException
 
 import akka.actor.{Actor, ActorRef}
-import ch.qos.logback.classic.Level
 import com.programmaticallyspeaking.ncd.host.{InitialInitializationComplete, ScriptEvent}
 import com.programmaticallyspeaking.ncd.infra.{CancellableFuture, DelayedFuture}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject, Subscription}
@@ -317,16 +316,8 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
 
   private def captureLogs(): Unit = {
     logSubscription = MemoryAppender.logEvents.subscribe(Observer.from {
-      case event if event.getLevel.isGreaterOrEqual(Level.DEBUG) => // if event.getLoggerName == getClass.getName =>
-        val simpleLoggerName = event.getLoggerName.split('.').last
-        var txt = s"[$simpleLoggerName][${event.getLevel}]: ${event.getMessage}"
-        Option(event.getThrowableProxy).foreach { proxy =>
-          txt += "\n" + proxy.getMessage
-          proxy.getStackTraceElementProxyArray.foreach { st =>
-            txt += "\n  " + st.toString
-          }
-        }
-        self ! ReportProgress(txt)
+      case msg if !msg.contains("TRACE") =>
+        self ! ReportProgress(msg.trim())
     })
   }
 

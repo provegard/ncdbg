@@ -4,21 +4,28 @@ import ch.qos.logback.classic.spi.ILoggingEvent
 import ch.qos.logback.core.UnsynchronizedAppenderBase
 import ch.qos.logback.core.encoder.Encoder
 import ch.qos.logback.core.status.ErrorStatus
-import java.io.ByteArrayOutputStream
-import java.io.IOException
+import java.io.{ByteArrayOutputStream, IOException, OutputStream}
+import java.nio.charset.StandardCharsets
 
 import com.programmaticallyspeaking.ncd.messaging.{Observable, SerializedSubject}
 
 object MemoryAppender {
-  private[MemoryAppender] val logEventSubject = new SerializedSubject[ILoggingEvent]
+  private[MemoryAppender] val logEventSubject = new SerializedSubject[String]
 
-  def logEvents: Observable[ILoggingEvent] = logEventSubject
+  def logEvents: Observable[String] = logEventSubject
 }
 
 class MemoryAppender extends UnsynchronizedAppenderBase[ILoggingEvent] {
   import MemoryAppender._
-  protected var encoder: Encoder[ILoggingEvent] = _
-  protected var outputStream = new ByteArrayOutputStream
+  private var encoder: Encoder[ILoggingEvent] = _
+  private var outputStream = new OutputStream {
+    override def write(b: Int): Unit = ???
+
+    override def write(b: Array[Byte]): Unit = {
+      val str = new String(b, StandardCharsets.UTF_8)
+      logEventSubject.onNext(str)
+    }
+  }
 
   override def start(): Unit = {
     try {
@@ -33,7 +40,6 @@ class MemoryAppender extends UnsynchronizedAppenderBase[ILoggingEvent] {
 
   override protected def append(event: ILoggingEvent): Unit = {
     if (!isStarted) return
-    logEventSubject.onNext(event)
     try {
       event.prepareForDeferredProcessing()
       Option(encoder).foreach(_.doEncode(event))
@@ -47,6 +53,4 @@ class MemoryAppender extends UnsynchronizedAppenderBase[ILoggingEvent] {
   def setEncoder(e: Encoder[ILoggingEvent]): Unit = {
     encoder = e
   }
-
-  def getRenderedOutput = new String(outputStream.toByteArray)
 }

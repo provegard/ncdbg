@@ -1,7 +1,7 @@
 <configuration>
     <appender name="MEMORY" class="com.programmaticallyspeaking.ncd.testing.MemoryAppender">
         <encoder>
-            <pattern>%d %-5level [%thread] %logger{0}: %msg%n</pattern>
+            <pattern>%-5level [%thread] %logger{0}: %msg%n</pattern>
         </encoder>
     </appender>
 
