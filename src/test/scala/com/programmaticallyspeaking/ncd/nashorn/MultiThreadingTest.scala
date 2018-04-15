@@ -1,20 +1,18 @@
 package com.programmaticallyspeaking.ncd.nashorn
 import java.io.{BufferedReader, InputStreamReader}
 import java.util.concurrent.atomic.AtomicInteger
-import javax.script.Compilable
 
 import com.programmaticallyspeaking.ncd.host._
-import com.programmaticallyspeaking.ncd.infra.AwaitAndExplain
 import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.{SharedInstanceActorTesting, UnitTest}
 import jdk.nashorn.api.scripting.NashornScriptEngineFactory
-import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.slf4s.Logging
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 
-trait MultiThreadingTestFixture extends UnitTest with Logging with SharedInstanceActorTesting with VirtualMachineLauncher with ScalaFutures with FairAmountOfPatience {
+trait MultiThreadingTestFixture extends UnitTest with Logging with SharedInstanceActorTesting with VirtualMachineLauncher with ScalaFutures with FairAmountOfPatience with Eventually {
   override val scriptExecutor: ScriptExecutorBase = MultiThreadedScriptExecutor
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 }
@@ -44,9 +42,8 @@ class MultiThreadingTest extends MultiThreadingTestFixture {
     })
 
     whenReady(scriptAddedPromise.future) { script =>
-      val scriptLocation = host.getBreakpointLocations(ScriptIdentity.fromId(script.id), location(1), None).headOption match {
-        case Some(l) => l
-        case None => fail(s"No line numbers for script ${script.id}")
+      val scriptLocation = eventually {
+        host.getBreakpointLocations(ScriptIdentity.fromId(script.id), location(1), None).headOption.getOrElse(fail(s"No line numbers for script ${script.id}"))
       }
       host.setBreakpoint(ScriptIdentity.fromURL(script.url), scriptLocation, None)
       whenReady(hitBreakpointPromise.future) { _ =>
@@ -65,18 +62,19 @@ object MultiThreadedScriptExecutor extends App with ScriptExecutorBase {
   println(Signals.ready)
   waitForSignal(Signals.go)
 
-  val compiledScript = scriptEngine.asInstanceOf[Compilable].compile(
+  // Used a compiled script here before, stopped working with JDK 10
+  var src =
     """(function () {
       |  return 5 + 5;
       |})();
-    """.stripMargin)
+    """.stripMargin
 
   implicit val ec = ExecutionContext.global
 
   val futures = (1 to 5).map { _ =>
     Future {
       while (true) {
-        compiledScript.eval()
+        scriptEngine.eval(src)
       }
     }
   }
