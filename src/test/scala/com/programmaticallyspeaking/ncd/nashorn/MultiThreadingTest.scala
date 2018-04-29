@@ -74,7 +74,7 @@ object MultiThreadedScriptExecutor extends App with ScriptExecutorBase {
   // Used a compiled script here before, stopped working with JDK 10
   var src =
     """(function () {
-      |  return 5 + 5;
+      |  return Math.floor(5.5);
       |})();
     """.stripMargin
 
