@@ -15,11 +15,13 @@ class StreamReadingThread(in: InputStream, appender: (String) => Unit) extends T
       }
     } catch {
       case _: InterruptedException =>
-      // ok
-      case ex: IOException =>
-        if (ex.getMessage != "Stream closed") ex.printStackTrace(System.err)
+        // ok
+      case ex: IOException if isStreamClosed(ex) =>
+        // ok
       case NonFatal(t) =>
         t.printStackTrace(System.err)
     }
   }
+
+  private def isStreamClosed(ex: IOException) = ex.getMessage.toLowerCase == "stream closed"
 }
