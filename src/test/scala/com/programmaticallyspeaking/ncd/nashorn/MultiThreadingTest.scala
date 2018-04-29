@@ -1,5 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 import java.io.{BufferedReader, InputStreamReader}
+import java.util.concurrent.TimeoutException
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.programmaticallyspeaking.ncd.host._
@@ -7,6 +8,7 @@ import com.programmaticallyspeaking.ncd.messaging.Observer
 import com.programmaticallyspeaking.ncd.testing.{SharedInstanceActorTesting, UnitTest}
 import jdk.nashorn.api.scripting.NashornScriptEngineFactory
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.exceptions.TestFailedException
 import org.slf4s.Logging
 
 import scala.concurrent.duration._
@@ -46,10 +48,17 @@ class MultiThreadingTest extends MultiThreadingTestFixture {
         host.getBreakpointLocations(ScriptIdentity.fromId(script.id), location(1), None).headOption.getOrElse(fail(s"No line numbers for script ${script.id}"))
       }
       host.setBreakpoint(ScriptIdentity.fromURL(script.url), scriptLocation, None)
-      whenReady(hitBreakpointPromise.future) { _ =>
-        // Ugly, but wait for a while to see if the counter increases over 1 (which it shouldn't).
-        Thread.sleep(200)
-        breakpointCounter.get() should be (1)
+
+      try {
+        whenReady(hitBreakpointPromise.future) { _ =>
+          // Ugly, but wait for a while to see if the counter increases over 1 (which it shouldn't).
+          Thread.sleep(200)
+          breakpointCounter.get() should be(1)
+        }
+      } catch {
+        case t: TestFailedException if t.getMessage().contains("timeout") =>
+          val progress = summarizeProgress()
+          throw new TimeoutException("Timed out: " + progress)
       }
     }
   }
