@@ -3,6 +3,8 @@
 ## Unreleased
 
 * Handle arguments to Debugger.stepInto (issue #95)
+* Change suspend policy to "suspend all threads." This is required to avoid JDI deadlocks
+  with Java 10.
 
 ## 0.8.0 (2018-04-12)
 
