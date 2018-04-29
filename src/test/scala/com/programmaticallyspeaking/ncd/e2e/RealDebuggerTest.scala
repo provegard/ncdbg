@@ -310,7 +310,10 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
       })
     }
 
-    "should support frame restart when paused at a debugger statement" in {
+    // Disabled because this test doesn't work with Java 10:
+    // java.lang.NullPointerException
+    //   at jdk.scripting.nashorn.scripts/jdk.nashorn.internal.scripts.Script$Recompilation$116$\^eval\_/1907604549.:program(<eval>:5)
+    "should support frame restart when paused at a debugger statement" ignore {
       val script =
         """var f = function () {
           |  debugger; // stop here
