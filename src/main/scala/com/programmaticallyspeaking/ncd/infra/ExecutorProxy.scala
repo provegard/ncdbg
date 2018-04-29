@@ -34,11 +34,13 @@ class ExecutorProxy(executor: Executor) {
       val id = idGen.getAndIncrement()
       val argss = Option(args).getOrElse(Array.empty)
       val desc = s"$method(${argss.mkString(", ")})[$id]"
+      log.trace(s"Waiting to execute: $desc")
 
       // Snapshot of waiting calls prior to submitting to the executor
       val waitingCallsAtEntry = awaitingCalls
 
       executor.execute(() => {
+        log.trace(s"Execute: $id")
         Try(method.invoke(instance, args: _*)) match {
           case Success(f: Future[_]) => resultPromise.completeWith(f.asInstanceOf[Future[AnyRef]])
           case Success(result) => resultPromise.success(result)
@@ -68,6 +70,7 @@ class ExecutorProxy(executor: Executor) {
         } finally {
           // Done with this call
           awaitingCalls -= id
+          log.trace(s"Done: $id")
         }
       }
     }
