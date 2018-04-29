@@ -91,7 +91,8 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
 
   private def extractSourceLater(maybeThread: Option[ThreadReference], refType: ReferenceType, ciType: ReferenceType,
                                  callback: IdentifiedScriptCallback): Unit = {
-    log.debug(s"Will get source from ${refType.name()} when InstallPhase is complete")
+    val theThread = maybeThread.get // .get is safe here, since installPhaseType is defined
+    log.debug(s"Will get source from ${refType.name()} when InstallPhase is complete, in thread ${theThread.name()}")
     // Let the stack unwind a bit in order to get hold of the source. This logic is based on the observation that
     // we see the ClassPrepareEvent event inside Context$ContextCodeInstaller (in Java 9, one of its subclasses).
     // In Java 8, it's the initialize method, in Java 9 it's the install method. The source isn't set until in
@@ -99,7 +100,7 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
     // is complete.
     val req = virtualMachine.eventRequestManager().createMethodExitRequest()
     req.addClassFilter(ciType)
-    req.addThreadFilter(maybeThread.get) // .get is safe here, since installPhaseType is defined
+    req.addThreadFilter(theThread)
     req.addCountFilter(1)
     req.onEventDo { _ =>
       log.debug(s"Getting source from ${refType.name()} at method exit from InstallPhase")

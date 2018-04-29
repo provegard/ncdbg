@@ -152,7 +152,7 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
     subject.subscribe(observer) //TODO: What to do about the subscription?
 
     val request = virtualMachine.eventRequestManager().createClassPrepareRequest()
-    request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
+    request.setSuspendPolicy(EventRequest.SUSPEND_ALL)
     request.setEnabled(true)
 
     bumpScanTimer()

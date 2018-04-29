@@ -29,7 +29,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
     // rethrows an exception.
     // We don't necessarily find ECMAException at VM startup, so we don't have it available here.
     val request = erm.createExceptionRequest(null, true, true)
-    request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD) // TODO: Duplicate code
+    request.setSuspendPolicy(EventRequest.SUSPEND_ALL) // TODO: Duplicate code
     // We're mostly interested in exceptions thrown in scripts, but a reference error is thrown from
     // jdk.nashorn.internal.objects.Global.__noSuchProperty__, so include the entire internal Nashorn package.
     request.addClassFilter("jdk.nashorn.internal.*")
@@ -83,7 +83,7 @@ trait PauseSupport { self: NashornDebuggerHost with Logging =>
 
   private def configureRequest(request: EventRequest with CanAddClassFilter) = {
     // TODO: Lots of duplicate code here wrt how we create breakpoints.
-    request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
+    request.setSuspendPolicy(EventRequest.SUSPEND_ALL)
     // TODO: Should StepRequestClassFilter be this string?? But then maybe it won't be possible to step over _to_
     // TODO: a debugger statement. Check if we have a test for that!
     request.addClassFilter(ScriptClassNamePrefix + "*")
