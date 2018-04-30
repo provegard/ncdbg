@@ -30,10 +30,6 @@ object NashornDebuggerHost {
   val wantedTypes = Map(
     NIR_ScriptRuntime -> true,
     NIR_Context -> true,
-    JL_Boolean -> true,
-    JL_Integer -> true,
-    JL_Long -> true,
-    JL_Double -> true,
     NIO_Global -> true,
     NIR_Source -> false, // don't stop init
     NIR_JSType -> false  // don't stop init
