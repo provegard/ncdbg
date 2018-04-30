@@ -37,7 +37,7 @@ class BreakableLocation private(val script: Script, eventRequestManager: EventRe
 
   def createBreakpointRequest(): BreakpointRequest = {
     val breakpointRequest = eventRequestManager.createBreakpointRequest(location)
-    breakpointRequest.setSuspendPolicy(EventRequest.SUSPEND_ALL)
+    breakpointRequest.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
     breakpointRequest
   }
 

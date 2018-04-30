@@ -151,9 +151,15 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
     log.debug("ClassScanner setup")
     subject.subscribe(observer) //TODO: What to do about the subscription?
 
-    val request = virtualMachine.eventRequestManager().createClassPrepareRequest()
-    request.setSuspendPolicy(EventRequest.SUSPEND_ALL)
-    request.setEnabled(true)
+    def createRequest(classFilter: String) = {
+      val request = virtualMachine.eventRequestManager().createClassPrepareRequest()
+      request.addClassFilter(classFilter)
+      request.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
+      request.enable()
+    }
+
+    NashornDebuggerHost.wantedTypes.keys.foreach(createRequest)
+    createRequest("jdk.nashorn.internal.scripts.*")
 
     bumpScanTimer()
   }

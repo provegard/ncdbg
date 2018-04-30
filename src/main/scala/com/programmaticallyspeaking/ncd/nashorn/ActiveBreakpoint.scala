@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host._
 import com.sun.jdi.event.BreakpointEvent
-import com.sun.jdi.request.{BreakpointRequest, EventRequestManager}
+import com.sun.jdi.request.{BreakpointRequest, EventRequest, EventRequestManager}
 
 import scala.collection.mutable.ListBuffer
 
@@ -30,6 +30,7 @@ class ActiveBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation
     locations.foreach { bl =>
       allLocations += bl
       val req = bl.createBreakpointRequest()
+      req.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
       ActiveBreakpoint.associateWithBreakpoint(req, this)
       req.enable()
       breakpointRequests += req

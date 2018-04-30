@@ -20,7 +20,7 @@ object Breakpoints extends Logging {
   // TODO: BreakableLocation also does this. Reuse code!
   private def createBreakpointAt(location: Location) = {
     val br = location.virtualMachine().eventRequestManager().createBreakpointRequest(location)
-    br.setSuspendPolicy(EventRequest.SUSPEND_ALL)
+    br.setSuspendPolicy(EventRequest.SUSPEND_EVENT_THREAD)
     br.setEnabled(true)
     br
   }
