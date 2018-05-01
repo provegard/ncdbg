@@ -39,9 +39,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
       case Some(pd) if pd.stackFrames.head.id == stackFrameId =>
 
         nonPersistRunnerByScriptHash.get(scriptHash).map { rr =>
-          val vn = virtualMachine.withDisabledBreakpoints {
-            rr.runner.run()(pd.marshaller)
-          }
+          val vn = rr.runner.run()(pd.marshaller)
           (vn, rr.scriptId)
         }
 
@@ -161,9 +159,7 @@ trait CompiledScriptSupport { self: NashornDebuggerHost =>
         runnerByScriptId.get(scriptId) match {
           case Some(runner) =>
             log.debug(s"Running script with ID $scriptId")
-            virtualMachine.withDisabledBreakpoints {
-              runner.run()(pd.marshaller)
-            }
+            runner.run()(pd.marshaller)
           case None =>
             val known = runnerByScriptId.keys.mkString(", ")
             log.warn(s"Cannot find compiled script with ID $scriptId. Known compiled script IDs: $known")

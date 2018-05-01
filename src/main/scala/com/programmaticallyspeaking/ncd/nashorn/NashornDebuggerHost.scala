@@ -263,12 +263,13 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     internalStateSubject.onNext(Pause)
 
     implicit val thread = ev.thread()
-    val pd = new PausedData(thread, createMarshaller(), stackBuilder, ev)
+    val pd = new PausedData(thread, createMarshaller(), stackBuilder, ev, virtualMachine.disableEnabledRequests())
     pausedData = Some(pd)
     pd
   }
 
   private def cleanupPausing(): Unit = {
+    pausedData.foreach(_.restoreDisabledEventRequests())
     pausedData = None
     clearNonPersistedScripts()
     mappingRegistry.clear() // only valid when paused
@@ -436,8 +437,12 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     case Some(data) =>
       log.info("Resuming virtual machine")
       enableGarbageCollectionWhereDisabled()
-      virtualMachine.resume()
+
+      // Note that cleanup and this restoring disabled event requests must happen before
+      // we resume the virtual machine, otherwise we might miss events.
       cleanupPausing()
+      virtualMachine.resume()
+
       emitEvent(Resumed)
     case None =>
       log.debug("Ignoring resume request when not paused (no pause data).")
@@ -462,9 +467,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
         val data = InvokeFunctionData(thisValue.orNull, argValues)
 
         _scanner.withClassTracking {
-          virtualMachine.withDisabledBreakpoints {
-            _stackFramEval.evaluateOnStackFrame(pd, stackFrameId, functionDeclaration, Some(data))
-          }
+          _stackFramEval.evaluateOnStackFrame(pd, stackFrameId, functionDeclaration, Some(data))
         }
       case None =>
         log.warn(s"Evaluation of '$functionDeclaration' cannot be done in a non-paused state.")
@@ -493,9 +496,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
 
           case None =>
             _scanner.withClassTracking {
-              virtualMachine.withDisabledBreakpoints {
-                _stackFramEval.evaluateOnStackFrame(pd, stackFrameId, expression, None)
-              }
+              _stackFramEval.evaluateOnStackFrame(pd, stackFrameId, expression, None)
             }
         }
       case None =>

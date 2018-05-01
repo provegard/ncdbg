@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.sun.jdi.request.EventRequestManager
+import com.sun.jdi.request.{BreakpointRequest, EventRequest, EventRequestManager}
 import com.sun.jdi._
 import com.sun.jdi.event.EventQueue
 
@@ -69,12 +69,19 @@ class XVirtualMachine(virtualMachine: VirtualMachine) {
     case _ =>
   }
 
-  def withDisabledBreakpoints[R](f: => R): R = {
-    val enabledRequests = eventRequestManager().breakpointRequests().asScala.filter(_.isEnabled)
+  private def isDeleted(r: EventRequest) = r.toString.contains("(deleted)")
+
+  // Disables enabled requests and returns a restore function that will re-enable them.
+  def disableEnabledRequests(): () => Unit = {
+    val erm = eventRequestManager()
+    val allRequests = erm.breakpointRequests().asScala ++
+        erm.methodEntryRequests().asScala ++
+        erm.methodExitRequests().asScala ++
+        erm.exceptionRequests().asScala ++
+        erm.classPrepareRequests().asScala
+    val enabledRequests = allRequests.filter(_.isEnabled).toList
     enabledRequests.foreach(_.disable())
-    try f finally {
-      enabledRequests.foreach(_.enable())
-    }
+    () => enabledRequests.filterNot(isDeleted).foreach(_.enable())
   }
 
   lazy val version: VMVersion = VMVersion.parse(virtualMachine.version())

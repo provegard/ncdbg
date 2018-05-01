@@ -139,15 +139,12 @@ abstract class Invoker(referenceTypeData: ReferenceTypeData) {
 
 class DynamicInvoker(objectReference: ObjectReference, referenceTypeData: ReferenceTypeData) extends Invoker(referenceTypeData) with Dynamic {
   import scala.collection.JavaConverters._
-  import VirtualMachineExtensions._
 
   def applyDynamic(methodName: String)(args: Any*)(implicit thread: ThreadReference): Value = {
     findMethod(objectReference.referenceType(), methodName, args.size) match {
       case Right(method) =>
         val argValues = args.map(toValue)
-        thread.virtualMachine().withoutClassPrepareRequests {
-          unpackError(objectReference.invokeMethod(thread, method, argValues.asJava, ObjectReference.INVOKE_SINGLE_THREADED))
-        }
+        unpackError(objectReference.invokeMethod(thread, method, argValues.asJava, ObjectReference.INVOKE_SINGLE_THREADED))
       case Left(candidates) =>
         rejectCall(methodName, objectReference.referenceType(), args, candidates)
     }
@@ -156,15 +153,12 @@ class DynamicInvoker(objectReference: ObjectReference, referenceTypeData: Refere
 
 class StaticInvoker(classType: ClassType, referenceTypeData: ReferenceTypeData) extends Invoker(referenceTypeData) with Dynamic {
   import scala.collection.JavaConverters._
-  import VirtualMachineExtensions._
 
   def applyDynamic(methodName: String)(args: Any*)(implicit thread: ThreadReference): Value = {
     findMethod(classType, methodName, args.size) match {
       case Right(method) =>
         val argValues = args.map(toValue)
-        thread.virtualMachine().withoutClassPrepareRequests {
-          unpackError(classType.invokeMethod(thread, method, argValues.asJava, ObjectReference.INVOKE_SINGLE_THREADED))
-        }
+        unpackError(classType.invokeMethod(thread, method, argValues.asJava, ObjectReference.INVOKE_SINGLE_THREADED))
       case Left(candidates) =>
         rejectCall(methodName, classType, args, candidates)
     }

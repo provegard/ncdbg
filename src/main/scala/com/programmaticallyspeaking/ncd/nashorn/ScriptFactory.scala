@@ -111,7 +111,7 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
       considerReferenceType(None, refType, callback)
       true // consume the event
     }
-    req.setEnabled(true)
+    req.enable()
   }
 
   private def identifiedScript(script: Script, locations: Seq[Location]): IdentifiedScript = {
