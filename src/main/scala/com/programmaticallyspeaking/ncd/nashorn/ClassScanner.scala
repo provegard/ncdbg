@@ -154,7 +154,6 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
     def createRequest(classFilter: String) = {
       val request = virtualMachine.eventRequestManager().createClassPrepareRequest()
       request.addClassFilter(classFilter)
-      request.setSuspendPolicy(EventRequest.SUSPEND_ALL)
       request.enable()
     }
 
