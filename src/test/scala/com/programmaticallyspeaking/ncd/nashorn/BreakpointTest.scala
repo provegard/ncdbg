@@ -89,7 +89,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
   "setting a breakpoint for an unknown script" - {
     "works and returns no locations" in {
       waitForBreakpoint("debugger;") { (host, _) =>
-        val bp = host.setBreakpoint(URLRegexBasedScriptIdentity(".*unknown\\.js$"), ScriptLocation(1, None), None)
+        val bp = host.setBreakpoint(URLRegexBasedScriptIdentity(".*unknown\\.js$"), ScriptLocation(1, None), BreakpointOptions.empty)
         bp.locations should be (Seq.empty)
       }
     }
@@ -97,7 +97,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     "results in a BreakpointResolved event later on" in {
       waitForBreakpointThenEvent("debugger;") { (host, hb) =>
         host.ignoreBreakpoints()
-        host.setBreakpoint(URLRegexBasedScriptIdentity(".*unknown\\.js$"), ScriptLocation(1, None), None)
+        host.setBreakpoint(URLRegexBasedScriptIdentity(".*unknown\\.js$"), ScriptLocation(1, None), BreakpointOptions.empty)
 
         val loader =
           """
@@ -115,7 +115,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
 
     "actually breaks in a new script" in {
       waitForBreakpoints("debugger; this.ff();")({ (host, hb) =>
-        host.setBreakpoint(URLRegexBasedScriptIdentity(".*unknown2\\.js$"), ScriptLocation(2, None), None)
+        host.setBreakpoint(URLRegexBasedScriptIdentity(".*unknown2\\.js$"), ScriptLocation(2, None), BreakpointOptions.empty)
 
         val loader =
           """
@@ -372,7 +372,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
           if (data.hitsSoFar == 1) {
             // debugger
             getHost.findScript(ScriptIdentity.fromId(scriptId)).map { s =>
-              getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(2, None), None)
+              getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(2, None), BreakpointOptions.empty)
             } match {
               case Some(bps) => breakpointIds += bps.breakpointId
               case None => donePromise.failure(new Exception("No script or breakpoint"))
@@ -457,7 +457,7 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
   def setBreakpoint(bp: HitBreakpoint, line: Int, col: Option[Int]): Option[Breakpoint] = {
     val scriptId = bp.stackFrames.head.scriptId
     getHost.findScript(ScriptIdentity.fromId(scriptId)).map { s =>
-      getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(line, col), None)
+      getHost.setBreakpoint(ScriptIdentity.fromURL(s.url), ScriptLocation(line, col), BreakpointOptions.empty)
     }
   }
 

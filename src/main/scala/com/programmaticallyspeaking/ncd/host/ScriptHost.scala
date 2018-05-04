@@ -69,6 +69,17 @@ case object StepInto extends StepType
 case object StepOver extends StepType
 case object StepOut extends StepType
 
+/**
+  * Options for setting a breakpoint.
+  *
+  * @param condition if set, a condition that must be true for the breakpoint to hit
+  */
+case class BreakpointOptions(condition: Option[String])
+
+object BreakpointOptions {
+  val empty: BreakpointOptions = BreakpointOptions(None)
+}
+
 trait ScriptHost {
   /**
     * Indicates that all pauses should be skipped or not skipped. This flag is applied "on top" of pausing on
@@ -126,10 +137,10 @@ trait ScriptHost {
     * @param id the script identifier
     * @param location the location of the breakpoint; if the column number isn't set, the returned breakpoint may
     *                 refer to multiple locations.
-    * @param condition optional condition to use for the breakpoint
+    * @param options breakpoint options
     * @return a structure describing the breakpoint that was set
     */
-  def setBreakpoint(id: ScriptIdentity, location: ScriptLocation, condition: Option[String]): Breakpoint
+  def setBreakpoint(id: ScriptIdentity, location: ScriptLocation, options: BreakpointOptions): Breakpoint
 
   def getBreakpointLocations(id: ScriptIdentity, from: ScriptLocation, to: Option[ScriptLocation]): Seq[ScriptLocation]
 

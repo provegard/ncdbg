@@ -16,7 +16,7 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
     _breakpoints.disableById(id)
   }
 
-  override def setBreakpoint(id: ScriptIdentity, location: ScriptLocation, condition: Option[String]): Breakpoint = {
+  override def setBreakpoint(id: ScriptIdentity, location: ScriptLocation, options: BreakpointOptions): Breakpoint = {
     val bls = findBreakableLocationsAtLine(id, location.lineNumber1Based)
     // If we have a column number, try to find exactly that location, but fall back to locations on the line.
     // The reason is that column numbers is not an exact science, especially when it comes to source maps.
@@ -28,10 +28,10 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
       case None => bls
     }
 
-    val conditionDescription = condition.map(c => s" with condition ($c)").getOrElse("")
+    val conditionDescription = options.condition.map(c => s" with condition ($c)").getOrElse("")
 
     // Force boolean and handle that the condition contains a trailing comment
-    val wrapper = condition.map(c =>
+    val wrapper = options.condition.map(c =>
       s"""!!(function() {
          |return $c
          |})()

@@ -217,7 +217,8 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHo
       // DevTools passes "" when the breakpoint isn't conditional
       val actualCondition = condition.filter(_ != "")
       val location = ScriptLocation(lineNumberBase0 + 1, maybeColumnNumberBase0.map(_ + 1))
-      val bp = scriptHost.setBreakpoint(identity, location, actualCondition)
+      val options = BreakpointOptions(actualCondition)
+      val bp = scriptHost.setBreakpoint(identity, location, options)
       SetBreakpointByUrlResult(bp.breakpointId, bp.locations.map(l => Location(l.scriptId, l.location.lineNumber1Based - 1, l.location.columnNumber1Based.map(_ - 1))))
 
     case Debugger.resume =>
@@ -316,7 +317,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHo
       // DevTools always use column 0 (there's a comment: "Always use 0 column."), but if we pass a column to
       // the host, it will be too picky, so pass no column at all.
       val scriptLocation = ScriptLocation(location.lineNumber + 1, None)
-      val bp = scriptHost.setBreakpoint(ScriptIdentity.fromId(location.scriptId), scriptLocation, None)
+      val bp = scriptHost.setBreakpoint(ScriptIdentity.fromId(location.scriptId), scriptLocation, BreakpointOptions.empty)
       if (log.underlying.isDebugEnabled)
         log.debug(s"Continue to line ${scriptLocation.lineNumber1Based} in script ${location.scriptId} with temporary breakpoint ID ${bp.breakpointId}")
       else

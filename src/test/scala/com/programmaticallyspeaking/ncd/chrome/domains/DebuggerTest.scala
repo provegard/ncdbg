@@ -190,7 +190,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       "should translate empty condition to no condition" in {
         setBreakpointByUrl(3, "a", Some(""))
-        verify(currentScriptHost).setBreakpoint(any[ScriptIdentity], any[ScriptLocation], meq(None))
+        verify(currentScriptHost).setBreakpoint(any[ScriptIdentity], any[ScriptLocation], meq(BreakpointOptions.empty))
       }
 
       "should support the 'urlRegex' parameter" in {
@@ -581,7 +581,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
   override def createScriptHost(): ScriptHost = {
     val host = super.createScriptHost()
 
-    when(host.setBreakpoint(any[ScriptIdentity], any[ScriptLocation], any[Option[String]])).thenAnswerWith({
+    when(host.setBreakpoint(any[ScriptIdentity], any[ScriptLocation], any[BreakpointOptions])).thenAnswerWith({
       case (scriptId: ScriptIdentity) :: (location: ScriptLocation) :: _ :: Nil =>
         val bpId = "bp_" + location.lineNumber1Based
         // Arbitrary test stuff. High line numbers don't exist!

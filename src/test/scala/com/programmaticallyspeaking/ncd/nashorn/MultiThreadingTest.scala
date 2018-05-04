@@ -47,7 +47,7 @@ class MultiThreadingTest extends MultiThreadingTestFixture {
       val scriptLocation = eventually {
         host.getBreakpointLocations(ScriptIdentity.fromId(script.id), location(1), None).headOption.getOrElse(fail(s"No line numbers for script ${script.id}"))
       }
-      host.setBreakpoint(ScriptIdentity.fromURL(script.url), scriptLocation, None)
+      host.setBreakpoint(ScriptIdentity.fromURL(script.url), scriptLocation, BreakpointOptions.empty)
 
       try {
         whenReady(hitBreakpointPromise.future) { _ =>

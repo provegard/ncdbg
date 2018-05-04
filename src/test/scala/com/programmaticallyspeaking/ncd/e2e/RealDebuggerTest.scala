@@ -5,7 +5,7 @@ import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{CallFrame, Eval
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{CallArgument, RemoteObject}
 import com.programmaticallyspeaking.ncd.chrome.domains.{Debugger, Domain, EventEmitHook, Runtime => RuntimeD}
 import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
-import com.programmaticallyspeaking.ncd.host.{ComplexNode, Script, ScriptIdentity, ScriptLocation}
+import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.ioc.Container
 import com.programmaticallyspeaking.ncd.nashorn.types.ObjectPropertyDescriptorTest
 import com.programmaticallyspeaking.ncd.testing.{FakeFilePublisher, SharedInstanceActorTesting}
@@ -456,8 +456,8 @@ class RealDebuggerTest extends RealDebuggerTestFixture with TableDrivenPropertyC
         withHead(callFrames) { cf =>
           val scriptId = cf.location.scriptId
           // Debugger API doesn't allow us to set a breakpoint by ID, so we have to access ScriptHost directly.
-          getHost.setBreakpoint(ScriptIdentity.fromId(scriptId), ScriptLocation(4, None), None) // 1-based line
-          sendRequest(Debugger.continueToLocation(Location(scriptId, 3, None)))                 // 0-based line
+          getHost.setBreakpoint(ScriptIdentity.fromId(scriptId), ScriptLocation(4, None), BreakpointOptions.empty) // 1-based line
+          sendRequest(Debugger.continueToLocation(Location(scriptId, 3, None)))                                    // 0-based line
         }
         DontAutoResume
       }, callFrames => {
