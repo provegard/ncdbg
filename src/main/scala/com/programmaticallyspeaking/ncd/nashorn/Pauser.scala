@@ -100,6 +100,9 @@ class Pauser(breakpoints: ActiveBreakpoints, scripts: Scripts, emitter: ScriptEv
         val scriptId = topStackFrame.scriptId
         breakpoints.activeFor(topStackFrame.breakableLocation) match {
           case Some(activeBreakpoint) if reason == BreakpointReason.Breakpoint =>
+            // Let ActiveBreakpoints know so that the breakpoint can be removed.
+            breakpoints.onBreakpointHit(activeBreakpoint)
+
             val breakpointId = activeBreakpoint.id
 
             // Check condition if we have one. We cannot do this until now (which means that a conditional breakpoint

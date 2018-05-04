@@ -14,13 +14,15 @@ import scala.collection.mutable.ListBuffer
   * @param breakableLocations the breakable locations
   */
 class ActiveBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation], val condition: Option[String],
-                       scriptIdentity: ScriptIdentity, scriptLocation: ScriptLocation) {
+                       scriptIdentity: ScriptIdentity, scriptLocation: ScriptLocation, oneOff: Boolean) {
 
   private object lock
   private val allLocations = ListBuffer[BreakableLocation]()
   private val breakpointRequests = ListBuffer[BreakpointRequest]()
 
   addBreakableLocations(breakableLocations)
+
+  def isOneOff: Boolean = oneOff
 
   def belongsTo(script: Script): Boolean = scriptIdentity.matchesScript(script)
 
@@ -30,6 +32,9 @@ class ActiveBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation
     locations.foreach { bl =>
       allLocations += bl
       val req = bl.createBreakpointRequest()
+      if (oneOff) {
+        req.addCountFilter(1)
+      }
       ActiveBreakpoint.associateWithBreakpoint(req, this)
       req.enable()
       breakpointRequests += req

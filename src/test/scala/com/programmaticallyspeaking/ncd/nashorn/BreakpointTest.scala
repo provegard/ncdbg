@@ -86,6 +86,11 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
     }
   }
 
+  def lineOf(bp: HitBreakpoint) =
+    bp.stackFrames.headOption.map(_.location.lineNumber1Based).getOrElse(-1)
+  def scriptIdOf(bp: HitBreakpoint) =
+    bp.stackFrames.headOption.map(sf => ScriptIdentity.fromId(sf.scriptId)).getOrElse(fail("Missing stack"))
+
   "setting a breakpoint for an unknown script" - {
     "works and returns no locations" in {
       waitForBreakpoint("debugger;") { (host, _) =>
@@ -128,6 +133,27 @@ class BreakpointTest extends BreakpointTestFixture with TableDrivenPropertyCheck
         host.evaluateOnStackFrame(hb.stackFrames.head.id, loader)
       }, { (host, hb) =>
         hb.stackFrames.head.scriptURL.toString should include ("unknown2.js")
+      })
+    }
+  }
+
+  "a one-off breakpoint" - {
+    "is hit once" in {
+      val script =
+        """var i = 0;
+          |debugger;
+          |while (i < 5) {
+          |  i = i + 1;
+          |}
+          |debugger;
+        """.stripMargin
+      waitForBreakpoints(script)({ (host, breakpoint) =>
+        lineOf(breakpoint) should be (2)
+        host.setBreakpoint(scriptIdOf(breakpoint), ScriptLocation(4, None), BreakpointOptions(None, oneOff = true))
+      }, { (_, breakpoint) =>
+        lineOf(breakpoint) should be (4)
+      }, { (_, breakpoint) =>
+        lineOf(breakpoint) should be (6)
       })
     }
   }

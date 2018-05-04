@@ -217,7 +217,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHo
       // DevTools passes "" when the breakpoint isn't conditional
       val actualCondition = condition.filter(_ != "")
       val location = ScriptLocation(lineNumberBase0 + 1, maybeColumnNumberBase0.map(_ + 1))
-      val options = BreakpointOptions(actualCondition)
+      val options = BreakpointOptions(actualCondition, oneOff = false)
       val bp = scriptHost.setBreakpoint(identity, location, options)
       SetBreakpointByUrlResult(bp.breakpointId, bp.locations.map(l => Location(l.scriptId, l.location.lineNumber1Based - 1, l.location.columnNumber1Based.map(_ - 1))))
 

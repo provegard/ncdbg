@@ -39,6 +39,13 @@ class ActiveBreakpoints extends Logging {
     enabledBreakpoints.values.find(_.contains(bl))
   }
 
+  def onBreakpointHit(activeBreakpoint: ActiveBreakpoint): Unit = {
+    if (activeBreakpoint.isOneOff) {
+      log.trace(s"Removing one-off breakpoint with id ${activeBreakpoint.id}")
+      removeBreakpoint(activeBreakpoint)
+    }
+  }
+
   def disableAll(): Unit = {
     //TODO: Not very atomic, this
     enabledBreakpoints.foreach(e => e._2.disable())
@@ -49,15 +56,19 @@ class ActiveBreakpoints extends Logging {
     enabledBreakpoints.get(id) match {
       case Some(activeBp) =>
         log.info(s"Removing breakpoint with id $id")
-        activeBp.disable()
-        enabledBreakpoints -= activeBp.id
+        removeBreakpoint(activeBp)
       case None =>
         log.warn(s"Got request to remove an unknown breakpoint with id $id")
     }
   }
 
-  def create(id: ScriptIdentity, location: ScriptLocation, locations: Seq[BreakableLocation], condition: Option[String]): ActiveBreakpoint = {
-    val activeBp = new ActiveBreakpoint(breakpointIdGenerator.next, locations, condition, id, location)
+  private def removeBreakpoint(activeBreakpoint: ActiveBreakpoint): Unit = {
+    activeBreakpoint.disable()
+    enabledBreakpoints -= activeBreakpoint.id
+  }
+
+  def create(id: ScriptIdentity, location: ScriptLocation, locations: Seq[BreakableLocation], condition: Option[String], oneOff: Boolean): ActiveBreakpoint = {
+    val activeBp = new ActiveBreakpoint(breakpointIdGenerator.next, locations, condition, id, location, oneOff)
     enabledBreakpoints += (activeBp.id -> activeBp)
     activeBp
   }

@@ -37,7 +37,7 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
          |})()
      """.stripMargin)
 
-    val activeBp = _breakpoints.create(id, location, candidates, wrapper)
+    val activeBp = _breakpoints.create(id, location, candidates, wrapper, options.oneOff)
     if (activeBp.isUnresolved)
       log.info(s"Setting an unresolved breakpoint with ID ${activeBp.id} at line ${location.lineNumber1Based} in $id$conditionDescription")
     else

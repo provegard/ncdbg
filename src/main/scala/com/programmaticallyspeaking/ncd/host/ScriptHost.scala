@@ -73,11 +73,14 @@ case object StepOut extends StepType
   * Options for setting a breakpoint.
   *
   * @param condition if set, a condition that must be true for the breakpoint to hit
+  * @param oneOff if true, the breakpoint is only hit once
   */
-case class BreakpointOptions(condition: Option[String])
+case class BreakpointOptions(condition: Option[String], oneOff: Boolean) {
+  require(!oneOff || condition.isEmpty, "condition + one-off is currently not supported")
+}
 
 object BreakpointOptions {
-  val empty: BreakpointOptions = BreakpointOptions(None)
+  val empty: BreakpointOptions = BreakpointOptions(None, oneOff = false)
 }
 
 trait ScriptHost {
