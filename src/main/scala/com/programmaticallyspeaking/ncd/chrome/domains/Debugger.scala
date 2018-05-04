@@ -174,8 +174,6 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHo
 
   private var lastCallFrameList: Option[Seq[CallFrame]] = None
 
-  private var temporaryBreakpointIds = Set[String]()
-
   private def emitScriptParsedEvent(script: Script) = {
     val hash = script.contentsHash()
     if (emittedScripts.getOrElse(script.id, "") == hash) {
@@ -317,13 +315,12 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHo
       // DevTools always use column 0 (there's a comment: "Always use 0 column."), but if we pass a column to
       // the host, it will be too picky, so pass no column at all.
       val scriptLocation = ScriptLocation(location.lineNumber + 1, None)
-      val bp = scriptHost.setBreakpoint(ScriptIdentity.fromId(location.scriptId), scriptLocation, BreakpointOptions.empty)
+      val options = BreakpointOptions(None, oneOff = true)
+      val bp = scriptHost.setBreakpoint(ScriptIdentity.fromId(location.scriptId), scriptLocation, options)
       if (log.underlying.isDebugEnabled)
         log.debug(s"Continue to line ${scriptLocation.lineNumber1Based} in script ${location.scriptId} with temporary breakpoint ID ${bp.breakpointId}")
       else
         log.info(s"Continue to line ${scriptLocation.lineNumber1Based} in script ${location.scriptId}")
-
-      temporaryBreakpointIds += bp.breakpointId
 
       scriptHost.resume()
   }
@@ -331,14 +328,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHo
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {
     case hb: HitBreakpoint =>
       log.debug("Handling breakpoint event: " + hb)
-      pauseBasedOnBreakpoint(hb).foreach(breakpointId => {
-        if (temporaryBreakpointIds.contains(breakpointId)) {
-          log.debug(s"Removing temporary breakpoint $breakpointId (created for continue-to-location)")
-          // This was a temporary breakpoint, so remove it
-          temporaryBreakpointIds -= breakpointId
-          scriptHost.removeBreakpointById(breakpointId)
-        }
-      })
+      pauseBasedOnBreakpoint(hb)
 
     case ScriptAdded(script) => self ! EmitScriptParsed(script)
 
@@ -364,7 +354,7 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHo
     }
   }
 
-  private def pauseBasedOnBreakpoint(hitBreakpoint: HitBreakpoint): Option[String] = {
+  private def pauseBasedOnBreakpoint(hitBreakpoint: HitBreakpoint): Unit = {
     hitBreakpoint.stackFrames.headOption match {
       case Some(_) =>
         val converter = RemoteObjectConverter.byReference
@@ -383,7 +373,6 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHo
         }
         val params = PausedEventParams(callFrames, reason, hitBreakpoint.breakpointId.toSeq, data)
         emitEvent("Debugger.paused", params)
-        hitBreakpoint.breakpointId
 
       case None =>
         log.warn("Unexpected! Got a HitBreakpoint without stack frames!")
