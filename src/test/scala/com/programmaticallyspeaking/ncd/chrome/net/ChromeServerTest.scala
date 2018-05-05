@@ -8,9 +8,12 @@ import akka.stream.testkit.{TestPublisher, TestSubscriber}
 import akka.testkit.TestProbe
 import com.programmaticallyspeaking.ncd.chrome.domains.{DomainActorTesting, FooTestDomain}
 import com.programmaticallyspeaking.ncd.chrome.net.Protocol.{EmptyResponse, ErrorResponse, Message, Response}
+import com.programmaticallyspeaking.ncd.host.ScriptEvent
 import com.programmaticallyspeaking.ncd.infra.ObjectMapping.fromJson
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer}
 import com.programmaticallyspeaking.ncd.testing.UnitTest
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.reactivestreams.{Publisher, Subscriber, Subscription}
 import org.scalatest.Inside
 import org.scalatest.prop.TableDrivenPropertyChecks
@@ -36,6 +39,7 @@ object AkkaTestMigration {
 
 class ChromeServerTest extends UnitTest with DomainActorTesting with Inside with TableDrivenPropertyChecks {
   import AkkaTestMigration._
+  import org.mockito.Mockito._
   lazy val domainFactory = new CapturingDomainFactory()
   lazy implicit val materializer = ActorMaterializer()
   lazy val chromeServerFactory = new ChromeServerFactory(domainFactory)
@@ -52,6 +56,12 @@ class ChromeServerTest extends UnitTest with DomainActorTesting with Inside with
       .run()
   }
 
+  def newConnection(f: (TestPublisher.Probe[String], TestSubscriber.Probe[Any]) => Unit) = {
+    val (pub, sub) = setup(chromeServerFactory.create())
+    f(pub, sub)
+  }
+
+
   def enableDomain(pub: TestPublisher.Probe[String], sub: TestSubscriber.Probe[Any]): Unit = {
     sub.request(1)
     pub.sendNext("""{"id":"1","method":"FooTestDomain.enable"}""")
@@ -59,6 +69,31 @@ class ChromeServerTest extends UnitTest with DomainActorTesting with Inside with
   }
 
   "ChromeServer" - {
+    "should re-create an actor after it has failed in preStart a first time" in {
+      var call = 0
+      when(currentScriptHost.events).thenAnswer(new Answer[Observable[ScriptEvent]] {
+        override def answer(invocation: InvocationOnMock): Observable[ScriptEvent] = {
+          call += 1
+          if (call == 1) throw new RuntimeException("fail")
+          else scriptEventSubject
+        }
+      })
+
+      newConnection {
+        case (pub, sub) =>
+          sub.request(1)
+          pub.sendNext("""{"id":"1","method":"FooTestDomain.enable"}""")
+          sub.expectComplete()
+      }
+
+      newConnection {
+        case (pub, sub) =>
+          sub.request(1)
+          pub.sendNext("""{"id":"1","method":"FooTestDomain.enable"}""")
+          sub.expectNext(EmptyResponse(1))
+      }
+    }
+
     "should setup a DevTools handler to respond to messages" in {
       val (pub, sub) = setup(chromeServerFactory.create())
 

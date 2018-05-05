@@ -2,6 +2,7 @@ package com.programmaticallyspeaking.ncd.chrome.domains
 
 import java.util.concurrent.Semaphore
 
+import com.programmaticallyspeaking.ncd.host.ScriptHost
 import com.programmaticallyspeaking.ncd.testing.FakeScriptHost
 
 object FooTestDomain {
@@ -28,7 +29,7 @@ object FooTestDomain {
   }
 }
 
-class FooTestDomain extends DomainActor(FakeScriptHost, new EventEmitHook) {
+class FooTestDomain(host: ScriptHost) extends DomainActor(host, new EventEmitHook) {
   override protected def handle: PartialFunction[AnyRef, Any] = {
     case FooTestDomain.bar => // noop
 

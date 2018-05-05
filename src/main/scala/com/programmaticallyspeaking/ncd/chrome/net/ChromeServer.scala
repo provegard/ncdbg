@@ -44,6 +44,9 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
   }
 
   private def disconnectDevTools(status: Any): Unit = {
+    queuedRequests.clear()
+    outstandingRequests.clear()
+
     currentDevToolsRef.foreach { ref =>
       // If we terminate with Status.Failure we get ugly exception stack traces.
       ref ! Status.Success(status)
@@ -69,8 +72,9 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
       // TODO: Test getOrElseUpdate!!
       // TODO: context.watch on the child actor and break if it fails!!
       val domainActor = domains.getOrElseUpdate(domain, {
-        log.trace(s"Creating a new domain actor for $domain")
-        domainFactory.create(domain)
+        val actorRef = domainFactory.create(domain)
+        log.trace(s"Created a new domain actor for $domain: $actorRef")
+        actorRef
       })
       val domainMessageArg = DomainMethodArgumentFactory.create(msg)
 
@@ -111,8 +115,10 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
 
   override def receive: Receive = {
     case DevToolsConnected =>
+      val devToolsRef = sender()
+      log.debug(s"New Developer Tools client: $devToolsRef")
       log.info("A Developer Tools client connected!")
-      currentDevToolsRef = Some(sender())
+      currentDevToolsRef = Some(devToolsRef)
       context.become(receiveClient)
   }
 
