@@ -1,4 +1,4 @@
-package com.programmaticallyspeaking.ncd.boot
+package com.programmaticallyspeaking.ncd.config
 
 import org.rogach.scallop.{ScallopConf, ValueConverter}
 

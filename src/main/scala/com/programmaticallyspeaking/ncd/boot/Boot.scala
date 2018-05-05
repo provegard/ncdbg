@@ -3,6 +3,7 @@ package com.programmaticallyspeaking.ncd.boot
 import java.util.logging.LogManager
 
 import akka.actor.ActorSystem
+import com.programmaticallyspeaking.ncd.config.Conf
 import com.programmaticallyspeaking.ncd.infra.BuildProperties
 import com.programmaticallyspeaking.ncd.nashorn.AttachingHostProxy
 import org.slf4s.Logging

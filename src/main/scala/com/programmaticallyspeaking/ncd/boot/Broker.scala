@@ -5,6 +5,7 @@ import java.net.ConnectException
 import akka.actor.ActorSystem
 import com.programmaticallyspeaking.ncd.chrome.domains.{DefaultDomainFactory, EventEmitHook}
 import com.programmaticallyspeaking.ncd.chrome.net.{FilePublisher, FileServer, WebSocketServer}
+import com.programmaticallyspeaking.ncd.config.Conf
 import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.ioc.Container
 import com.programmaticallyspeaking.ncd.messaging.Observer

@@ -3,6 +3,7 @@ package com.programmaticallyspeaking.ncd.boot
 import akka.actor.ActorSystem
 import com.programmaticallyspeaking.ncd.chrome.domains.DefaultDomainFactory
 import com.programmaticallyspeaking.ncd.chrome.net.{FileServer, WebSocketServer}
+import com.programmaticallyspeaking.ncd.config.Conf
 import com.programmaticallyspeaking.ncd.ioc.Container
 import com.programmaticallyspeaking.ncd.nashorn.NashornScriptHost
 import org.slf4s.Logging

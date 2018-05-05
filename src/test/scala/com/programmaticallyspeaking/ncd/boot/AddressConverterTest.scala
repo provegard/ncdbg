@@ -1,5 +1,6 @@
 package com.programmaticallyspeaking.ncd.boot
 
+import com.programmaticallyspeaking.ncd.config.{Address, AddressConverter}
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 import org.rogach.scallop.exceptions.WrongOptionFormat
 import org.rogach.scallop.{ScallopConf, throwError}
