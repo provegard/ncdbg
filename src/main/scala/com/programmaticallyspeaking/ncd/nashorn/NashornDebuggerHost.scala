@@ -213,7 +213,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
 
   private def signalComplete(): Unit = {
     // Emit asynchronously so that code that observes the event can interact with the host without deadlocking it.
-    log.info("Signalling completion.")
+    log.info("Remote VM died or disconnected.")
     Future(eventSubject.onComplete())
   }
 

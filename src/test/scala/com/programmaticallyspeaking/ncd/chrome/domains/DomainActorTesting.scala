@@ -24,7 +24,7 @@ trait DomainActorTesting extends ActorTesting with MockitoSugar { self: UnitTest
   case object Accepted
 
   private val scripts = ListBuffer[Script]()
-  private var scriptEventSubject: Subject[ScriptEvent] = _
+  protected var scriptEventSubject: Subject[ScriptEvent] = _
   protected var currentScriptHost: ScriptHost = _
   protected val eventEmitHook: EventEmitHook = new EventEmitHook
 

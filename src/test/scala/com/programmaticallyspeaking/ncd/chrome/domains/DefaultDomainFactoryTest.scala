@@ -6,7 +6,7 @@ import com.programmaticallyspeaking.ncd.ioc.Container
 import com.programmaticallyspeaking.ncd.testing.{ActorTesting, FakeScriptHost, UnitTest}
 
 class DefaultDomainFactoryTest extends UnitTest with ActorTesting {
-  val container = new Container(Seq(Bar("success")))
+  val container = new Container(Seq(Bar("success"), FakeScriptHost))
   def factory = new DefaultDomainFactory(container)
 
   "DomainFactory" - {

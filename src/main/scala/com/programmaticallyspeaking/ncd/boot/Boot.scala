@@ -1,18 +1,14 @@
 package com.programmaticallyspeaking.ncd.boot
 
-import java.net.ConnectException
 import java.util.logging.LogManager
 
 import akka.actor.ActorSystem
-import com.programmaticallyspeaking.ncd.chrome.domains.{DefaultDomainFactory, EventEmitHook}
-import com.programmaticallyspeaking.ncd.chrome.net.{FilePublisher, FileServer, WebSocketServer}
-import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.infra.BuildProperties
-import com.programmaticallyspeaking.ncd.ioc.Container
-import com.programmaticallyspeaking.ncd.messaging.Observer
-import com.programmaticallyspeaking.ncd.nashorn.{NashornDebugger, NashornDebuggerConnector, NashornScriptHost}
+import com.programmaticallyspeaking.ncd.nashorn.AttachingHostProxy
 import org.slf4s.Logging
 
+import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success}
 
@@ -20,7 +16,7 @@ object Boot extends App with Logging {
   val conf = new Conf(args)
 
   implicit val system = ActorSystem()
-  import system.dispatcher
+  import scala.concurrent.ExecutionContext.Implicits._
 
   // Disable java.util logging (used by the Closure Compiler)
   LogManager.getLogManager.reset()
@@ -28,30 +24,33 @@ object Boot extends App with Logging {
   log.info("NCDbg version: " + BuildProperties.version)
   log.info("Local Java version: " + System.getProperty("java.version"))
 
-  val connectAddr = conf.connect()
-  val connector = new NashornDebuggerConnector(connectAddr.host, connectAddr.port)
-  val debuggerReady = connector.connect().map(vm => new NashornDebugger().create(vm))
+  val attachBehavior = false
 
-  debuggerReady.andThen {
+  val broker = new Broker(conf)
+
+  val futureHost = if (attachBehavior) {
+    log.info("Starting in attach mode. Will attach to the debug target upon a DevTools connection.")
+    val proxy = new AttachingHostProxy(broker, 10.seconds)
+    Future.successful(proxy.createHost())
+  } else {
+    broker.connect({
+      case Some(t) => die(2)
+      case None => die(0)
+    }).map(_.host)
+  }
+
+  futureHost.onComplete {
     case Success(host) =>
-      startListening(host)
-
-      val listenAddr = conf.listen()
-      val fileServer = new FileServer(listenAddr.host, listenAddr.port)
-      val container = new BootContainer(fileServer.publisher, host)
-
-      startHttpServer(container, fileServer)
-    case Failure(t) =>
-      t match {
-        case _: ConnectException =>
-          log.error("Failed to connect to the debug target.")
-          log.error("Please make sure that the debug target is started with debug VM arguments, for example:")
-          log.error(s"  -Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=${connectAddr.host}:${connectAddr.port}")
-        case _ =>
-          log.error("Failed to start the debugger", t)
+      val server = new Server(conf)
+      try server.start(host) catch {
+        case NonFatal(t) =>
+          log.error("Failed to start server", t)
+          die(3)
       }
-      system.terminate()
-      die(1)
+
+    case Failure(t) =>
+      log.error("Host creation failed", t)
+      die(3)
   }
 
   private def die(code: Int): Nothing = {
@@ -59,37 +58,4 @@ object Boot extends App with Logging {
     System.exit(code)
     ???
   }
-
-  private def startListening(host: NashornScriptHost) = {
-    host.events.subscribe(new Observer[ScriptEvent] {
-      override def onNext(item: ScriptEvent): Unit = {}
-
-      override def onError(error: Throwable): Unit = {
-        log.error("Exiting due to an error", error)
-        die(2)
-      }
-
-      override def onComplete(): Unit = {
-        log.info("Exiting because the debug target disconnected")
-        die(0)
-      }
-    })
-  }
-
-  private def startHttpServer(container: Container, fileServer: FileServer): Unit = {
-    val server = new WebSocketServer(new DefaultDomainFactory(container), Some(fileServer))
-    try {
-      val listenAddr = conf.listen()
-      server.start(listenAddr.host, listenAddr.port)
-      log.info(s"Server is listening on ${listenAddr.host}:${listenAddr.port}")
-      val url = s"chrome-devtools://devtools/bundled/inspector.html?experiments=true&v8only=true&ws=${listenAddr.host}:${listenAddr.port}/dbg"
-      log.info("Open this URL in Chrome: " + url)
-    } catch {
-      case NonFatal(t) =>
-        log.error("Binding failed", t)
-        die(2)
-    }
-  }
-
-  class BootContainer(filePublisher: FilePublisher, scriptHost: ScriptHost) extends Container(Seq(filePublisher, scriptHost, new EventEmitHook))
 }
