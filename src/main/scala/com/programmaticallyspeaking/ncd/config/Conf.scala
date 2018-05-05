@@ -46,5 +46,6 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
     descr = s"address to listen on, on <host>:<port> format or port only. Defaults to $defaultListen.")
   val connect = opt[Address](default = Some(defaultConnect),
     descr = s"address to connect to, on <host>:<port> format or port only. Defaults to $defaultConnect.")
+  val isLazy = toggle(name = "lazy", default = Some(false))
   verify()
 }

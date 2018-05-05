@@ -25,13 +25,13 @@ object Boot extends App with Logging {
   log.info("NCDbg version: " + BuildProperties.version)
   log.info("Local Java version: " + System.getProperty("java.version"))
 
-  val attachBehavior = false
+  val lazyBehavior = conf.isLazy()
 
   val broker = new Broker(conf)
 
-  val futureHost = if (attachBehavior) {
-    log.info("Starting in attach mode. Will attach to the debug target upon a DevTools connection.")
-    val proxy = new AttachingHostProxy(broker, 10.seconds)
+  val futureHost = if (lazyBehavior) {
+    log.info("Starting in lazy mode. Will attach to the debug target upon a DevTools connection.")
+    val proxy = new AttachingHostProxy(broker, 10.seconds) //TODO: Configurable time here
     Future.successful(proxy.createHost())
   } else {
     broker.connect({

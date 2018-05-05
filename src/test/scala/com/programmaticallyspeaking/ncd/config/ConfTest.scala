@@ -42,5 +42,19 @@ class ConfTest extends UnitTest {
         conf.connect() should be (Address("somehost", 9999))
       }
     }
+
+    "with --lazy" - {
+      "defaults to not lazy" in new Arguments {
+        conf.isLazy() should be (false)
+      }
+
+      "can be set to lazy" in new Arguments("--lazy") {
+        conf.isLazy() should be (true)
+      }
+
+      "can be set to not lazy" in new Arguments("--nolazy") {
+        conf.isLazy() should be (false)
+      }
+    }
   }
 }
