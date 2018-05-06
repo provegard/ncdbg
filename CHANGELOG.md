@@ -6,6 +6,9 @@
 * Change suspend policy to "suspend all threads." This is required to avoid JDI deadlocks
   with Java 10.
 * Various changes to ensure stability given execution across multiple threads.
+* Support "attach on demand" a.k.a. lazy mode. In this mode, triggered by using the `--lazy`
+  command line switch, NCDbg won't connect to the debug target until DevTools connects, and
+  will stay alive if the debug target dies.
 
 ## 0.8.0 (2018-04-12)
 
