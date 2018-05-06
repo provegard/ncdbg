@@ -46,6 +46,8 @@ class Conf(arguments: Seq[String]) extends ScallopConf(arguments) {
     descr = s"address to listen on, on <host>:<port> format or port only. Defaults to $defaultListen.")
   val connect = opt[Address](default = Some(defaultConnect),
     descr = s"address to connect to, on <host>:<port> format or port only. Defaults to $defaultConnect.")
-  val isLazy = toggle(name = "lazy", default = Some(false))
+  val isLazy = toggle(name = "lazy", default = Some(false),
+    descrYes = "defer connection until DevTools connects, and stay alive when the debug target dies.",
+    descrNo = "connect right away and require the debug target to live. This is the default.")
   verify()
 }
