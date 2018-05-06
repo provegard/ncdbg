@@ -36,7 +36,8 @@ class Broker(conf: Conf)(implicit actorSystem: ActorSystem) extends Logging {
           def disconnect(): Unit = {
             host.virtualMachine.inner.dispose()
           }
-          val conn = BrokerConnection(host, disconnect)
+          // Writing just 'disconnect' results in compilation warning about deprecated ETA expansion.
+          val conn = BrokerConnection(host, disconnect _)
           connectionPromise.success(conn)
         } catch {
           case NonFatal(t) =>
