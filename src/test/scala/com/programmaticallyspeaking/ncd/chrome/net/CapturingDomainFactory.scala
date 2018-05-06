@@ -30,7 +30,7 @@ class CapturingDomainFactory(implicit container: Container, system: ActorSystem)
     actorMustNotExist = true
   }
 
-  override def create(domain: String): ActorRef = {
+  override def create(domain: String)(implicit factory: ActorRefFactory): ActorRef = {
     actorByName(domain) match {
       case Some(ar) if actorMustNotExist =>
         throw new IllegalStateException("Found an old domain actor: " + ar)

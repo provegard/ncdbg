@@ -176,6 +176,28 @@ class ChromeServerTest extends UnitTest with DomainActorTesting with Inside with
       sub.expectNext(ErrorResponse(2, unknownMethod("UnknownDomain.enable")))
     }
 
+    "responds with error for an unknown domain in a queued message" in {
+      val (pub, sub) = setup(chromeServerFactory.create())
+
+      sub.request(2)
+      pub.sendNext("""{"id":"1","method":"FooTestDomain.enable"}""")
+      pub.sendNext("""{"id":"2","method":"UnknownDomain.enable"}""")
+      sub.expectNext(EmptyResponse(1))
+      sub.expectNext(ErrorResponse(2, unknownMethod("UnknownDomain.enable")))
+    }
+
+    "proceeds with the queue after an error for an unknown domain in a queued message" in {
+      val (pub, sub) = setup(chromeServerFactory.create())
+
+      sub.request(3)
+      pub.sendNext("""{"id":"1","method":"FooTestDomain.enable"}""")
+      pub.sendNext("""{"id":"2","method":"UnknownDomain.enable"}""")
+      pub.sendNext("""{"id":"3","method":"FooTestDomain.bar"}""")
+      sub.expectNext(EmptyResponse(1))
+      sub.expectNext(ErrorResponse(2, unknownMethod("UnknownDomain.enable")))
+      sub.expectNext(EmptyResponse(3))
+    }
+
     val serializeTests =
       Table(
         ("desc", "method", "resp"),

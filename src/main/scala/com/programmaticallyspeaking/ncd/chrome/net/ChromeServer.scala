@@ -1,8 +1,9 @@
 package com.programmaticallyspeaking.ncd.chrome.net
 
+import java.net.ConnectException
 import java.util.concurrent.atomic.AtomicBoolean
 
-import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props, Stash, Status, Terminated}
+import akka.actor.{Actor, ActorContext, ActorRef, ActorSystem, OneForOneStrategy, Props, Stash, Status, SupervisorStrategy, Terminated}
 import com.programmaticallyspeaking.ncd.chrome.domains.{DomainFactory, DomainMethodArgumentFactory, Messages}
 import com.programmaticallyspeaking.ncd.chrome.net.Protocol.Message
 import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, SerializedSubject}
@@ -29,9 +30,25 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
 
   // Queue for requests that we won't send because there are outstanding requests. We serialize all requests
   // to avoid race conditions between domain actors (e.g. resuming the VM when another domain is getting properties).
-  private val queuedRequests = mutable.Queue[(ActorRef, Messages.Request)]()
+  private val queuedRequests = mutable.Queue[(Protocol.IncomingMessage, Messages.Request)]()
 
   private val outstandingRequests = mutable.Set[String]()
+
+  override val supervisorStrategy: SupervisorStrategy =
+    new OneForOneStrategy(SupervisorStrategy.defaultDecider) {
+      override def logFailure(context: ActorContext, child: ActorRef, cause: Throwable, decision: SupervisorStrategy.Directive): Unit = cause match {
+        case t: Exception if isConnectException(t) =>
+          // noop, Broker should have logged this
+        case _ =>
+          super.logFailure(context, child, cause, decision)
+      }
+    }
+
+  private def isConnectException(t: Throwable): Boolean = t match {
+    case _: ConnectException => true
+    case t: RuntimeException if isConnectException(t.getCause) => true
+    case _ => false
+  }
 
   override def postStop(): Unit = try {
     stopDomainActors()
@@ -62,6 +79,18 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
     }
   }
 
+  private def getOrCreateDomainActor(domain: String): ActorRef = {
+    val domainActor = domains.getOrElseUpdate(domain, {
+      val actorRef = domainFactory.create(domain)
+      log.trace(s"Created a new domain actor for $domain: $actorRef")
+      actorRef
+    })
+
+    context.watch(domainActor)
+
+    domainActor
+  }
+
   private def handleIncomingMessage(msg: Protocol.IncomingMessage): Unit = {
     if (invalidMethods.contains(msg.method)) {
       sendToDevTools(Protocol.ErrorResponse(msg.id, "Unknown domain or method: " + msg.method))
@@ -69,31 +98,19 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
     }
     try {
       val domain = msg.domain()
-      // TODO: Test getOrElseUpdate!!
-      // TODO: context.watch on the child actor and break if it fails!!
-      val domainActor = domains.getOrElseUpdate(domain, {
-        val actorRef = domainFactory.create(domain)
-        log.trace(s"Created a new domain actor for $domain: $actorRef")
-        actorRef
-      })
       val domainMessageArg = DomainMethodArgumentFactory.create(msg)
-
-      context.watch(domainActor)
-
       val request = Messages.Request(msg.id.toString, domainMessageArg)
 
       // If there are no outstanding requests, make this one (but it's now outstanding).
       // Otherwise queue it.
       if (outstandingRequests.isEmpty) {
-        sendRequestToDomainActor(domainActor, request)
+        sendRequestToDomainActor(domain, request)
       } else {
-        queuedRequests += ((domainActor, request))
+        queuedRequests += ((msg, request))
       }
     } catch {
       case ex: IllegalArgumentException =>
-        invalidMethods += msg.method
-        log.warn(s"Failed to handle message ($msg): " + ex.getMessage)
-        sendToDevTools(Protocol.ErrorResponse(msg.id, "Unknown domain or method: " + msg.method))
+        handleInvalidDomainOrMethod(msg, ex)
       case ex: Exception =>
         // Unknown stuff
         log.error(s"Failed to handle message ($msg)", ex)
@@ -101,15 +118,40 @@ class DevToolsHandler(domainFactory: DomainFactory) extends Actor with Logging w
     }
   }
 
-  private def sendRequestToDomainActor(actor: ActorRef, request: Messages.Request): Unit = {
+  private def handleInvalidDomainOrMethod(msg: Protocol.IncomingMessage, ex: IllegalArgumentException): Unit = {
+    invalidMethods += msg.method
+    log.warn(s"Failed to handle message ($msg): " + ex.getMessage)
+    sendToDevTools(Protocol.ErrorResponse(msg.id, "Unknown domain or method: " + msg.method))
+  }
+
+  private def sendRequestToDomainActor(domain: String, request: Messages.Request): Unit = {
+    val actor = getOrCreateDomainActor(domain)
     outstandingRequests += request.id
     actor ! request
   }
 
+  private def sendQueuedRequest(msg: Protocol.IncomingMessage, request: Messages.Request): Unit = {
+    try sendRequestToDomainActor(msg.domain(), request) catch {
+      case ex: IllegalArgumentException =>
+        // DomainMethodArgumentFactory.create in handleIncomingMessage won't catch an unknown domain in case
+        // of X.enable, since that actually gets transformed into Domain.enable. Thus, for a queued request we'll
+        // get the unknown domain error here instead, when actor creation is attempted.
+        handleInvalidDomainOrMethod(msg, ex)
+
+        // We won't get a request response and thus won't hit handleRequestResponse, so explicit
+        // queue processing is needed.
+        processQueuedRequests()
+    }
+  }
+
   private def handleRequestResponse(id: String): Unit = {
     outstandingRequests -= id
+    processQueuedRequests()
+  }
+
+  private def processQueuedRequests(): Unit = {
     queuedRequests.dequeueFirst(_ => true).foreach(tup => {
-      sendRequestToDomainActor(tup._1, tup._2)
+      sendQueuedRequest(tup._1, tup._2)
     })
   }
 

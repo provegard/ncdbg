@@ -5,13 +5,13 @@ import com.programmaticallyspeaking.ncd.infra.IdGenerator
 import com.programmaticallyspeaking.ncd.ioc.Container
 
 trait DomainFactory {
-  def create(domain: String): ActorRef
+  def create(domain: String)(implicit factory: ActorRefFactory): ActorRef
 }
 
-class DefaultDomainFactory(container: Container)(implicit factory: ActorRefFactory) extends DomainFactory {
+class DefaultDomainFactory(container: Container) extends DomainFactory {
   private val actorNameIdGenerator = new IdGenerator("domact")
 
-  def create(domain: String): ActorRef = {
+  def create(domain: String)(implicit factory: ActorRefFactory): ActorRef = {
     val clazz = lookupActorClass(domain)
     def creator(clazz: Class[_], args: Seq[Any]) = Props(clazz, args: _*)
     factory.actorOf(container.newInstance(clazz, creator), domain + "-" + actorNameIdGenerator.next)

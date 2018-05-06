@@ -52,7 +52,9 @@ class Broker(conf: Conf)(implicit actorSystem: ActorSystem) extends Logging {
           case _ =>
             log.error("Failed to start the debugger", t)
         }
-        connectionPromise.failure(new RuntimeException("connection failed"))
+        // Wrap in RuntimeException if needed, otherwise we'll get UndeclaredThrowableException wrapping the cause.
+        val error = if (t.isInstanceOf[RuntimeException]) t else new RuntimeException(t)
+        connectionPromise.failure(error)
     }
 
     connectionPromise.future

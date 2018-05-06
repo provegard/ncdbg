@@ -6,7 +6,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.Scanner
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.{ActorRef, ActorRefFactory, ActorSystem}
 import com.programmaticallyspeaking.ncd.chrome.domains.DomainFactory
 import com.programmaticallyspeaking.ncd.infra.ObjectMapping
 import com.programmaticallyspeaking.ncd.testing.UnitTest
@@ -175,6 +175,6 @@ class FileServerServeTest extends UnitTest with ServerStarter[FileServer] with B
   }
 
   class FakeDomainFactory extends DomainFactory {
-    override def create(domain: String): ActorRef = throw new UnsupportedOperationException("Fake domain factory")
+    override def create(domain: String)(implicit factory: ActorRefFactory): ActorRef = throw new UnsupportedOperationException("Fake domain factory")
   }
 }
