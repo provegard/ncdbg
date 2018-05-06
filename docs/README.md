@@ -4,11 +4,11 @@
 
 * Java version 1.8.0_66 or newer, though NCDbg currently won't enforce it.
 
-### Java 9
+### Java 9 and later
 
 I've tested running a _debug target_ with Java 9 (JDK build 9-ea+164) and NCDbg running with Java 8 could debug it just fine.
 
-Building with Java 9.0.1 works. One test fails due to [JDK-8187143](http://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8187143).
+Building with Java 9.0.1 and 10 works. Some tests are disabled due to [JDK-8187143](http://bugs.java.com/bugdatabase/view_bug.do?bug_id=JDK-8187143).
 
 ## The debug target
 
@@ -27,10 +27,13 @@ To run the bleeding edge version of NCDbg, you'll want to clone the repository a
 download a distribution, unpack it somewhere, and run using one of the distribution scripts.
 
 Running with Gradle is straightforward but the syntax to pass arguments is extremely awkward. If you happen to use a
-Unix-like shell such as Git Bash, run:
+Unix-like shell, run:
 
     ./gradlew run -Pargs="--help"
-    
+
+> &#x26a0; Running NCDbg in Git Bash / MINGW64 under Windows 10 doesn't work well for me.
+In particular, using Ctrl-C to exit doesn't work. YMMV!
+
 In a Windows command prompt, omit the leading dot-slash:
 
     gradlew run -Pargs="--help"
@@ -70,7 +73,7 @@ Running with `--help` shows all available options.
 The default port NCDbg will connect to is 7777. To connect do a different port, use `--connect` or `-c`.
 For example, to connect to port 9999, run:
 
-    bin/ncdbg --connect 9999
+    bin\ncdbg --connect 9999
 
 The argument value can be a port number of an address on the form _&lt;host>:&lt;port>_.
     
@@ -79,9 +82,19 @@ The argument value can be a port number of an address on the form _&lt;host>:&lt
 By default, NCDbg listens on port 7778 for connections from Chrome Developer Tools. To listen on a different port, use
 `--listen` or `-l`. For example, to listen on port 10000, run:
 
-    bin/ncdbg --listen 10000
+    bin\ncdbg --listen 10000
 
 The argument value can be a port number of an address on the form _&lt;host>:&lt;port>_.
+
+### Lazy mode
+
+NCDbg can operate in a special mode where it doesn't connect to the debug target right
+away, and stays alive if the debug target dies. This mode is known as _lazy_ mode or
+_attach on demand_ mode.
+
+To enable lazy mode, run:
+
+    bin\ncdbg --lazy
 
 ## Troubleshooting
 
