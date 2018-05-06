@@ -50,7 +50,7 @@ object Boot extends App with Logging {
       }
 
     case Failure(t) =>
-      log.error("Host creation failed", t)
+      // Assume Broker has logged the reason!
       die(3)
   }
 
