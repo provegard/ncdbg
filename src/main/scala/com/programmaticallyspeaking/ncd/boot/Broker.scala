@@ -3,8 +3,8 @@ package com.programmaticallyspeaking.ncd.boot
 import java.net.ConnectException
 
 import akka.actor.ActorSystem
-import com.programmaticallyspeaking.ncd.chrome.domains.{DefaultDomainFactory, EventEmitHook}
-import com.programmaticallyspeaking.ncd.chrome.net.{FilePublisher, FileServer, WebSocketServer}
+import com.programmaticallyspeaking.ncd.chrome.domains.EventEmitHook
+import com.programmaticallyspeaking.ncd.chrome.net.FilePublisher
 import com.programmaticallyspeaking.ncd.config.Conf
 import com.programmaticallyspeaking.ncd.host.{ScriptEvent, ScriptHost}
 import com.programmaticallyspeaking.ncd.ioc.Container
@@ -31,10 +31,6 @@ class Broker(conf: Conf)(implicit actorSystem: ActorSystem) extends Logging {
     debuggerReady.onComplete {
       case Success(host) =>
         startListening(host, errorCallback)
-
-        val listenAddr = conf.listen()
-        val fileServer = new FileServer(listenAddr.host, listenAddr.port)
-        val container = new BootContainer(fileServer.publisher, host)
 
         try {
           def disconnect(): Unit = {
