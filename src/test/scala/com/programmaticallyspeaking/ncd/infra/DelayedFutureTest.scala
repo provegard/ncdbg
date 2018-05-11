@@ -28,7 +28,7 @@ class DelayedFutureTest extends UnitTest with ScalaFutures with FairAmountOfPati
 
     "can be cancelled" in {
       var mut = ""
-      val f = DelayedFuture(400 millis)(mut = "it failed")
+      val f = DelayedFuture(400 millis) { mut = "it failed" }
       f.cancel()
       Thread.sleep(500)
       mut should be ("")
