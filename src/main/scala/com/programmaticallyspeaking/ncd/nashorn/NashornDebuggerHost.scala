@@ -142,7 +142,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   protected var pausedData: Option[PausedData] = None
 
   private val _scripts = new Scripts
-  protected val _breakableLocations = new BreakableLocations(virtualMachine, _scripts)
+  protected val _breakableLocations = new BreakableLocations(_scripts)
   private val _scriptFactory = new ScriptFactory(virtualMachine)
   protected val _breakpoints = new LineBreakpoints
 

@@ -22,20 +22,20 @@ object BreakableLocation {
   * Represents a location in a script that the debugger can break at.
   *
   * @param script the script that contains the location
-  * @param eventRequestManager [[EventRequestManager]] instance for creating/removing a breakpoint
   * @param location the location
   */
-class BreakableLocation private(val script: Script, eventRequestManager: EventRequestManager, val scriptLocation: ScriptLocation, location: Location) {
+class BreakableLocation private(val script: Script, val scriptLocation: ScriptLocation, location: Location) {
   def hasLocation(loc: Location): Boolean = loc == location
 
   import JDIExtensions._
 
-  def this(script: Script, eventRequestManager: EventRequestManager, location: Location) =
-    this(script, eventRequestManager, BreakableLocation.scriptLocationFromScriptAndLocation(script, location), location)
+  def this(script: Script, location: Location) =
+    this(script, BreakableLocation.scriptLocationFromScriptAndLocation(script, location), location)
 
   def sameMethodAndLineAs(l: Location): Boolean = l.sameMethodAndLineAs(Some(location))
 
   def createBreakpointRequest(): BreakpointRequest = {
+    val eventRequestManager = location.virtualMachine().eventRequestManager()
     val breakpointRequest = eventRequestManager.createBreakpointRequest(location)
     breakpointRequest
   }

@@ -6,7 +6,7 @@ import org.slf4s.Logging
 
 import scala.collection.concurrent.TrieMap
 
-class BreakableLocations(virtualMachine: XVirtualMachine, scripts: Scripts) extends Logging {
+class BreakableLocations(scripts: Scripts) extends Logging {
 
   import JDIExtensions._
 
@@ -63,11 +63,10 @@ class BreakableLocations(virtualMachine: XVirtualMachine, scripts: Scripts) exte
   private def findScriptUrl(id: ScriptIdentity): Option[String] = scripts.byId(id).map(_.url.toString)
 
   private def gatherBreakableLocations(script: Script, locations: Seq[Location]): Seq[BreakableLocation] = {
-    val erm = virtualMachine.eventRequestManager()
     // Find all potentially breakable lines. Create breakable locations from actual locations. Then create
     // candidates for the potentially breakable lines that weren't covered. Such a line may for example belong to
     // a function that hasn't been executed yet.
-    locations.map(l => new BreakableLocation(script, erm, l))
+    locations.map(l => new BreakableLocation(script, l))
   }
 
 }
