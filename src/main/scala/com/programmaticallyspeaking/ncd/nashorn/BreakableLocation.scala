@@ -5,16 +5,8 @@ import com.sun.jdi.Location
 import com.sun.jdi.request.{BreakpointRequest, EventRequest, EventRequestManager}
 
 object BreakableLocation {
-  // TODO: Move elsewhere
-  def scriptLocationFromScriptAndLocation(script: Script, location: Location): ScriptLocation = {
-    scriptLocationFromScriptAndLine(script, location.lineNumber())
-  }
-
-  def scriptLocationFromScriptAndLine(script: Script, lineNumber1: Int): ScriptLocation = {
-    val lineNo = lineNumber1
-    // Use index of first non-whitespace
-    val colNo = script.sourceLine(lineNo).map(line => 1 + line.indexWhere(!_.isWhitespace))
-    ScriptLocation(lineNo, colNo)
+  private def scriptLocationFromScriptAndLocation(script: Script, location: Location): ScriptLocation = {
+    ScriptLocation.fromScriptAndLine(script, location.lineNumber())
   }
 }
 

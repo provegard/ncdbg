@@ -12,6 +12,15 @@ case class ScriptLocation(lineNumber1Based: Int, columnNumber1Based: Option[Int]
   override def toString: String = lineNumber1Based + columnNumber1Based.map(c => ":" + c).getOrElse("")
 }
 
+object ScriptLocation {
+  def fromScriptAndLine(script: Script, lineNumber1: Int): ScriptLocation = {
+    val lineNo = lineNumber1
+    // Use index of first non-whitespace
+    val colNo = script.sourceLine(lineNo).map(line => 1 + line.indexWhere(!_.isWhitespace))
+    ScriptLocation(lineNo, colNo)
+  }
+}
+
 /**
   * This is a script identity _and_ location. [[ScriptLocation]] is used as input parameter in which case script
   * identity is typically separate. When we return a location it's convenient to include the script identity though.
