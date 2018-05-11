@@ -144,7 +144,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   private val _scripts = new Scripts
   protected val _breakableLocations = new BreakableLocations(virtualMachine, _scripts)
   private val _scriptFactory = new ScriptFactory(virtualMachine)
-  protected val _breakpoints = new ActiveBreakpoints
+  protected val _breakpoints = new LineBreakpoints
 
   protected val _pauser = new Pauser(_breakpoints, _scripts, emitEvent)
 
@@ -448,7 +448,7 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
       log.debug("Ignoring resume request when not paused (no pause data).")
   }
 
-  private def removeAllBreakpoints(): Unit = _breakpoints.disableAll()
+  private def removeAllBreakpoints(): Unit = _breakpoints.removeAll()
 
   override def reset(): Unit = {
     log.info("Resetting VM...")

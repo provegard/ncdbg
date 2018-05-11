@@ -5,7 +5,7 @@ import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.StackFrameIm
 import com.sun.jdi.event._
 import org.slf4s.Logging
 
-class Pauser(breakpoints: ActiveBreakpoints, scripts: Scripts, emitter: ScriptEventEmitter) extends Logging {
+class Pauser(breakpoints: LineBreakpoints, scripts: Scripts, emitter: ScriptEventEmitter) extends Logging {
 
   private var currentExceptionPauseType: ExceptionPauseType = ExceptionPauseType.None
 
@@ -41,7 +41,7 @@ class Pauser(breakpoints: ActiveBreakpoints, scripts: Scripts, emitter: ScriptEv
   }
 
   private def describeBreakpointId(ev: LocatableEvent): String = ev match {
-    case be: BreakpointEvent => ActiveBreakpoint.getBreakpointId(be).map(s => s" $s").getOrElse("")
+    case be: BreakpointEvent => LineBreakpoint.getBreakpointId(be).map(s => s" $s").getOrElse("")
     case _ => ""
   }
 
@@ -98,7 +98,7 @@ class Pauser(breakpoints: ActiveBreakpoints, scripts: Scripts, emitter: ScriptEv
     stackFrames.headOption.collect { case sf: StackFrameImpl => sf } match {
       case Some(topStackFrame) =>
         val scriptId = topStackFrame.scriptId
-        breakpoints.activeFor(topStackFrame.breakableLocation) match {
+        breakpoints.forBreakableLocation(topStackFrame.breakableLocation) match {
           case Some(activeBreakpoint) if reason == BreakpointReason.Breakpoint =>
             // Let ActiveBreakpoints know so that the breakpoint can be removed.
             breakpoints.onBreakpointHit(activeBreakpoint)

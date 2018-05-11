@@ -7,14 +7,18 @@ import com.sun.jdi.request.{BreakpointRequest, EventRequestManager}
 import scala.collection.mutable.ListBuffer
 
 /**
-  * An active breakpoint may map to one or more breakable locations, since we cannot distinguish between location
-  * column numbers.
+  * A line breakpoint may map to one or more breakable locations, since we cannot distinguish between location
+  * column numbers AND because a single script may consist of multiple classes.
   *
   * @param id the breakpoint ID
   * @param breakableLocations the breakable locations
+  * @param condition optional condition that must evaluate to truthy for the breakpoint to be hit
+  * @param scriptIdentity the identity of the script the breakpoint belongs to
+  * @param scriptLocation the line and optional column of the breakpoint
+  * @param oneOff whether this is a one-off breakpoint or not
   */
-class ActiveBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation], val condition: Option[String],
-                       scriptIdentity: ScriptIdentity, scriptLocation: ScriptLocation, oneOff: Boolean) {
+class LineBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation], val condition: Option[String],
+                     scriptIdentity: ScriptIdentity, scriptLocation: ScriptLocation, oneOff: Boolean) {
 
   private object lock
   private val allLocations = ListBuffer[BreakableLocation]()
@@ -35,7 +39,7 @@ class ActiveBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation
       if (oneOff) {
         req.addCountFilter(1)
       }
-      ActiveBreakpoint.associateWithBreakpoint(req, this)
+      LineBreakpoint.associateWithBreakpoint(req, this)
       req.enable()
       breakpointRequests += req
     }
@@ -47,23 +51,22 @@ class ActiveBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation
     Breakpoint(id, breakableLocations.map(bl => LocationInScript(bl.script.id, bl.scriptLocation)).distinct)
   }
 
-  //TODO: Fix bad name, this is really delete!
-  def disable(): Unit = lock.synchronized {
+  def remove(): Unit = lock.synchronized {
     breakpointRequests.foreach { req =>
         //TODO: Fix ugly
      req.virtualMachine().eventRequestManager().deleteEventRequest(req)
     }
   }
-  def contains(breakableLocation: BreakableLocation) = breakableLocations.contains(breakableLocation)
+  def contains(breakableLocation: BreakableLocation): Boolean = breakableLocations.contains(breakableLocation)
 
-  def matches(breakableLocation: BreakableLocation): Boolean = {
-    // TODO: Do we need to check column here? Or can we simply remove column support altogether??
-    breakableLocation.scriptLocation.lineNumber1Based == scriptLocation.lineNumber1Based
+  def oughtToContain(breakableLocation: BreakableLocation): Boolean = {
+    scriptIdentity.matchesScript(breakableLocation.script) &&
+      breakableLocation.scriptLocation.lineNumber1Based == scriptLocation.lineNumber1Based
   }
 }
 
-object ActiveBreakpoint {
-  def associateWithBreakpoint(br: BreakpointRequest, ab: ActiveBreakpoint): Unit = {
+object LineBreakpoint {
+  def associateWithBreakpoint(br: BreakpointRequest, ab: LineBreakpoint): Unit = {
     br.putProperty("__breakpoint_id", ab.id)
   }
 

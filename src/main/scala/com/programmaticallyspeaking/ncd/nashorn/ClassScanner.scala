@@ -27,7 +27,7 @@ object ClassScanner {
 
 class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFactory: ScriptFactory,
                    scriptPublisher: ScriptPublisher, breakableLocations: BreakableLocations,
-                   activeBreakpoints: ActiveBreakpoints,
+                   activeBreakpoints: LineBreakpoints,
                    actionPerWantedType: Map[String, (ClassType) => Unit])(implicit executionContext: ExecutionContext) extends Logging {
   import ClassScanner._
 

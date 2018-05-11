@@ -13,7 +13,7 @@ trait BreakpointSupport { self: NashornDebuggerHost with Logging =>
   }
 
   override def removeBreakpointById(id: String): Unit = {
-    _breakpoints.disableById(id)
+    _breakpoints.removeById(id)
   }
 
   override def setBreakpoint(id: ScriptIdentity, location: ScriptLocation, options: BreakpointOptions): Breakpoint = {

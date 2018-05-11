@@ -7,9 +7,9 @@ import org.slf4s.Logging
 
 import scala.collection.concurrent.TrieMap
 
-class ActiveBreakpoints extends Logging {
+class LineBreakpoints extends Logging {
   private val breakpointIdGenerator = new IdGenerator("ndb")
-  private val enabledBreakpoints = TrieMap[String, ActiveBreakpoint]()
+  private val byId = TrieMap[String, LineBreakpoint]()
   private val resolvedSubject = new SerializedSubject[BreakpointResolved]()
 
   def resolvedBreakpoints: Observable[BreakpointResolved] = resolvedSubject
@@ -17,9 +17,9 @@ class ActiveBreakpoints extends Logging {
   def addBreakableLocations(script: Script, newLocations: Seq[BreakableLocation]): Unit = {
     // Go through active breakpoints that belong to the script
     // For each BL that matches the active breakpoint, add it
-    val breakpoints = enabledBreakpoints.values.filter(_.belongsTo(script))
-    breakpoints.foreach { bp =>
-      val toAdd = newLocations.filter(bp.matches)
+    val lineBreakpointsForScript = byId.values.filter(_.belongsTo(script))
+    lineBreakpointsForScript.foreach { bp =>
+      val toAdd = newLocations.filter(bp.oughtToContain)
       if (toAdd.nonEmpty) {
         val willBeResolved = bp.isUnresolved
         log.debug(s"Adding ${toAdd.size} breakable locations to breakpoint ${bp.id}")
@@ -30,30 +30,30 @@ class ActiveBreakpoints extends Logging {
           val item = BreakpointResolved(bp.id, LocationInScript(first.script.id, first.scriptLocation))
           log.info(s"Resolving breakpoint ${bp.id} with location ${first.scriptLocation} in script ${script.id}")
           resolvedSubject.onNext(item)
-      }
+        }
       }
     }
   }
 
-  def activeFor(bl: BreakableLocation): Option[ActiveBreakpoint] = {
-    enabledBreakpoints.values.find(_.contains(bl))
+  def forBreakableLocation(bl: BreakableLocation): Option[LineBreakpoint] = {
+    byId.values.find(_.contains(bl))
   }
 
-  def onBreakpointHit(activeBreakpoint: ActiveBreakpoint): Unit = {
+  def onBreakpointHit(activeBreakpoint: LineBreakpoint): Unit = {
     if (activeBreakpoint.isOneOff) {
       log.trace(s"Removing one-off breakpoint with id ${activeBreakpoint.id}")
       removeBreakpoint(activeBreakpoint)
     }
   }
 
-  def disableAll(): Unit = {
+  def removeAll(): Unit = {
     //TODO: Not very atomic, this
-    enabledBreakpoints.foreach(e => e._2.disable())
-    enabledBreakpoints.clear()
+    byId.foreach(e => e._2.remove())
+    byId.clear()
   }
 
-  def disableById(id: String): Unit = {
-    enabledBreakpoints.get(id) match {
+  def removeById(id: String): Unit = {
+    byId.get(id) match {
       case Some(activeBp) =>
         log.info(s"Removing breakpoint with id $id")
         removeBreakpoint(activeBp)
@@ -62,14 +62,14 @@ class ActiveBreakpoints extends Logging {
     }
   }
 
-  private def removeBreakpoint(activeBreakpoint: ActiveBreakpoint): Unit = {
-    activeBreakpoint.disable()
-    enabledBreakpoints -= activeBreakpoint.id
+  private def removeBreakpoint(activeBreakpoint: LineBreakpoint): Unit = {
+    activeBreakpoint.remove()
+    byId -= activeBreakpoint.id
   }
 
-  def create(id: ScriptIdentity, location: ScriptLocation, locations: Seq[BreakableLocation], condition: Option[String], oneOff: Boolean): ActiveBreakpoint = {
-    val activeBp = new ActiveBreakpoint(breakpointIdGenerator.next, locations, condition, id, location, oneOff)
-    enabledBreakpoints += (activeBp.id -> activeBp)
+  def create(id: ScriptIdentity, location: ScriptLocation, locations: Seq[BreakableLocation], condition: Option[String], oneOff: Boolean): LineBreakpoint = {
+    val activeBp = new LineBreakpoint(breakpointIdGenerator.next, locations, condition, id, location, oneOff)
+    byId += (activeBp.id -> activeBp)
     activeBp
   }
 }
