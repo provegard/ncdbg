@@ -52,10 +52,8 @@ class LineBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation],
   }
 
   def remove(): Unit = lock.synchronized {
-    breakpointRequests.foreach { req =>
-        //TODO: Fix ugly
-     req.virtualMachine().eventRequestManager().deleteEventRequest(req)
-    }
+    def removeOne(req: BreakpointRequest) = req.virtualMachine().eventRequestManager().deleteEventRequest(req)
+    breakpointRequests.foreach(removeOne)
   }
   def contains(breakableLocation: BreakableLocation): Boolean = breakableLocations.contains(breakableLocation)
 
