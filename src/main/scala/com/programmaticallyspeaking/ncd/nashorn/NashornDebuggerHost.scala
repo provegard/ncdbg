@@ -104,10 +104,6 @@ object NashornDebuggerHost {
     val isAtDebuggerStatement = location.isDebuggerStatement
   }
 
-  sealed trait InternalState
-  case object Pause extends InternalState
-  case object Unpause extends InternalState
-
   // Internal version of ScriptAdded which we need since we may suppress ScriptAdded
   private[nashorn] case class InternalScriptAdded(script: Script) extends ScriptEvent {
     override def toStringParams(): Map[String, Any] = Map("scriptId" -> script.id)
@@ -129,8 +125,6 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
   protected val stackframeIdGenerator = new IdGenerator("ndsf")
 
   private val eventSubject = Subject.serialized[ScriptEvent]
-
-  protected val internalStateSubject = Subject.serialized[InternalState] //TODO: Serialized isn't needed
 
   private var hostInitializationComplete = false
 
@@ -260,8 +254,6 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     // Start with a fresh object registry
     mappingRegistry.clear()
 
-    internalStateSubject.onNext(Pause)
-
     implicit val thread = ev.thread()
     val pd = new PausedData(thread, createMarshaller(), stackBuilder, ev, virtualMachine.disableEnabledRequests())
     pausedData = Some(pd)
@@ -273,8 +265,6 @@ class NashornDebuggerHost(val virtualMachine: XVirtualMachine, protected val asy
     pausedData = None
     clearNonPersistedScripts()
     mappingRegistry.clear() // only valid when paused
-
-    internalStateSubject.onNext(Unpause)
   }
 
   private def maybeEmitErrorEvent(pd: PausedData): Unit = pd.exceptionEventInfo match {

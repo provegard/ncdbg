@@ -1,10 +1,7 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.PrintMessage
-import com.programmaticallyspeaking.ncd.messaging.Observer
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{InternalState, Pause, Unpause}
 import com.sun.jdi.event.{BreakpointEvent, Event}
-import com.sun.jdi.request.BreakpointRequest
 import com.sun.jdi.{ArrayReference, ClassType, ThreadReference, Value}
 import org.slf4s.Logging
 
@@ -19,22 +16,16 @@ object PrintSupport {
   */
 trait PrintSupport { self: NashornDebuggerHost with Logging =>
 
+  import JDIExtensions._
   import PrintSupport._
   import TypeConstants._
   import com.programmaticallyspeaking.ncd.nashorn.mirrors.Mirrors._
-  import JDIExtensions._
 
   import scala.collection.JavaConverters._
 
   def enablePrintCapture(global: ClassType): Unit = {
     Breakpoints.enableBreakingAtGlobalPrint(global) { breakpointRequests =>
       breakpointRequests.foreach(_.onEventDo(eventHandler))
-
-      internalStateSubject.subscribe(Observer.from[InternalState] {
-        case Pause   => breakpointRequests.foreach(_.disable())
-        case Unpause => breakpointRequests.foreach(_.enable())
-      })
-
     }
   }
 
