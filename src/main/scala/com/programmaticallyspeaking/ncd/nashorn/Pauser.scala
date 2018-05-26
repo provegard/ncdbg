@@ -6,6 +6,7 @@ import com.sun.jdi.event._
 import org.slf4s.Logging
 
 class Pauser(breakpoints: LineBreakpoints, scripts: Scripts, emitter: ScriptEventEmitter) extends Logging {
+  import Pauser._
 
   private var currentExceptionPauseType: ExceptionPauseType = ExceptionPauseType.None
 
@@ -172,20 +173,27 @@ class Pauser(breakpoints: LineBreakpoints, scripts: Scripts, emitter: ScriptEven
   private def shouldPause(pausedData: PausedData, ev: Event): Either[String, Unit] = ev match {
     case _ if disablePausingAltogether =>
       // disablePausingAltogether disabled all sort of pausing - exceptions, stepping, breakpoints...
-      Left("pausing is entirely disabled")
+      PausingDisabled
     case _ if pausedData.exceptionEventInfo.isDefined =>
       shouldPauseOnException(pausedData.exceptionEventInfo.get)
     case _:StepEvent|_:MethodEntryEvent =>
       // Stepping should work even if breakpoints are disabled, and method entry is when the user wants to pause,
       // which also should work when breakpoints are disabled.
-      Right(())
+      ShouldPause
     case _ =>
       // Resume right away if we're not pausing on breakpoints
-      if (!willPauseOnBreakpoints) return Left("breakpoints are disabled")
-      if (pausedData.stackFrameHolders.isEmpty) return Left("no stack frames were found at all")
-      if (!pausedData.pausedInAScript) return Left("location doesn't belong to a script")
-
-      Right(())
+      if      (!willPauseOnBreakpoints)              BreakpointsAreDisabled
+      else if (pausedData.stackFrameHolders.isEmpty) NoStackFramesFound
+      else if (!pausedData.pausedInAScript)          NotAScriptLocation
+      else                                           ShouldPause
   }
 
+}
+
+object Pauser {
+  val BreakpointsAreDisabled = Left("breakpoints are disabled")
+  val NoStackFramesFound = Left("no stack frames were found at all")
+  val NotAScriptLocation = Left("location doesn't belong to a script")
+  val PausingDisabled = Left("pausing is entirely disabled")
+  val ShouldPause = Right(())
 }
