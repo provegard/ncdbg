@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.1 (2018-06-19)
 
 * Handle arguments to Debugger.stepInto (issue #95)
 * Change suspend policy to "suspend all threads." This is required to avoid JDI deadlocks
@@ -9,6 +9,7 @@
 * Support "attach on demand" a.k.a. lazy mode. In this mode, triggered by using the `--lazy`
   command line switch, NCDbg won't connect to the debug target until DevTools connects, and
   will stay alive if the debug target dies.
+* Use Gradle 4.8 for the build system. Needed for building with Java 11.
 
 ## 0.8.0 (2018-04-12)
 
