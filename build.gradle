@@ -1,6 +1,5 @@
 plugins {
-    // Note: Version 0.16 is for Gradle 4
-    id "com.github.maiflai.scalatest" version "0.19"
+    id "com.github.maiflai.scalatest" version "0.22"
     id 'com.palantir.git-version' version '0.5.3'
 }
 
