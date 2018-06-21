@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.2 (2018-06-21)
+
+* In the _ncdbg_ and _ncdbg.bat_ start scripts, add tools.jar to the class path
+  even if NCDbg is built using a Java version that doesn't
+  include tools.jar.
+* Fix "bad substitution" error in the _ncdbg_ start script when the _sh_
+  shell is Dash.
+* Show the Java version that NCDbg was built with on boot. 
+
 ## 0.8.1 (2018-06-19)
 
 * Handle arguments to Debugger.stepInto (issue #95)
