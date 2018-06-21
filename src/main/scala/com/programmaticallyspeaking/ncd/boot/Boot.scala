@@ -23,6 +23,7 @@ object Boot extends App with Logging {
   LogManager.getLogManager.reset()
 
   log.info("NCDbg version: " + BuildProperties.version)
+  log.info("NCDbg built with Java version: " + BuildProperties.buildJavaVersion)
   log.info("Local Java version: " + System.getProperty("java.version"))
 
   val lazyBehavior = conf.isLazy()

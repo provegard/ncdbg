@@ -11,4 +11,6 @@ object BuildProperties {
   }
 
   def version: String = Option(props.getProperty("version")).getOrElse("(unknown)")
+
+  def buildJavaVersion: String = Option(props.getProperty("build_java_version")).getOrElse("(unknown)")
 }

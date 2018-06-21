@@ -30,7 +30,10 @@ task generateResources {
     doLast {
         mkdir generatedResourcesFolder
         def buildProps = new File(generatedResourcesFolder, "build.properties")
-        buildProps.text = "version=$version"
+        def javaVer = org.gradle.internal.jvm.Jvm.current().javaVersion
+        buildProps.text = """version=$version
+build_java_version=$javaVer
+"""
     }
 }
 
