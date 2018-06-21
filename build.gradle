@@ -112,7 +112,13 @@ startScripts {
             // If JAVA_HOME is a Windows path (e.g. under MinGW), we need to remove the colon (since that's the class path
             // separator) and prefix with a slash to make Java understand that it's a path. This has been tested in
             // Windows with Git Bash (MINGW64) and in Linux.
-            unixScriptFile.text  = unixScriptFile.text.replace('$APP_HOME/lib/tools.jar', '/${JAVA_HOME/:/}/lib/tools.jar')
+            // Note: Variable substitution doesn't work with dash, which is the sh replacement on Linux,
+            // hence the use of echo + tr.
+            unixScriptFile.text = unixScriptFile.text.replace('$APP_HOME/lib/tools.jar', '/$(echo $JAVA_HOME | tr -d ":")/lib/tools.jar')
+        } else {
+            // Java distribution used for building doesn't include tools.jar, so append it to CLASSPATH
+            windowsScriptFile.text = windowsScriptFile.text.replaceFirst('(CLASSPATH=.*)', '$1;%JAVA_HOME%\\\\lib\\\\tools.jar')
+            unixScriptFile.text = unixScriptFile.text.replaceFirst('(CLASSPATH=.*)', '$1:/\\$\\(echo \\$JAVA_HOME | tr -d ":"\\)/lib/tools.jar')
         }
     }
 }
