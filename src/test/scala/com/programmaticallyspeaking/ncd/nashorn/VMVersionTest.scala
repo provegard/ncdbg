@@ -10,9 +10,10 @@ class VMVersionTest extends UnitTest with TableDrivenPropertyChecks {
 
       val cases = Table(
         ("desc", "input", "expected"),
-        ("Java 8", "1.8.0_151", VMVersion(1, Some(8), Some(0), Some(151))),
-        ("Java 9", "9.0.1", VMVersion(9, Some(0), Some(1), None)),
-        ("Java 10", "10", VMVersion(10, None, None, None))
+        ("Java 8", "1.8.0_151", VMVersion(1, Some(8), Some(0), Some(151), false)),
+        ("Java 9", "9.0.1", VMVersion(9, Some(0), Some(1), None, false)),
+        ("Java 10", "10", VMVersion(10, None, None, None, false)),
+        ("Java 12 EA", "12-ea", VMVersion(12, None, None, None, true))
       )
 
       forAll(cases) { (desc, input, expected) =>

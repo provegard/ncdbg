@@ -87,7 +87,7 @@ class XVirtualMachine(virtualMachine: VirtualMachine) {
   lazy val version: VMVersion = VMVersion.parse(virtualMachine.version())
 }
 
-case class VMVersion(major: Int, minor: Option[Int], patch: Option[Int], build: Option[Int]) {
+case class VMVersion(major: Int, minor: Option[Int], patch: Option[Int], build: Option[Int], earlyAccess: Boolean) {
   def knownBugs: Seq[KnownBug.EnumVal] = KnownBug.all.filter(_.appearsIn(this))
 }
 
@@ -99,12 +99,19 @@ object VMVersion {
     * @return a version structure
     */
   def parse(version: String): VMVersion = {
-    val parts = version.split(Array('.', '_'))
+    var ver = version
+    var earlyAccess = false
+    if (ver.endsWith("-ea")) {
+      earlyAccess = true
+      ver = ver.substring(0, ver.length - 3)
+    }
+    val parts = ver.split(Array('.', '_'))
     if (parts.length > 4) throw new IllegalArgumentException("Unexpected version format: " + version)
     VMVersion(parts.head.toInt,
       parts.lift(1).map(_.toInt),
       parts.lift(2).map(_.toInt),
-      parts.lift(3).map(_.toInt))
+      parts.lift(3).map(_.toInt),
+      earlyAccess)
   }
 }
 
