@@ -129,13 +129,17 @@ object Debugger extends Logging {
         // Publish the map file
         val externalUrl = filePublisher.publish(sourceMapFile)
 
+        val sourceMapUrl = ScriptURL.create(sourceMapFile.toString)
+
         // Read the map file to find the source file(s)
         fileReader.read(sourceMapFile, StandardCharsets.UTF_8).map(SourceMap.fromJson) match {
           case Success(sourceMap) =>
 
             // Publish all sources, but we're not interested in their URLs.
-            // TODO: Should they be relative to the map rather?
-            sourceMap.sources.map(script.url.resolve).filter(_.isFile).foreach(u => filePublisher.publish(u.toFile))
+            // "If the sources are not absolute URLs after prepending of the “sourceRoot”, the sources are resolved
+            // relative to the SourceMap (like resolving script src in a html document)."
+            // -- https://sourcemaps.info/spec.html#h.75yo6yoyk7x5
+            sourceMap.sources.map(sourceMapUrl.resolve).filter(_.isFile).foreach(u => filePublisher.publish(u.toFile))
 
             new ProxyScript(script) {
               override def sourceMapUrl(): Option[ScriptURL] = Some(ScriptURL.create(externalUrl))
