@@ -12,6 +12,7 @@ class ScriptURLTest extends UnitTest with TableDrivenPropertyChecks {
     Table(
       ("desc", "input", "output"),
       ("Windows path", "c:\\temp\\test.txt","file:///c:/temp/test.txt"),
+      ("Windows path with forward slashes", "c:/temp/test.txt","file:///c:/temp/test.txt"),
       ("relative Windows path", "temp\\test.txt","temp/test.txt"),
       ("Path with ..", "c:\\temp\\subdir\\..\\test.txt","file:///c:/temp/test.txt"),
       ("Unix path", "/tmp/test.txt", "file:///tmp/test.txt"),
