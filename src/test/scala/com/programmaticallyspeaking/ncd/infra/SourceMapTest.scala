@@ -17,5 +17,11 @@ class SourceMapTest extends UnitTest {
       val sm = SourceMap.fromJson(json)
       sm.sources should be (Seq("b.coffee"))
     }
+
+    "resolves relative to sourceRoot" in {
+      val json = """{"sourceRoot":"/path/to/","sources":["a.coffee"]}"""
+      val sm = SourceMap.fromJson(json)
+      sm.sources should be (Seq("/path/to/a.coffee"))
+    }
   }
 }
