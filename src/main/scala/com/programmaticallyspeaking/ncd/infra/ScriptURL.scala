@@ -39,7 +39,7 @@ object ScriptURL {
     x.length > 0 && x(0) != '/' && !x.lift(1).contains(':')
 
   private def isAbsoluteUnixOrWindowsFilePath(x: String) =
-    x.startsWith("/") || (x.lift(1).contains(':') && x.indexOf('\\') > 1)
+    x.startsWith("/") || (x.lift(1).contains(':') && x.indexWhere(c => c == '\\' || c == '/') > 1)
 
   def create(url: URL): ScriptURL = new ScriptURL(url.toURI)
 
