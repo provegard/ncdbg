@@ -743,8 +743,9 @@ class DebuggerObjectTest extends UnitTest {
           |//# sourceMappingURL=d:/path/to/file.js.map
         """.stripMargin
       val newMapFile = new File("/d:/path/to/file.js.map")
+      val newCoffeeFile = new File("/d:/path/to/file.coffee")
       implicit val reader = fakeFileReader(Map(
-        coffeeFile -> coffee,
+        newCoffeeFile -> coffee,
         newMapFile -> map,
         jsFile -> js
       ))
@@ -756,6 +757,11 @@ class DebuggerObjectTest extends UnitTest {
       "publishes the map file in its correct location" in {
         newScript
         publisher.published should contain (newMapFile)
+      }
+
+      "resolves the source file relative to the source map" in {
+        newScript
+        publisher.published should contain (newCoffeeFile)
       }
     }
 
