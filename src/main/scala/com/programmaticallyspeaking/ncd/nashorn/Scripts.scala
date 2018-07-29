@@ -1,7 +1,5 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import java.util.concurrent.LinkedBlockingQueue
-
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.infra.{IdGenerator, PathUtils, ScriptURL}
 
@@ -12,7 +10,6 @@ class Scripts {
 
   private val _scriptByUrl = TrieMap[ScriptURL, Script]()
   private val _scriptById = TrieMap[String, Script]()
-  private val _anonScripts = new LinkedBlockingQueue[Script]()
 
   def scripts: Seq[Script] = _scriptById.values.toSeq
 
