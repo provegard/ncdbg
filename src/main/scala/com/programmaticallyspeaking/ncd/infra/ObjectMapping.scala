@@ -11,7 +11,7 @@ import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
 import scala.reflect.ClassTag
 
 /**
-  * This class exists because Jackson's `OptionModule` cannot write `Some(null)`
+  * This class exists because Jackson's `OptionModule` doesn't write anything for `Some(null)`
   */
 private class RemoteObjectSerializer extends StdSerializer[RemoteObject](classOf[RemoteObject]) {
   override def serialize(value: RemoteObject, gen: JsonGenerator, provider: SerializerProvider): Unit = {
