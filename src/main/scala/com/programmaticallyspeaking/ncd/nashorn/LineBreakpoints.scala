@@ -52,6 +52,20 @@ class LineBreakpoints extends Logging {
     byId.clear()
   }
 
+  /**
+    * Removes line breakpoints that are unique for the given script, i.e. that cannot match
+    * another script (via URL).
+    */
+  def removeUniqueForScript(script: Script): Seq[LineBreakpoint] = {
+    // TODO: Not atomic...
+    val forScript = byId.values.filter(_.belongsUniquelyTo(script))
+    forScript.foreach { bp =>
+      bp.remove()
+      byId -= bp.id
+    }
+    forScript.toSeq
+  }
+
   def removeById(id: String): Unit = {
     byId.get(id) match {
       case Some(activeBp) =>

@@ -10,7 +10,7 @@ class ScriptsTest extends IsolatedUnitTest {
     val scripts = new Scripts
 
     "when a script is suggested" - {
-      val script = aScript("script.js", "return 42;", "a")
+      val script = aScript("script.js", "return 42;", "a", 1)
       scripts.suggest(script)
 
       "accepts it" in {
@@ -27,7 +27,7 @@ class ScriptsTest extends IsolatedUnitTest {
     }
 
     "when an anonymous script is suggested" - {
-      val script = aScript("", "return 42;", "a")
+      val script = aScript("", "return 42;", "a", 1)
       scripts.suggest(script)
 
       "accepts it" in {
@@ -44,13 +44,13 @@ class ScriptsTest extends IsolatedUnitTest {
     }
 
     "when a script with the same contents as an existing one is added" - {
-      val script1 = aScript("script.js", "return 42;", "a")
-      val script2 = aScript("scriptRecompilation.js", "return 42;", "b")
+      val script1 = aScript("script.js", "return 42;", "a", 1)
+      val script2 = aScript("scriptRecompilation.js", "return 42;", "b", 2)
       scripts.suggest(script1)
       val actual = scripts.suggest(script2)
 
       "returns the original one" in {
-        actual shouldBe theSameInstanceAs(script1)
+        actual.get.script shouldBe theSameInstanceAs(script1)
       }
 
       "allows lookup with the new URL (and returns the original script)" in {
@@ -63,49 +63,60 @@ class ScriptsTest extends IsolatedUnitTest {
       }
     }
 
-    "when a script with different contents but same URL is added" - {
-      val script1 = aScript("script.js", "return 42;", "a")
-      val script2 = aScript("script.js", "return 52;", "b")
+    "when a newer script with different contents but same URL is added" - {
+      val script1 = aScript("script.js", "return 42;", "a", 1)
+      val script2 = aScript("script.js", "return 52;", "b", 2)
       scripts.suggest(script1)
       val actual = scripts.suggest(script2)
 
-      "returns a script with a generated ID" in {
-        actual.id should not be ("b")
+      "returns the newer script" in {
+        actual.map(_.script.id) should be (Some("b"))
       }
 
-      "returns a script with a modified URL" in {
-        actual.url.toString should fullyMatch regex("script_.*\\.js$")
+      "returns the replacement script" in {
+        actual.flatMap(_.replaced.map(_.id)) should be (Some("a"))
       }
 
-      "returns the old script for lookup with the URL" in {
-        scripts.byId(ScriptIdentity.fromURL("script.js")).map(_.contents) should be (Some("return 42;"))
+      "preserves the script URL" in {
+        actual.map(_.script.url.toString) should be (Some("script.js"))
       }
 
-      "returns the new script for lookup with the new URL" in {
-        scripts.byId(ScriptIdentity.fromURL(actual.url)).map(_.contents) should be (Some("return 52;"))
+      "returns the new script for lookup with the URL" in {
+        scripts.byId(ScriptIdentity.fromURL("script.js")).map(_.contents) should be (Some("return 52;"))
       }
 
-      "doesn't have a script with the suggested ID" in {
-        scripts.byId(ScriptIdentity.fromId("b")) should be (None)
+      "doesn't have a script with the old ID" in {
+        scripts.byId(ScriptIdentity.fromId("a")) should be (None)
       }
 
       "has a script with the new ID" in {
-        scripts.byId(ScriptIdentity.fromId(actual.id)).map(_.contents) should be (Some("return 52;"))
+        scripts.byId(ScriptIdentity.fromId("b")) should be ('defined)
       }
 
-      "doesn't enumerate the script with its suggested ID" in {
+      "doesn't enumerate the old script" in {
         val ids = scripts.scripts.map(_.id)
-        ids should not contain ("b")
+        ids should not contain ("a")
+      }
+    }
+
+    "when an older script with different contents but same URL is added" - {
+      val script1 = aScript("script.js", "return 42;", "a", 2)
+      val script2 = aScript("script.js", "return 52;", "b", 1)
+      scripts.suggest(script1)
+      val actual = scripts.suggest(script2)
+
+      "ignores the script" in {
+        actual should be (None)
       }
     }
 
     "rejects suggestion of the same script twice" in {
-      val script = aScript("script.js", "return 42;", "a")
+      val script = aScript("script.js", "return 42;", "a", 1)
       scripts.suggest(script)
       assertThrows[IllegalArgumentException](scripts.suggest(script))
     }
   }
 
-  def aScript(url: String, source: String, id: String) =
-    ScriptImpl.fromSource(ScriptURL.create(url), source, id)
+  def aScript(url: String, source: String, id: String, version: Int) =
+    ScriptImpl.fromSource(ScriptURL.create(url), source, id, version)
 }

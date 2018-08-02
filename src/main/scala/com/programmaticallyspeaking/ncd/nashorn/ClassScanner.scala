@@ -3,16 +3,14 @@ package com.programmaticallyspeaking.ncd.nashorn
 import com.programmaticallyspeaking.ncd.infra.{CancellableFuture, DelayedFuture}
 import com.programmaticallyspeaking.ncd.messaging.{Observer, SerializedSubject}
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{ScriptClassNamePrefix, wantedTypes}
-import com.sun.jdi.event.ClassPrepareEvent
-import com.sun.jdi.request.EventRequest
 import com.sun.jdi._
+import com.sun.jdi.event.ClassPrepareEvent
 import org.slf4s.Logging
 
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
-import scala.util.{Failure, Success}
 
 sealed trait ScanAction
 case class ScanMoreLater(continueScan: () => Unit) extends ScanAction
@@ -27,11 +25,9 @@ object ClassScanner {
 
 class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFactory: ScriptFactory,
                    scriptPublisher: ScriptPublisher, breakableLocations: BreakableLocations,
-                   activeBreakpoints: LineBreakpoints,
+                   lineBreakpoints: LineBreakpoints,
                    actionPerWantedType: Map[String, (ClassType) => Unit])(implicit executionContext: ExecutionContext) extends Logging {
   import ClassScanner._
-
-  import scala.collection.JavaConverters._
 
   private var hasInitiatedClassScanning = false
 
@@ -128,10 +124,31 @@ class ClassScanner(virtualMachine: XVirtualMachine, scripts: Scripts, scriptFact
       def callback(maybeIdentifiedScript: Option[IdentifiedScript], lineLocations: Seq[Location]) = maybeIdentifiedScript match {
         case Some(identifiedScript) =>
           try {
-            val script = scripts.suggest(identifiedScript.script)
-            val bls = breakableLocations.add(script, lineLocations)
-            activeBreakpoints.addBreakableLocations(script, bls)
-            scriptPublisher.publish(script)
+            scripts.suggest(identifiedScript.script) match {
+              case Some(result) =>
+                // TODO: This is somewhat untested. How do we best test this code?
+                result.replaced.foreach { s =>
+                  log.debug(s"Script ${result.script.id} is a replacement for ${s.id}, with URL ${result.script.url}")
+
+                  // Don't track breakable locations for the old script anymore.
+                  breakableLocations.removeFor(s)
+
+                  // Remove breakpoints in the old script
+                  lineBreakpoints.removeUniqueForScript(s)
+                }
+
+                val bls = breakableLocations.add(result.script, lineLocations)
+
+                // Add breakable locations. This will enable line breakpoints automatically for the new script and emit
+                // them with the new script ID.
+                // Note, unless the breakpoint is resolved already, which it likely is. But this doesn't seem to be
+                // a problem for DevTools - it correctly handles an existing breakpoint in the replacement script.
+                lineBreakpoints.addBreakableLocations(result.script, bls)
+
+                scriptPublisher.publish(result.script)
+              case None =>
+                log.debug(s"Ignoring script with URL ${identifiedScript.script.url} since it's an older version (${identifiedScript.script.version}).")
+            }
           } catch {
             case NonFatal(t) =>
               log.error("Script publish failure", t)

@@ -65,10 +65,10 @@ class ScriptReloadTest extends ScriptReloadTestFixture {
         }
       }
 
-      "it has a modified URL to not collide with the original" in {
+      "it has the same URL as the original" in {
         whenReady(fScript1) { script =>
           whenReady(fScript2) { scriptAgain =>
-            scriptAgain.url.toString should not be (script.url.toString)
+            scriptAgain.url.toString should be (script.url.toString)
           }
         }
       }
@@ -79,10 +79,10 @@ class ScriptReloadTest extends ScriptReloadTestFixture {
         }
       }
 
-      "the old script can still be fetched from the host" in {
+      "the old script can no longer be fetched from the host" in {
         whenReady(fScript1) { script =>
           whenReady(fScript2) { _ =>
-            scriptById(script.id).contents should include("this.x")
+            assertThrows[IllegalArgumentException](scriptById(script.id))
           }
         }
       }

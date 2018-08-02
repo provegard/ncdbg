@@ -88,6 +88,6 @@ class ScriptPublisherTest extends UnitTest {
 
   def testScript(id: String, contents: String = "") = {
     val data = contents.getBytes(StandardCharsets.UTF_8)
-    new ScriptImpl(ScriptURL.create(""), data, id)
+    new ScriptImpl(ScriptURL.create(""), data, id, 1)
   }
 }

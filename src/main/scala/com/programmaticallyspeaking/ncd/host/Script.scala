@@ -6,6 +6,11 @@ trait Script {
   val id: String
   val url: ScriptURL
 
+  /**
+    * Version is used to determine which script is newer of two scripts with the same URL.
+    */
+  val version: Int
+
   val lineCount: Int
   val lastLineLength: Int
 
@@ -27,6 +32,7 @@ class ProxyScript(inner: Script) extends Script {
   override val lineCount: Int = inner.lineCount
   override val lastLineLength: Int = inner.lastLineLength
   override val contents: String = inner.contents
+  override val version: Int = inner.version
   override def sourceLine(lineNumber1Based: Int): Option[String] = inner.sourceLine(lineNumber1Based)
   override def contentsHash(): String = inner.contents
   override def sourceMapUrl(): Option[ScriptURL] = inner.sourceMapUrl()

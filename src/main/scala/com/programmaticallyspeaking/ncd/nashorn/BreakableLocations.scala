@@ -7,10 +7,16 @@ import org.slf4s.Logging
 import scala.collection.concurrent.TrieMap
 
 class BreakableLocations(scripts: Scripts) extends Logging {
-
   import JDIExtensions._
 
   private val breakableLocationsByScriptUrl = TrieMap[String, Seq[BreakableLocation]]()
+
+  /**
+    * Removes breakable locations for the given script.
+    */
+  def removeFor(script: Script): Unit = {
+    breakableLocationsByScriptUrl -= script.url.toString
+  }
 
   def add(script: Script, locations: Seq[Location]): Seq[BreakableLocation] = {
     add0(script, gatherBreakableLocations(script, locations))

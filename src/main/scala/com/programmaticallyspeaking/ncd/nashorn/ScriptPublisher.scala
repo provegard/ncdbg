@@ -26,7 +26,7 @@ class ScriptPublisher(eventEmitter: ScriptEventEmitter) extends Logging {
       log.debug(s"Script with ID '${script.id}' is already known")
     } else {
       if (log.underlying.isDebugEnabled)
-        log.debug(s"Adding script with ID '${script.id}', URI '${script.url}' and hash '${script.contentsHash()}'")
+        log.debug(s"Adding script with ID '${script.id}', URI '${script.url}', hash '${script.contentsHash()} and version ${script.version}'")
       else
         log.info(s"Adding script '${script.id}' with URI '${script.url}'")
 

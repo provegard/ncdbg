@@ -5,9 +5,9 @@ import com.programmaticallyspeaking.ncd.infra.{IdGenerator, PathUtils, ScriptURL
 
 import scala.collection.concurrent.TrieMap
 
-class Scripts {
-  private val scriptIdGenerator = new IdGenerator("ndx") // special prefix for replacement scripts
+case class SuggestResult(script: Script, replaced: Option[Script])
 
+class Scripts {
   private val _scriptByUrl = TrieMap[ScriptURL, Script]()
   private val _scriptById = TrieMap[String, Script]()
 
@@ -15,13 +15,13 @@ class Scripts {
 
   private def isAnonymousScript(s: Script) = s.url.toString == ""
 
-  def suggest(script: Script): Script = {
+  def suggest(script: Script): Option[SuggestResult] = {
     require(byId(ScriptIdentity.fromId(script.id)).isEmpty, s"Script with ID ${script.id} has already been added")
 
     // No URL checking for an anonymous script
     if (isAnonymousScript(script)) {
       _scriptById += script.id -> script
-      return script
+      return Some(SuggestResult(script, None))
     }
 
     // For a recompilation, we will (most likely) already have the original script that was recompiled (recompilation
@@ -36,29 +36,40 @@ class Scripts {
         // line locations also. But we don't have locations here, and I don't want to do too much defensive coding.
         _scriptByUrl += script.url -> scriptWithSameSource
         // Don't add an entry to _scriptById since we ignore the new script
-        scriptWithSameSource
+        Some(SuggestResult(scriptWithSameSource, None))
       case None =>
         _scriptByUrl.get(script.url) match {
-          case Some(_) =>
+          case Some(existing) =>
             // This is a new script with new contents but with the same URL as an old one - it is likely a script
             // that has been reloaded via Nashorn's 'load' function.
-            // The choice of using the ID as suffix is pretty arbitrary - it could also be a sequence number.
-            val newId = scriptIdGenerator.next
-            //TODO: Don't use PathUtils here, it's URL now
-            val newURLString = PathUtils.insertNameSuffix(script.url.toString, "_" + newId)
-            val newURL = ScriptURL.create(newURLString)
+            // Supporting debugging of a replaced script is certainly possible but it becomes complex especially
+            // with source maps. It is likely a rare edge case, so we just replace the old script with the new
+            // one (and the caller will have to do some breakpoint bookkeeping).
 
-            val replacement = ScriptImpl.fromSource(newURL, script.contents, newId)
-            _scriptByUrl += newURL -> replacement
-            _scriptById += newId -> replacement
-            replacement
-
+            // Which is newest? Check version.
+            versionOrder(existing, script) match {
+              case (oldest, _) if oldest eq script =>
+                // The new script is the oldest, just ignore it!
+                None
+              case _ =>
+                // The new script is newer than the existing
+                _scriptById -= existing.id
+                _scriptByUrl += script.url -> script
+                _scriptById += script.id -> script
+                Some(SuggestResult(script, Some(existing)))
+            }
           case None =>
+            // New script wih unique URL
             _scriptByUrl += script.url -> script
             _scriptById += script.id -> script
-            script
+            Some(SuggestResult(script, None))
         }
     }
+  }
+
+  private def versionOrder(s1: Script, s2: Script): (Script, Script) = {
+    if (s1.version < s2.version) (s1, s2)
+    else (s2, s1)
   }
 
   def byId(id: ScriptIdentity): Option[Script] = {
