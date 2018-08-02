@@ -195,8 +195,10 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHo
 
   override def handle = {
     case Domain.enable =>
-      log.info("Enabling debugging, sending all parsed scripts to the client.")
-      scriptHost.scripts.foreach(emitScriptParsedEvent)
+      val scripts = scriptHost.scripts
+      val scriptsStr = scripts.map(s => s"- ${s.url} [${s.id}]").mkString("\n")
+      log.info("Enabling debugging, sending all parsed scripts to the client:\n" + scriptsStr)
+      scripts.foreach(emitScriptParsedEvent)
 
       scriptHost.pauseOnBreakpoints()
 
