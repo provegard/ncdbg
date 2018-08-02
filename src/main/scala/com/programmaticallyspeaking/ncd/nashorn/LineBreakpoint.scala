@@ -18,7 +18,7 @@ import scala.collection.mutable.ListBuffer
   * @param oneOff whether this is a one-off breakpoint or not
   */
 class LineBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation], val condition: Option[String],
-                     scriptIdentity: ScriptIdentity, scriptLocation: ScriptLocation, oneOff: Boolean) {
+                     val scriptIdentity: ScriptIdentity, val scriptLocation: ScriptLocation, oneOff: Boolean) {
 
   private object lock
   private val allLocations = ListBuffer[BreakableLocation]()
@@ -29,6 +29,8 @@ class LineBreakpoint(val id: String, breakableLocations: Seq[BreakableLocation],
   def isOneOff: Boolean = oneOff
 
   def belongsTo(script: Script): Boolean = scriptIdentity.matchesScript(script)
+
+  def belongsUniquelyTo(script: Script): Boolean = belongsTo(script) && scriptIdentity.isInstanceOf[IdBasedScriptIdentity]
 
   def isUnresolved: Boolean = allLocations.isEmpty
 

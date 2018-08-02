@@ -120,10 +120,10 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
 
   private def scriptFromEval(refType: ReferenceType, scriptURL: ScriptURL): Either[NoScriptReason.EnumVal, Script] = {
     refType.shamelesslyExtractEvalSourceFromPrivatePlaces().map { src =>
-      Right(newScript(scriptURL, src))
+      Right(newScript(scriptURL, src, VersionExtractor.extract(refType)))
     }.getOrElse(Left(NoScriptReason.NoSource))
   }
 
-  private def newScript(url: ScriptURL, source: String) =
-    ScriptImpl.fromSource(url, source, scriptIdGenerator.next)
+  private def newScript(url: ScriptURL, source: String, version: Int) =
+    ScriptImpl.fromSource(url, source, scriptIdGenerator.next, version)
 }

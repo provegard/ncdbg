@@ -8,7 +8,7 @@ import com.programmaticallyspeaking.ncd.infra.{Hasher, ScriptURL}
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-class ScriptImpl(val url: ScriptURL, scriptData: Array[Byte], val id: String) extends Script {
+class ScriptImpl(val url: ScriptURL, scriptData: Array[Byte], val id: String, val version: Int) extends Script {
   import ScriptImpl._
 
   val contents = new String(scriptData, UTF8)
@@ -62,8 +62,8 @@ object ScriptImpl {
 
   private val UTF8 = StandardCharsets.UTF_8
 
-  def fromSource(url: ScriptURL, source: String, id: String): Script = {
+  def fromSource(url: ScriptURL, source: String, id: String, version: Int): Script = {
     val bytes = source.getBytes(UTF8)
-    new ScriptImpl(url, bytes, id)
+    new ScriptImpl(url, bytes, id, version)
   }
 }

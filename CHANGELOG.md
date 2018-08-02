@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+* Better support for replaced script. If a script is reloaded with the same URL, the old script
+  is "delisted." Previous behavior of creating "ndx" versions of the script has been removed.
+  Using the possibility to run code from multiple versions of the same script seems like an edge
+  case&mdash;it is more likely that reloading a script means that the new version should take
+  effect. (Issue #98)
+
 ## 0.8.2 (2018-06-21)
 
 * In the _ncdbg_ and _ncdbg.bat_ start scripts, add tools.jar to the class path

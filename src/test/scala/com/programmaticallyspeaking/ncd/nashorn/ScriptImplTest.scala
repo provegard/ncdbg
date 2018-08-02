@@ -6,7 +6,7 @@ import com.programmaticallyspeaking.ncd.testing.UnitTest
 class ScriptImplTest extends UnitTest {
 
   def fromSource(path: String, source: String, id: String) =
-    ScriptImpl.fromSource(ScriptURL.create(path), source, id)
+    ScriptImpl.fromSource(ScriptURL.create(path), source, id, 1)
 
   "ScriptImpl" - {
     "fromSource" - {
