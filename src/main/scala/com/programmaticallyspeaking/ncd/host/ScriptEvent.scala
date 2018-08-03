@@ -65,7 +65,9 @@ object InitialInitializationComplete extends ScriptEvent
   *
   * @param message the message passed to the print function
   */
-case class PrintMessage(message: String) extends ScriptEvent
+case class PrintMessage(message: String) extends ScriptEvent {
+  override def toStringParams(): Map[String, Any] = Map("message" -> message)
+}
 
 /**
   * Emitted when a new script is detected and there are breakpoints that match it.

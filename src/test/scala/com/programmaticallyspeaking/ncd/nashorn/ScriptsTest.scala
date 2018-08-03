@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.ScriptIdentity
+import com.programmaticallyspeaking.ncd.host.{ScriptIdentity, ScriptVersion}
 import com.programmaticallyspeaking.ncd.infra.ScriptURL
 import com.programmaticallyspeaking.ncd.testing.IsolatedUnitTest
 
@@ -118,5 +118,5 @@ class ScriptsTest extends IsolatedUnitTest {
   }
 
   def aScript(url: String, source: String, id: String, version: Int) =
-    ScriptImpl.fromSource(ScriptURL.create(url), source, id, version)
+    ScriptImpl.fromSource(ScriptURL.create(url), source, id, ScriptVersion(version, true))
 }

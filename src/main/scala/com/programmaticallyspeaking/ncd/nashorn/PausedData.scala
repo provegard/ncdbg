@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import com.programmaticallyspeaking.ncd.host.types.ObjectPropertyDescriptor
 import com.programmaticallyspeaking.ncd.host.{ObjectId, StackFrame}
-import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.ObjectPropertiesKey
+import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{ObjectPropertiesKey, StackFrameHolder}
 import com.sun.jdi.ThreadReference
 import com.sun.jdi.event.{ExceptionEvent, LocatableEvent}
 
@@ -18,7 +18,22 @@ private[nashorn] class PausedData(val thread: ThreadReference, val marshaller: M
 
   lazy val stackFrameHolders = stackBuilder.captureStackFrames(thread)(marshaller)
 
-  def pausedInAScript: Boolean = stackFrameHolders.headOption.exists(h => h.stackFrame.isDefined || h.mayBeAtSpecialStatement)
+  def pausedInAScript: Boolean = {
+    if (isScriptFrame(stackFrameHolders.headOption)) {
+      // Paused in a script, for real
+      true
+    } else {
+      if (stackFrameHolders.headOption.exists(_.mayBeAtSpecialStatement)) {
+        // Paused at a 'debugger' statement (or similar)
+        // Verify that the caller is a script!
+        isScriptFrame(stackFrameHolders.lift(1))
+      } else {
+        false
+      }
+    }
+  }
+
+  private def isScriptFrame(maybeHolder: Option[StackFrameHolder]) = maybeHolder.exists(_.stackFrame.isDefined)
 
   def isAtDebuggerStatement: Boolean = stackFrameHolders.headOption.exists(_.isAtDebuggerStatement)
 

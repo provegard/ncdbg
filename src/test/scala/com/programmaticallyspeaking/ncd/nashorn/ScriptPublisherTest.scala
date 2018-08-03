@@ -2,7 +2,7 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import java.nio.charset.StandardCharsets
 
-import com.programmaticallyspeaking.ncd.host.{ScriptAdded, ScriptEvent}
+import com.programmaticallyspeaking.ncd.host.{ScriptAdded, ScriptEvent, ScriptVersion}
 import com.programmaticallyspeaking.ncd.infra.ScriptURL
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.InternalScriptAdded
 import com.programmaticallyspeaking.ncd.testing.UnitTest
@@ -88,6 +88,6 @@ class ScriptPublisherTest extends UnitTest {
 
   def testScript(id: String, contents: String = "") = {
     val data = contents.getBytes(StandardCharsets.UTF_8)
-    new ScriptImpl(ScriptURL.create(""), data, id, 1)
+    new ScriptImpl(ScriptURL.create(""), data, id, ScriptVersion(1, true))
   }
 }

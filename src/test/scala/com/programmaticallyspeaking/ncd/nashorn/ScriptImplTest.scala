@@ -1,12 +1,13 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
+import com.programmaticallyspeaking.ncd.host.ScriptVersion
 import com.programmaticallyspeaking.ncd.infra.ScriptURL
 import com.programmaticallyspeaking.ncd.testing.UnitTest
 
 class ScriptImplTest extends UnitTest {
 
   def fromSource(path: String, source: String, id: String) =
-    ScriptImpl.fromSource(ScriptURL.create(path), source, id, 1)
+    ScriptImpl.fromSource(ScriptURL.create(path), source, id, ScriptVersion(1, true))
 
   "ScriptImpl" - {
     "fromSource" - {

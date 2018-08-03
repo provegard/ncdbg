@@ -39,6 +39,9 @@ class Scripts {
         Some(SuggestResult(scriptWithSameSource, None))
       case None =>
         _scriptByUrl.get(script.url) match {
+          case Some(_) if !script.version.main =>
+            // Probably a recompilation of a script that we already have replaced. Ignore!
+            None
           case Some(existing) =>
             // This is a new script with new contents but with the same URL as an old one - it is likely a script
             // that has been reloaded via Nashorn's 'load' function.
@@ -68,7 +71,7 @@ class Scripts {
   }
 
   private def versionOrder(s1: Script, s2: Script): (Script, Script) = {
-    if (s1.version < s2.version) (s1, s2)
+    if (s1.version.version < s2.version.version) (s1, s2)
     else (s2, s1)
   }
 

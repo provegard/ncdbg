@@ -3,13 +3,13 @@ package com.programmaticallyspeaking.ncd.nashorn
 import java.io.File
 import java.nio.file.Files
 
-import com.programmaticallyspeaking.ncd.host.{Script, ScriptAdded, ScriptEvent, ScriptIdentity}
-import com.programmaticallyspeaking.ncd.messaging.Observer
-import org.scalatest.concurrent.ScalaFutures
+import com.programmaticallyspeaking.ncd.host._
+import com.programmaticallyspeaking.ncd.messaging.{Observable, Observer, Subject}
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
 
-trait ScriptReloadTestFixture extends NashornScriptHostTestFixture with ScalaFutures with FairAmountOfPatience {
+trait ScriptReloadTestFixture extends NashornScriptHostTestFixture with ScalaFutures with FairAmountOfPatience with Eventually {
   override implicit val executionContext: ExecutionContext = ExecutionContext.global
 
   private val scriptFile = File.createTempFile("script", ".js")
@@ -37,6 +37,21 @@ trait ScriptReloadTestFixture extends NashornScriptHostTestFixture with ScalaFut
     }
     observeAndRunScriptAsync(loader, observer)(_ => Future.successful(()))
     p.future
+  }
+
+  def executeScriptThatLoads(source: String)(cb: HitBreakpoint => Unit) = {
+    var error: Option[String] = None
+    val observer = Observer.from[ScriptEvent] {
+      case hb: HitBreakpoint =>
+        cb(hb)
+        getHost.resume()
+      case PrintMessage(msg) =>
+        println("ScriptReloadTest: " + msg)
+      case UncaughtError(errorValue) =>
+        error = Some("ERROR: " + errorValue.data.message)
+    }
+    observeAndRunScriptAsync(source, observer)(_ => Future.successful(()))
+    error.foreach(e => fail(e))
   }
 }
 
@@ -86,6 +101,74 @@ class ScriptReloadTest extends ScriptReloadTestFixture {
           }
         }
       }
+    }
+  }
+
+  "it should ignore a 'debugger' breakpoint in a replaced script" in {
+    val script =
+      """
+        |var fun1 = load({
+        |  script: "(function script1() { debugger; })",
+        |  name: "myscript.js"
+        |});
+        |
+        |var fun2 = load({
+        |  script: "(function script2() { debugger; })",
+        |  name: "myscript.js"
+        |});
+        |
+        |fun1();
+        |fun2();
+      """.stripMargin
+
+    var functionNames = Seq.empty[String]
+    executeScriptThatLoads(script) { hb =>
+      val name = hb.stackFrames.head.functionDetails.name
+      functionNames :+= name
+    }
+    eventually {
+      functionNames should be (Seq("script2"))
+    }
+  }
+
+  "it should ignore an ID-based breakpoint in a replaced script" ignore {
+    val script =
+      """function main() {
+        |  var fun1 = load({
+        |    script: "(function script1() {" +
+        |"Math.random();" +
+        |"debugger;" +
+        |"})",
+        |    name: "myscriptz.js"
+        |  });
+        |  fun1(); // call fun1 and set the breakpoint when we're paused at 'debugger'
+        |
+        |  load({
+        |    script: "(function script2() {})",
+        |    name: "myscriptz.js"
+        |  });
+        |
+        |  // call fun1 again - shouldn't stop at breakpoint _or_ 'debugger'
+        |  fun1();
+        |  debugger; // should stop here
+        |}
+        |main();
+      """.stripMargin
+
+    var functionNames = Seq.empty[String]
+    executeScriptThatLoads(script) { hb =>
+      val functionName = hb.stackFrames.head.functionDetails.name
+      if (functionName == "script1") {
+        val scriptId = hb.stackFrames.head.scriptId
+        // Set a breakpoint on the line before 'debugger'
+        var scriptLoc = hb.stackFrames.head.location
+        scriptLoc = scriptLoc.copy(lineNumber1Based = scriptLoc.lineNumber1Based - 1)
+        getHost.setBreakpoint(IdBasedScriptIdentity(scriptId), scriptLoc, BreakpointOptions(None, false))
+      }
+      functionNames :+= functionName
+    }
+    eventually {
+      functionNames should be (Seq("script1", "main"))
     }
   }
 
