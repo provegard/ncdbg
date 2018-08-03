@@ -2,13 +2,13 @@ package com.programmaticallyspeaking.ncd.nashorn
 
 import java.nio.charset.StandardCharsets
 
-import com.programmaticallyspeaking.ncd.host.Script
+import com.programmaticallyspeaking.ncd.host.{Script, ScriptVersion}
 import com.programmaticallyspeaking.ncd.infra.{Hasher, ScriptURL}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
 
-class ScriptImpl(val url: ScriptURL, scriptData: Array[Byte], val id: String, val version: Int) extends Script {
+class ScriptImpl(val url: ScriptURL, scriptData: Array[Byte], val id: String, val version: ScriptVersion) extends Script {
   import ScriptImpl._
 
   val contents = new String(scriptData, UTF8)
@@ -62,7 +62,7 @@ object ScriptImpl {
 
   private val UTF8 = StandardCharsets.UTF_8
 
-  def fromSource(url: ScriptURL, source: String, id: String, version: Int): Script = {
+  def fromSource(url: ScriptURL, source: String, id: String, version: ScriptVersion): Script = {
     val bytes = source.getBytes(UTF8)
     new ScriptImpl(url, bytes, id, version)
   }

@@ -64,7 +64,7 @@ class RuntimeTest extends UnitTest with DomainActorTesting {
     "compileScript" - {
 
       lazy val testCompileScript = {
-        val script = new ScriptImpl(ScriptURL.create(""), Array.empty, "xx", 1)
+        val script = new ScriptImpl(ScriptURL.create(""), Array.empty, "xx", ScriptVersion(1, true))
         when(currentScriptHost.compileScript(any[String], any[String], any[Boolean])).thenReturn(Future.successful(Some(script)))
 
         // Simulate emit from Debugger

@@ -39,7 +39,7 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
     override val lastLineLength: Int = 10
     override val contents: String = "abc"
     override val id: String = theId
-    override val version: Int = 1
+    override val version: ScriptVersion = ScriptVersion(1, true)
 
     override def sourceMapUrl(): Option[ScriptURL] = None
     override def sourceUrl(): Option[ScriptURL] = None
@@ -631,7 +631,8 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
 class DebuggerObjectTest extends UnitTest {
 
-  def originalScript(source: String, path: String, id: String) = ScriptImpl.fromSource(ScriptURL.create(path), source, id, 1)
+  def originalScript(source: String, path: String, id: String) =
+    ScriptImpl.fromSource(ScriptURL.create(path), source, id, ScriptVersion(1, true))
 
   def fakeFileReader(contents: Map[File, String]) = new FileReader {
     override def read(file: File, charset: Charset): Try[String] = {

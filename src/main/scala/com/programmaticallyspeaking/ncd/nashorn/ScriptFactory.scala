@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.Script
+import com.programmaticallyspeaking.ncd.host.{Script, ScriptVersion}
 import com.programmaticallyspeaking.ncd.infra.{IdGenerator, ScriptURL}
 import com.programmaticallyspeaking.ncd.nashorn.NashornDebuggerHost.{NoScriptReason, ScriptClassNamePrefix}
 import com.sun.jdi.{AbsentInformationException, Location, ReferenceType, ThreadReference}
@@ -124,6 +124,6 @@ class ScriptFactory(virtualMachine: XVirtualMachine) extends Logging {
     }.getOrElse(Left(NoScriptReason.NoSource))
   }
 
-  private def newScript(url: ScriptURL, source: String, version: Int) =
+  private def newScript(url: ScriptURL, source: String, version: ScriptVersion) =
     ScriptImpl.fromSource(url, source, scriptIdGenerator.next, version)
 }
