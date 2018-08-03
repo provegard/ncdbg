@@ -1,6 +1,6 @@
 package com.programmaticallyspeaking.ncd.nashorn
 
-import com.programmaticallyspeaking.ncd.host.{ScriptIdentity, ScriptVersion}
+import com.programmaticallyspeaking.ncd.host.{Script, ScriptIdentity, ScriptVersion}
 import com.programmaticallyspeaking.ncd.infra.ScriptURL
 import com.programmaticallyspeaking.ncd.testing.IsolatedUnitTest
 
@@ -110,6 +110,20 @@ class ScriptsTest extends IsolatedUnitTest {
       }
     }
 
+    "when a recompilation of an already replaced script is added" - {
+      val script1 = aScript("script.js", "return 42;", "a", ScriptVersion(1, true))
+      val script2 = aScript("script.js", "return 52;", "b", ScriptVersion(2, true))
+      val script3 = aScript("script.js", "return 42;", "c", ScriptVersion(3, false))
+
+      scripts.suggest(script1)
+      scripts.suggest(script2)
+      val actual = scripts.suggest(script3)
+
+      "ignores the script" in {
+        actual should be (None)
+      }
+    }
+
     "rejects suggestion of the same script twice" in {
       val script = aScript("script.js", "return 42;", "a", 1)
       scripts.suggest(script)
@@ -117,6 +131,8 @@ class ScriptsTest extends IsolatedUnitTest {
     }
   }
 
-  def aScript(url: String, source: String, id: String, version: Int) =
-    ScriptImpl.fromSource(ScriptURL.create(url), source, id, ScriptVersion(version, true))
+  def aScript(url: String, source: String, id: String, version: Int): Script =
+    aScript(url, source, id, ScriptVersion(version, true))
+  def aScript(url: String, source: String, id: String, version: ScriptVersion): Script =
+    ScriptImpl.fromSource(ScriptURL.create(url), source, id, version)
 }
