@@ -205,6 +205,9 @@ class ScriptExecutorRunner(scriptExecutor: ScriptExecutorBase)(implicit executio
       reportProgress("VM error: " + error)
       Option(scriptTimeoutHandler).foreach(_.postpone())
 
+      // Console-log to make test troubleshooting easier
+      System.err.println("Script error (may be expected): " + error)
+
     case ExecuteScript(script, observer, timeout) if scriptSender == null =>
       clearProgress()
       reportProgress("Sending script to VM!")
