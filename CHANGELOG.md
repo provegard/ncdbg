@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.3 (2018-09-17)
 
 * Better support for replaced script. If a script is reloaded with the same URL, the old script
   is "delisted." Previous behavior of creating "ndx" versions of the script has been removed.
