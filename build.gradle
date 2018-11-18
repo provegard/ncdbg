@@ -3,15 +3,23 @@ plugins {
     id 'com.palantir.git-version' version '0.5.3'
 }
 
+allprojects {
+    apply plugin: 'scala'
+    apply plugin: 'application'
+
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+
+    repositories {
+        mavenCentral()
+        maven { url "https://jitpack.io" }
+    }
+}
+
 group 'com.programmaticallyspeaking'
 version gitVersion()
 
-apply plugin: 'scala'
-apply plugin: 'application'
-
 def toolsJar = org.gradle.internal.jvm.Jvm.current().toolsJar
-
-sourceCompatibility = 1.8
 
 mainClassName = "com.programmaticallyspeaking.ncd.boot.Boot"
 
@@ -19,6 +27,19 @@ def generatedResourcesFolder = "$buildDir/generated-resources"
 
 // For the application plugin
 applicationName = "ncdbg"
+
+project(':repl') {
+    mainClassName = "com.programmaticallyspeaking.repl.Main"
+
+    dependencies {
+        compile rootProject
+    }
+
+    run {
+        standardInput = System.in
+        applicationDefaultJvmArgs = ["-Xdebug", "-Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=localhost:7777"]
+    }
+}
 
 sourceSets {
     main {
@@ -56,10 +77,7 @@ run {
     }
 }
 
-repositories {
-    mavenCentral()
-    maven { url "https://jitpack.io" }
-}
+task repl(dependsOn: project(':repl').run)
 
 dependencies {
     def logbackVersion = '1.1.7'
