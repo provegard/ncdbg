@@ -60,28 +60,10 @@ object JDIExtensions {
       val sourceName = location.sourceName()
       sourceNameToUrl(location.declaringType(), sourceName)
     }
-
   }
 
-  private def sourceNameToUrl(refType: ReferenceType, sourceName: String): String = sourceName match {
-    case "<eval>" =>
-      // For evaluated scripts, convert the type name into something that resembles a file URI.
-      val typeName = refType.name()
-      "eval:/" + typeNameToUrl(typeName)
-    case CompiledScript(cs) =>
-      cs.url
-    case _ =>
-      sourceName // keep it simple
-  }
-
-  private def typeNameToUrl(typeName: String): String = {
-    typeName
-      .replace("jdk.nashorn.internal.scripts.", "")
-      .replace('.', '/')
-      .replace('\\', '/')
-      .replaceAll("[$^_]", "")
-      .replaceFirst("/eval/?$", "")
-  }
+  private def sourceNameToUrl(refType: ReferenceType, sourceName: String): String =
+    NameConvert.sourceNameToUrl(refType.name(), sourceName)
 
   implicit class RichValue(val v: Value) extends AnyVal {
     def scopeType: ScopeType = {
