@@ -84,7 +84,7 @@ By default, NCDbg listens on port 7778 for connections from Chrome Developer Too
 
     bin\ncdbg --listen 10000
 
-The argument value can be a port number of an address on the form _&lt;host>:&lt;port>_.
+The argument value can be a port number or an address on the form _&lt;host>:&lt;port>_.
 
 ### Lazy mode
 
