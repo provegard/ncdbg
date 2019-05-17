@@ -123,6 +123,13 @@ distZip {
     excludes += ['**/tools.jar']
 }
 
+// Only report failed tests on the console. This makes it easier to spot the failures...
+tasks.withType(Test) {
+    testLogging {
+        events = ['FAILED']
+    }
+}
+
 // Excluding tools.jar doesn't remove it from the start script, where it's assumed to be in the local lib folder.
 // Do some text replacement to change its location to lib under JAVA_HOME instead.
 startScripts {
