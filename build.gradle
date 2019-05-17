@@ -83,6 +83,7 @@ dependencies {
     def logbackVersion = '1.1.7'
     def akkaHttpVersion = '10.0.3'
     def akkaVersion = '2.4.17'
+    def scalaVersion = '2.12.8'
 
     // needed for gradle-scalatest
     testRuntime 'org.pegdown:pegdown:1.6.0'
@@ -110,7 +111,7 @@ dependencies {
 
     compile group: 'com.fasterxml.jackson.module', name: 'jackson-module-scala_2.12', version: '2.9.6'
 
-    compile 'org.scala-lang:scala-library:2.12.6'
+    compile "org.scala-lang:scala-library:$scalaVersion"
 
     compile group: 'org.rogach', name: 'scallop_2.12', version: '2.1.0'
 
