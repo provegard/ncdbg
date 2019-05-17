@@ -4,12 +4,12 @@ import java.util.concurrent.{Executors, ThreadFactory}
 
 import akka.actor.ActorSystem
 import com.programmaticallyspeaking.ncd.infra.ExecutorProxy
-import com.sun.jdi.event.EventQueue
+import com.sun.jdi.event.{EventQueue, EventSet}
 import com.sun.jdi.{VMDisconnectedException, VirtualMachine}
 import org.slf4s.Logging
 
 import scala.annotation.tailrec
-import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.concurrent.{ExecutionContext, Future, Promise, TimeoutException}
 
 class NashornDebuggerConnector(hostName: String, port: Int) extends Logging {
   def connect(): Future[VirtualMachine] = {
@@ -72,6 +72,8 @@ class NashornDebugger(implicit executionContext: ExecutionContext) extends Loggi
 
 // TODO: Daemon thread?
 class NashornScriptHostInteractionThread(host: NashornScriptHost, initPromise: Promise[Unit]) extends Thread with Logging {
+  import scala.collection.JavaConverters._
+
   override def run(): Unit = {
     try {
       host.initialize()
@@ -89,7 +91,18 @@ class NashornScriptHostInteractionThread(host: NashornScriptHost, initPromise: P
 
   @tailrec
   private def listenIndefinitely(queue: EventQueue): Unit = {
-    Option(queue.remove(1000)).foreach { es => host.handleOperation(NashornEventSet(es)) }
+    Option(queue.remove(1000)).foreach(handleOperation)
     listenIndefinitely(queue)
+  }
+
+  private def handleOperation(es: EventSet): Unit = {
+    try {
+      host.handleOperation(NashornEventSet(es))
+    } catch {
+      case t: TimeoutException =>
+        val eventNames = es.asScala.toSeq.map(_.toString).mkString(", ")
+        log.warn(s"Timed out handling operation with the following events: $eventNames")
+        throw t
+    }
   }
 }
