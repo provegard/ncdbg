@@ -5,6 +5,8 @@
 * Exclude 'v8only' from printed DevTools URL to make newest Chrome/DevTools stop on breakpoints.
   Also exclude 'experiments' since I don't think it's needed. (issue #100)
 * Handle script whose source name contains &lt;eval> multiple times. (issue #101)
+* Log events when `handleOperation` times out, to be able to understand the error mentioned
+  in issue #101.
 
 ## 0.8.3 (2018-09-17)
 
