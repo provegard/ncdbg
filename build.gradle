@@ -82,7 +82,7 @@ task repl(dependsOn: project(':repl').run)
 dependencies {
     def logbackVersion = '1.1.7'
     def akkaHttpVersion = '10.0.3'
-    def akkaVersion = '2.4.17'
+    def akkaVersion = '2.5.22'
     def scalaVersion = '2.12.8'
 
     // needed for gradle-scalatest
