@@ -53,7 +53,7 @@ Please see CHANGELOG.md.
 
 ## License
 
-The code in this repository is licensed under the MIT license. See the *LICENCE* file
+The code in this repository is licensed under the 3-Clause BSD license. See the *LICENCE* file
 for details.
 
 ## Sponsoring
