@@ -7,6 +7,7 @@
 * Handle script whose source name contains &lt;eval> multiple times. (issue #101)
 * Log events when `handleOperation` times out, to be able to understand the error mentioned
   in issue #101.
+* Support new `Debugger.enable` with arguments. (issue #106)
 
 ## 0.8.3 (2018-09-17)
 
