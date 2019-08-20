@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.4 (2019-08-20)
 
 * Exclude 'v8only' from printed DevTools URL to make newest Chrome/DevTools stop on breakpoints.
   Also exclude 'experiments' since I don't think it's needed. (issue #100)
