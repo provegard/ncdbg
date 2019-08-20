@@ -1,7 +1,5 @@
 package com.programmaticallyspeaking.ncd.chrome.domains
 
-import java.io.File
-import java.net.URI
 import java.nio.charset.StandardCharsets
 
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.RemoteObject
@@ -17,6 +15,9 @@ import scala.util.{Failure, Success}
 object Debugger extends Logging {
   type CallFrameId = String
   type BreakpointId = String
+
+  // Debugger.enable takes parameters (optional, unused by NCDbg), so needs to be a custom class.
+  case class enable()
 
   case object stepOver
   case class stepInto(breakOnAsyncCall: Option[Boolean] = None)
@@ -193,14 +194,18 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHo
     case EmitScriptParsed(script) => emitScriptParsedEvent(script)
   }
 
-  override def handle = {
-    case Domain.enable =>
-      val scripts = scriptHost.scripts
-      val scriptsStr = scripts.map(s => s"- ${s.url} [${s.id}]").mkString("\n")
-      log.info("Enabling debugging, sending all parsed scripts to the client:\n" + scriptsStr)
-      scripts.foreach(emitScriptParsedEvent)
+  private def doEnable(): Unit = {
+    val scripts = scriptHost.scripts
+    val scriptsStr = scripts.map(s => s"- ${s.url} [${s.id}]").mkString("\n")
+    log.info("Enabling debugging, sending all parsed scripts to the client:\n" + scriptsStr)
+    scripts.foreach(emitScriptParsedEvent)
 
-      scriptHost.pauseOnBreakpoints()
+    scriptHost.pauseOnBreakpoints()
+  }
+
+  override def handle = {
+    case Domain.enable => doEnable()
+    case Debugger.enable() => doEnable() // New Chrome, enable with parameters (ignored here)
 
     case Domain.disable =>
       // Prepare for re-enabling
@@ -329,6 +334,10 @@ class Debugger(filePublisher: FilePublisher, scriptHost: ScriptHost, eventEmitHo
         log.info(s"Continue to line ${scriptLocation.lineNumber1Based} in script ${location.scriptId}")
 
       scriptHost.resume()
+  }
+
+  override protected def isEnable = super.isEnable orElse {
+    case Debugger.enable() => // ok
   }
 
   override protected def handleScriptEvent: PartialFunction[ScriptEvent, Unit] = {

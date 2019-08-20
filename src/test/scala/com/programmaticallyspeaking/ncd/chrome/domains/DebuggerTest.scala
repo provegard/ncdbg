@@ -8,7 +8,7 @@ import akka.actor.{ActorRef, PoisonPill}
 import akka.testkit.TestProbe
 import com.programmaticallyspeaking.ncd.chrome.domains.Debugger.{Scope => _, _}
 import com.programmaticallyspeaking.ncd.chrome.domains.Runtime.{ExceptionDetails, RemoteObject}
-import com.programmaticallyspeaking.ncd.chrome.net.FilePublisher
+import com.programmaticallyspeaking.ncd.chrome.net.{FilePublisher, Protocol}
 import com.programmaticallyspeaking.ncd.host._
 import com.programmaticallyspeaking.ncd.host.types.{ExceptionData, ObjectPropertyDescriptor, PropertyDescriptorType}
 import com.programmaticallyspeaking.ncd.infra.ScriptURL
@@ -79,6 +79,14 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
         requestAndReceiveResponse(debugger, "1", Domain.enable)
 
         verify(currentScriptHost).pauseOnBreakpoints()
+      }
+
+      "Understands Debugger.enable()" in {
+        val debugger = newActorInstance[Debugger]
+
+        requestAndReceiveResponse(debugger, "1", Debugger.enable())
+
+        verify(currentScriptHost).pauseOnBreakpoints() // arbitrary assertion
       }
 
       "should re-emit ScriptParsed events after disabling and re-enabling" in {
@@ -575,7 +583,17 @@ class DebuggerTest extends UnitTest with DomainActorTesting with Inside with Eve
 
       verify(currentScriptHost).reset()
     }
+
+    "DomainMethodArgumentFactory" - {
+      "supports Debugger.enable with maxScriptsCacheSize parameter" in {
+        val msg = Protocol.IncomingMessage(1, "Debugger.enable", Map("maxScriptsCacheSize" -> 10000))
+        val result = domainMethodArgumentFactory.create(msg)
+        result should be (Debugger.enable())
+      }
+    }
   }
+
+  def domainMethodArgumentFactory = DomainMethodArgumentFactory
 
   private val activeBreakpoints = mutable.Set[String]()
 
