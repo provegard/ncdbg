@@ -81,8 +81,8 @@ task repl(dependsOn: project(':repl').run)
 
 dependencies {
     def logbackVersion = '1.1.7'
-    def akkaHttpVersion = '10.0.3'
-    def akkaVersion = '2.5.22'
+    def akkaHttpVersion = '10.1.9'
+    def akkaVersion = '2.5.25'
     def scalaVersion = '2.12.8'
 
     // needed for gradle-scalatest
@@ -92,6 +92,8 @@ dependencies {
     testCompile group: 'org.scalacheck', name: 'scalacheck_2.12', version: '1.13.4'
 
     testCompile group: 'com.typesafe.akka', name: 'akka-http-testkit_2.12', version: akkaHttpVersion
+    testCompile group: 'com.typesafe.akka', name: 'akka-stream-testkit_2.12', version: akkaVersion
+
     testCompile group: 'org.mockito', name: 'mockito-core', version: '2.2.27'
     testCompile group: 'org.java-websocket', name: 'Java-WebSocket', version: '1.3.0'
 
