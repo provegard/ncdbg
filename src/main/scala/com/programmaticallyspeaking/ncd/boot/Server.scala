@@ -23,7 +23,7 @@ class Server(conf: Conf)(implicit actorSystem: ActorSystem) extends Logging {
     val listenAddr = conf.listen()
     server.start(listenAddr.host, listenAddr.port)
     log.info(s"Server is listening on ${listenAddr.host}:${listenAddr.port}")
-    val url = s"chrome-devtools://devtools/bundled/inspector.html?ws=${listenAddr.host}:${listenAddr.port}/dbg"
+    val url = s"devtools://devtools/bundled/inspector.html?ws=${listenAddr.host}:${listenAddr.port}/dbg"
     log.info("Open this URL in Chrome: " + url)
   }
 }
