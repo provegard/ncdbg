@@ -1,5 +1,5 @@
 plugins {
-    id "com.github.maiflai.scalatest" version "0.22"
+    id "com.github.maiflai.scalatest" version "0.25"
     id 'com.palantir.git-version' version '0.5.3'
 }
 
@@ -86,16 +86,16 @@ dependencies {
     def scalaVersion = '2.12.8'
 
     // needed for gradle-scalatest
-    testRuntime 'org.pegdown:pegdown:1.6.0'
+    testRuntimeOnly 'org.pegdown:pegdown:1.6.0'
 
-    testCompile group: 'org.scalatest', name: 'scalatest_2.12', version: '3.0.1'
-    testCompile group: 'org.scalacheck', name: 'scalacheck_2.12', version: '1.13.4'
+    testImplementation group: 'org.scalatest', name: 'scalatest_2.12', version: '3.0.1'
+    testImplementation group: 'org.scalacheck', name: 'scalacheck_2.12', version: '1.13.4'
 
-    testCompile group: 'com.typesafe.akka', name: 'akka-http-testkit_2.12', version: akkaHttpVersion
-    testCompile group: 'com.typesafe.akka', name: 'akka-stream-testkit_2.12', version: akkaVersion
+    testImplementation group: 'com.typesafe.akka', name: 'akka-http-testkit_2.12', version: akkaHttpVersion
+    testImplementation group: 'com.typesafe.akka', name: 'akka-stream-testkit_2.12', version: akkaVersion
 
-    testCompile group: 'org.mockito', name: 'mockito-core', version: '2.2.27'
-    testCompile group: 'org.java-websocket', name: 'Java-WebSocket', version: '1.3.0'
+    testImplementation group: 'org.mockito', name: 'mockito-core', version: '2.2.27'
+    testImplementation group: 'org.java-websocket', name: 'Java-WebSocket', version: '1.3.0'
 
     testCompile files("lib/script.jar")
 
@@ -103,21 +103,22 @@ dependencies {
         compile files(toolsJar)
     }
 
-    compile group: 'ch.qos.logback', name: 'logback-classic', version: logbackVersion
+    implementation group: 'ch.qos.logback', name: 'logback-classic', version: logbackVersion
 
-    compile group: 'com.programmaticallyspeaking', name: 'tinyws', version: '0.0.6'
+    implementation group: 'com.programmaticallyspeaking', name: 'tinyws', version: '0.0.6'
 
-    compile group: 'org.slf4s', name: 'slf4s-api_2.12', version: '1.7.25'
+    implementation group: 'org.slf4s', name: 'slf4s-api_2.12', version: '1.7.25'
 
-    compile group: 'com.typesafe.akka', name: 'akka-actor_2.12', version: akkaVersion
+    implementation group: 'com.typesafe.akka', name: 'akka-actor_2.12', version: akkaVersion
 
-    compile group: 'com.fasterxml.jackson.module', name: 'jackson-module-scala_2.12', version: '2.9.6'
+    implementation group: 'com.fasterxml.jackson.module', name: 'jackson-module-scala_2.12', version: '2.9.6'
 
+    // Must be compile for repl to work. What should it be replaced with?
     compile "org.scala-lang:scala-library:$scalaVersion"
 
-    compile group: 'org.rogach', name: 'scallop_2.12', version: '2.1.0'
+    implementation group: 'org.rogach', name: 'scallop_2.12', version: '2.1.0'
 
-    compile group: 'com.google.javascript', name: 'closure-compiler', version: 'v20180204'
+    implementation group: 'com.google.javascript', name: 'closure-compiler', version: 'v20180204'
 }
 
 // Exclude tools.jar from the distribution since we want to use the one from the user's JDK.
