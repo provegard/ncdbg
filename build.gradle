@@ -83,7 +83,7 @@ dependencies {
     def logbackVersion = '1.1.7'
     def akkaHttpVersion = '10.1.9'
     def akkaVersion = '2.5.25'
-    def scalaVersion = '2.12.8'
+    def scalaVersion = '2.12.11'
 
     // needed for gradle-scalatest
     testRuntimeOnly 'org.pegdown:pegdown:1.6.0'
