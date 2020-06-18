@@ -21,6 +21,14 @@ If you choose a different port number, NCDbg has to be configured accordingly.
 
 If you prefer, use `suspend=y` instead to have the debug target wait until the debugger connects.
 
+## REPL
+
+To run a simple Nashorn REPL (Read-Eval-Print Loop), run:
+
+    ./gradlew --console=plain repl
+    
+This can be used to write small functions for testing NCDbg.
+
 ## Running NCDbg
 
 To run the bleeding edge version of NCDbg, you'll want to clone the repository and use Gradle. Otherwise, you can
@@ -29,14 +37,17 @@ download a distribution, unpack it somewhere, and run using one of the distribut
 Running with Gradle is straightforward but the syntax to pass arguments is extremely awkward. If you happen to use a
 Unix-like shell, run:
 
-    ./gradlew run -Pargs="--help"
+    ./gradlew :run -Pargs="--help"
+
+(Please note the leading `:` in `:run` - this is needed to prevent Gradle from running
+the repl:run task when NCDbg exits.)
 
 > &#x26a0; Running NCDbg in Git Bash / MINGW64 under Windows 10 doesn't work well for me.
 In particular, using Ctrl-C to exit doesn't work. YMMV!
 
 In a Windows command prompt, omit the leading dot-slash:
 
-    gradlew run -Pargs="--help"
+    gradlew :run -Pargs="--help"
     
 Running from the distribution works in a similar way, except passing arguments is sane:
 
