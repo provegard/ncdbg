@@ -161,12 +161,10 @@ class ScriptReloadTest extends ScriptReloadTestFixture {
     executeScriptThatLoads(script) { hb =>
       val functionName = hb.stackFrames.head.functionDetails.name
       if (functionName == "script1") {
-        println("Here")
         val scriptId = hb.stackFrames.head.scriptId
         // Set a breakpoint on the line before 'debugger'
         var scriptLoc = hb.stackFrames.head.location
         scriptLoc = scriptLoc.copy(lineNumber1Based = scriptLoc.lineNumber1Based - 1)
-        println(scriptLoc)
         getHost.setBreakpoint(IdBasedScriptIdentity(scriptId), scriptLoc, BreakpointOptions(None, false))
       }
       functionNames :+= functionName
