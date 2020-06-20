@@ -27,7 +27,8 @@ To run a simple Nashorn REPL (Read-Eval-Print Loop), run:
 
     ./gradlew --console=plain repl
     
-This can be used to write small functions for testing NCDbg.
+This can be used to write small functions for testing NCDbg. If you want to test with a particular JDK,
+just set the JAVA_HOME environment variable before running the command above.
 
 ## Running NCDbg
 
